@@ -1,5 +1,4 @@
 import { compileProject } from "./linojava/compiler.js";
-import { dispatchIsoKernel, OFFSETS } from "./linojava/compiler/isokernel-abi.js";
 
 const root = document.querySelector("#lino-window");
 const canvas = document.querySelector("#game");
@@ -13,6 +12,8 @@ const manifest = await fetch(new URL("manifest.json", sourceRoot)).then((respons
 let pointerX = 0;
 let pointerY = 0;
 let pointerButtons = 0;
+const heldKeys = Object.create(null);
+const consoleInput = [];
 let frameCount = 0;
 let image = context.createImageData(canvas.width, canvas.height);
 let pixels = new Uint32Array(image.data.buffer);
@@ -69,28 +70,17 @@ function present(origin, width, height, memory) {
 status.textContent = "Compiling 14 Lino modules in this browser...";
 const host = {
   directory: ".",
+  keys: heldKeys,
+  consoleInput,
+  pointer() {
+    return { status: 3 | pointerButtons, x: pointerX, y: pointerY };
+  },
+  monotonicMilliseconds() {
+    return performance.now();
+  },
   retrace(origin, width, height, memory) {
     present(origin, width, height, memory);
     return true;
-  },
-  isocall(machine, linked) {
-    const memory = machine.memory;
-    const base = linked.memoryLayout.kernelBase;
-    const pointerCommand = memory[base + OFFSETS.PointerCommand];
-    const timerCommand = memory[base + OFFSETS.SYStimeCommand];
-    const processCommand = memory[base + OFFSETS.ProcessCommand];
-    if (pointerCommand === 12) {
-      memory[base + OFFSETS.PointerXCoordinate] = pointerX;
-      memory[base + OFFSETS.PointerYCoordinate] = pointerY;
-      memory[base + OFFSETS.PointerStatus] = 3 | pointerButtons;
-    }
-    if (timerCommand === 29) {
-      memory[base + OFFSETS.SYStimeCounts] = Math.floor(performance.now() * 1000) | 0;
-      memory[base + OFFSETS.CountsPerMillisecond] = 1000;
-    }
-    const result = dispatchIsoKernel(memory, { ...host, stockfile: linked.stockfile }, { kernelBase: base });
-    if (processCommand === 35) result.yielded = true;
-    return result;
   },
 };
 
@@ -101,7 +91,10 @@ function runFrame() {
   try {
     const result = program.run(2_000_000);
     status.textContent = `Real iGUI / ${frameCount} frame${frameCount === 1 ? "" : "s"} / ${result.status}`;
-    if (!program.machine.halted) requestAnimationFrame(runFrame);
+    if (!program.machine.halted) {
+      if (result.sleepMilliseconds > 0) setTimeout(runFrame, result.sleepMilliseconds);
+      else requestAnimationFrame(runFrame);
+    }
   } catch (error) {
     status.textContent = `Lino stopped: ${error.message}`;
     throw error;
@@ -118,6 +111,7 @@ canvas.addEventListener("pointermove", pointerPosition);
 canvas.addEventListener("pointerdown", (event) => {
   pointerPosition(event);
   pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
+  canvas.focus();
   canvas.setPointerCapture(event.pointerId);
 });
 canvas.addEventListener("pointerup", (event) => {
@@ -126,9 +120,52 @@ canvas.addEventListener("pointerup", (event) => {
 });
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 
+function linoKey(code) {
+  if (/^Key[A-Z]$/.test(code)) return `key${code.slice(3).toLowerCase()}`;
+  if (/^Digit[0-9]$/.test(code)) return `key${code.slice(5)}`;
+  if (/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(code)) return `key${code.toLowerCase()}`;
+  if (/^Numpad[0-9]$/.test(code)) return `key${code.slice(6)}n`;
+  return ({
+    Backspace: "keybackspace", Tab: "keytab", Enter: "keyreturn",
+    Escape: "keyescape", Space: "keyspacebar", Insert: "keyinsert",
+    Delete: "keydelete", Home: "keyhome", End: "keyend",
+    PageUp: "keypgup", PageDown: "keypgdn", ArrowUp: "keyup",
+    ArrowDown: "keydown", ArrowLeft: "keyleft", ArrowRight: "keyright",
+    NumpadDivide: "keyslash", NumpadMultiply: "keyasterisk",
+    NumpadSubtract: "keyhyphen", NumpadAdd: "keycross",
+    NumpadDecimal: "keydot", ShiftLeft: "keyshift", ShiftRight: "keyshift",
+    ControlLeft: "keycontrol", ControlRight: "keycontrol",
+    AltLeft: "keyalternate", AltRight: "keyalternate", Pause: "keypause",
+    NumLock: "keynumlock", CapsLock: "keycapslock", ScrollLock: "keyscrolllock",
+  })[code];
+}
+
+function asciiInput(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
+  if (event.key.length === 1) return event.key.codePointAt(0);
+  return ({ Enter: 13, Tab: 9, Backspace: 8, Escape: 27 })[event.key] ?? null;
+}
+
+canvas.addEventListener("keydown", (event) => {
+  const key = linoKey(event.code);
+  if (key) heldKeys[key] = 1;
+  const ascii = asciiInput(event);
+  if (ascii !== null) consoleInput.push(ascii);
+  if (key || ascii !== null) event.preventDefault();
+});
+canvas.addEventListener("keyup", (event) => {
+  const key = linoKey(event.code);
+  if (key) delete heldKeys[key];
+  if (key) event.preventDefault();
+});
+window.addEventListener("blur", () => {
+  for (const key of Object.keys(heldKeys)) delete heldKeys[key];
+});
+
 fullscreenButton.addEventListener("click", async () => {
   if (document.fullscreenElement) await document.exitFullscreen();
   else await root.requestFullscreen();
+  canvas.focus();
 });
 exitFullscreenButton.addEventListener("click", () => document.exitFullscreen());
 document.addEventListener("fullscreenchange", () => {

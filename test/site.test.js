@@ -12,10 +12,13 @@ test("ships the real linked iGUI and visible fullscreen exits", async () => {
   assert.match(html, /Lino-rendered integrated GUI/);
   assert.match(app, /compileProject/);
   assert.match(app, /examples\/iGUIcli\.txt/);
-  assert.match(app, /dispatchIsoKernel/);
   assert.match(app, /putImageData/);
   assert.match(app, /requestFullscreen\(\)/);
   assert.match(app, /exitFullscreen\(\)/);
   assert.match(app, /pointerdown/);
-  assert.match(app, /PointerXCoordinate/);
+  assert.match(app, /pointer\(\)/);
+  assert.match(app, /keys: heldKeys/);
+  assert.match(app, /consoleInput/);
+  assert.match(app, /keydown/);
+  assert.match(app, /sleepMilliseconds/);
 });

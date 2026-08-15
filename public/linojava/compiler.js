@@ -403,3 +403,8 @@ export function inspect(source) {
 
 export { compileLinkedProject, compileProject, emitRunner } from "./compiler/project-compiler.js";
 export { linkProject } from "./compiler/linker.js";
+export {
+  createNoctisIntrinsics,
+  NOCTIS_INTRINSIC_IDS,
+  NOCTIS_SERVICE_INTRINSIC_IDS,
+} from "./intrinsics/noctis.js";

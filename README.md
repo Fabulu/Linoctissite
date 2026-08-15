@@ -10,10 +10,13 @@ browser, runs the real IsoKernel startup sequence, and presents the 400 by 300
 iGUI framebuffer drawn by Lino itself. HTML provides only the page shell,
 loading status, and an easy reversible fullscreen control.
 
-This is the real-GUI bring-up, not yet the complete Noctis game. Pointer state
-is mapped into the Lino communication area and the machine continues across
-browser animation frames. Keyboard, audio, persistence, the remaining host
-services, and the complete Noctis source/intrinsic set follow in later waves.
+This is the real-GUI bring-up, not yet the complete Noctis game. Pointer state,
+queued ASCII input, and the complete held-key table are mapped into the Lino
+communication area. WASD, arrows, modifiers, function keys, and keypad controls
+therefore reach the running Lino project directly. The machine honors Lino's
+millisecond sleep requests and continues across browser animation frames.
+Audio, persistence, remaining host services, and complete Noctis source and
+intrinsic coverage follow in later waves.
 
 ## Local build
 
