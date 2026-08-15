@@ -14,6 +14,7 @@ const consoleInput = [];
 let pendingFrame = null;
 let completedFrame = false;
 let frameCredit = true;
+const frameBuffers = [];
 let runQueued = false;
 let delayedRun = 0;
 let renderedFrames = 0;
@@ -278,9 +279,13 @@ async function initialize(message) {
       completedFrame = true;
       if (frameCredit) {
         frameCredit = false;
+        const count = width * height;
+        let pixels = frameBuffers.pop();
+        if (!pixels || pixels.length !== count) pixels = new Int32Array(count);
+        pixels.set(memory.subarray(origin, origin + count));
         pendingFrame = {
           type: "frame", width, height,
-          pixels: memory.slice(origin, origin + width * height),
+          pixels,
         };
       }
       return true;
@@ -317,6 +322,7 @@ addEventListener("message", (event) => {
   } else if (message.type === "clearKeys") {
     for (const name of Object.keys(heldKeys)) delete heldKeys[name];
   } else if (message.type === "frameCredit") {
+    if (message.buffer instanceof ArrayBuffer) frameBuffers.push(new Int32Array(message.buffer));
     frameCredit = true;
   } else if (message.type === "ascii") consoleInput.push(message.value | 0);
   else if (message.type === "pointer") {

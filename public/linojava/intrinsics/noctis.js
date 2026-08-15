@@ -2976,17 +2976,18 @@ function prepareMappedBlockSteps(machine, linked, p) {
   const view = dataView(memory);
   const nearest = (control & 0x0c00) === 0;
   const scale = readFloat64View(view, p.fw + p.FS16 * 2);
-  const sources = [p.FSVX, p.FSVY, p.FSVZ];
-  const destinations = [p.FSK1, p.FSK2, p.FSK3];
   for (let axis = 0; axis < 3; axis += 1) {
-    let result = readFloat64View(view, p.fw + sources[axis] * 2) * scale;
+    const source = axis === 0 ? p.FSVX : axis === 1 ? p.FSVY : p.FSVZ;
+    const destination = axis === 0 ? p.FSK1 : axis === 1 ? p.FSK2 : p.FSK3;
+    let result = readFloat64View(view, p.fw + source * 2) * scale;
     writeFloat64View(view, p.FA0, result);
     result = nearest ? Math.fround(result) : roundFloat32(result, control);
     memory[p.FS0] = float32Bits(result);
-    writeFloat64View(view, p.fw + destinations[axis] * 2, result);
+    writeFloat64View(view, p.fw + destination * 2, result);
   }
   if ((memory[p.SPcull] | 0) !== 0) {
-    for (const slot of [p.FSK1, p.FSK2, p.FSK3]) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      const slot = axis === 0 ? p.FSK1 : axis === 1 ? p.FSK2 : p.FSK3;
       const input = readFloat64View(view, p.fw + slot * 2);
       let result = input + input;
       writeFloat64View(view, p.FA0, result);
@@ -3855,8 +3856,12 @@ function polygonEdges(machine, linked, p = null) {
     let y2 = memory[points + source + 3] | 0;
     memory[p.SPt] = x2;
     if (y2 < y1) {
-      [x1, x2] = [x2, x1];
-      [y1, y2] = [y2, y1];
+      const oldX1 = x1;
+      const oldY1 = y1;
+      x1 = x2;
+      y1 = y2;
+      x2 = oldX1;
+      y2 = oldY1;
     }
     memory[p.EWx1] = x1;
     memory[p.EWy1] = y1;
@@ -7850,6 +7855,64 @@ function standardText(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function terrainFacingDirect(machine, ground, triangle) {
+  const memory = machine.memory;
+  const h1 = memory[ground.VHGNDh1] | 0;
+  const index = Math.imul(h1, 2) + triangle;
+  memory[ground.VHGNDnormindex] = index;
+  const generation = memory[ground.VHGNDnormgen] | 0;
+  let normalX;
+  let normalY;
+  let normalZ;
+  if ((memory[ground.VHGNDnormstamp + index] | 0) === generation) {
+    normalX = float32FromBits(memory[ground.VHGNDnormx + index]);
+    normalY = float32FromBits(memory[ground.VHGNDnormy + index]);
+    normalZ = float32FromBits(memory[ground.VHGNDnormz + index]);
+  } else {
+    const control = floatingPoint(machine).control;
+    const step = memory[ground.VHGNDlodstep] << 14;
+    const x0 = memory[ground.VHGNDx] << 14;
+    const z0 = memory[ground.VHGNDz] << 14;
+    const x1 = x0 + step;
+    const z1 = z0 + step;
+    const y0 = -((triangle === 0 ? memory[ground.VHGNDs1] : memory[ground.VHGNDs2]) << 11);
+    const y1 = -((triangle === 0 ? memory[ground.VHGNDs2] : memory[ground.VHGNDs3]) << 11);
+    const y2 = -(memory[ground.VHGNDs4] << 11);
+    const ax = triangle === 0 ? x0 : x1;
+    const az = z0;
+    const bx = x1;
+    const bz = triangle === 0 ? z0 : z1;
+    const cx = x0;
+    const cz = z1;
+    const edge1X = roundFloat32(ax - cx, control);
+    const edge1Y = roundFloat32(y0 - y2, control);
+    const edge1Z = roundFloat32(az - cz, control);
+    const edge2X = roundFloat32(bx - cx, control);
+    const edge2Y = roundFloat32(y1 - y2, control);
+    const edge2Z = roundFloat32(bz - cz, control);
+    normalX = roundFloat32(edge1Y * edge2Z - edge1Z * edge2Y, control);
+    normalY = roundFloat32(edge1Z * edge2X - edge1X * edge2Z, control);
+    normalZ = roundFloat32(edge1X * edge2Y - edge1Y * edge2X, control);
+    memory[ground.VHGNDnormx + index] = float32Bits(normalX);
+    memory[ground.VHGNDnormy + index] = float32Bits(normalY);
+    memory[ground.VHGNDnormz + index] = float32Bits(normalZ);
+    memory[ground.VHGNDnormstamp + index] = generation;
+  }
+
+  const floats = memory[ground.PJfwbase] >>> 0;
+  const view = dataView(memory);
+  const step = memory[ground.VHGNDlodstep] << 14;
+  const vertexX = memory[ground.VHGNDx] << 14;
+  const vertexY = -(memory[ground.VHGNDs4] << 11);
+  const vertexZ = (memory[ground.VHGNDz] << 14) + step;
+  let dot = (readFloat64View(view, floats + 448) - vertexX) * normalX;
+  dot = (readFloat64View(view, floats + 450) - vertexY) * normalY + dot;
+  dot = (readFloat64View(view, floats + 452) - vertexZ) * normalZ + dot;
+  const facing = !Number.isNaN(dot) && dot >= 0;
+  memory[ground.FCret] = facing ? 1 : 0;
+  return facing;
+}
+
 function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
   const memory = machine.memory;
   const p = landedTerrainAddresses(linked);
@@ -7896,9 +7959,9 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
 
   for (let triangle = 0; triangle < 2; triangle += 1) {
     memory[p.VHGNDvctri] = triangle;
+    const facing = terrainFacingDirect(machine, p, triangle);
+    if (!facing) continue;
     landedTerrainTriangle(machine, linked);
-    terrainFacing(machine, linked);
-    if ((memory[p.FCret] | 0) === 0) continue;
     memory[p.VHGNDtilepolys] = (memory[p.VHGNDtilepolys] + 1) | 0;
     memory[p.PGtexf] = 5;
     terrainMapped(machine, linked);
