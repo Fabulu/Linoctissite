@@ -239,6 +239,8 @@ const SERVICE_IDS = Object.freeze({
   drawStickLine: "service:vhsdrawline",
   rotateVertices: "service:pjrotate",
   rotateSelectedVertices: "service:pjrotateselected",
+  projectMapGeneric: "service:pjprojectmapgenericservice",
+  project3d: "service:pjproject3dservice",
 });
 
 const symbolCaches = new WeakMap();
@@ -1331,6 +1333,188 @@ function rotateVertices(machine, linked, resetVertex) {
   }
   machine.A = vertex | 0;
   machine.C = mode;
+}
+
+function projectMapGeneric(machine, linked) {
+  const memory = machine.memory;
+  const pgfi = address(linked, "PGFi");
+  const fi = address(linked, "FI");
+  const vertexAddress = address(linked, "PJvr");
+  const countAddress = address(linked, "PJvr2");
+  const minXAddress = address(linked, "PJminx");
+  const maxXAddress = address(linked, "PJmaxx");
+  const minYAddress = address(linked, "BXminy");
+  const maxYAddress = address(linked, "BXmaxy");
+  const points = address(linked, "mp");
+  const slot = (name) => address(linked, name);
+  const load = (index) => { memory[pgfi] = index; pgfLoadA(machine, linked); };
+  const binary = (index, operation) => {
+    memory[pgfi] = index;
+    pgfBinary(machine, linked, operation);
+  };
+  const store = (index) => { memory[pgfi] = index; pgfStoreA(machine, linked); };
+
+  memory[vertexAddress] = 0;
+  memory[minXAddress] = 311;
+  memory[maxXAddress] = 5;
+  memory[minYAddress] = 190;
+  memory[maxYAddress] = 10;
+  const count = memory[countAddress] >>> 0;
+  let vertex = 0;
+  while (vertex < count) {
+    load(slot("FSDPP"));
+    binary(slot("FSUZ") + vertex, divideFloat64);
+    store(slot("FSW3"));
+
+    binary(slot("FSUX") + vertex, multiplyFloat64);
+    binary(slot("FSXC"), addFloat64);
+    pgfInteger(machine, linked);
+    machine.A = vertex;
+    machine.A = (machine.A + machine.A) | 0;
+    machine.C = points;
+    machine.C = (machine.C + machine.A) | 0;
+    memory[machine.C >>> 0] = memory[fi];
+    machine.A = memory[fi] | 0;
+    if (machine.A < (memory[minXAddress] | 0)) memory[minXAddress] = machine.A;
+    machine.A = memory[fi] | 0;
+    if (machine.A > (memory[maxXAddress] | 0)) memory[maxXAddress] = machine.A;
+
+    load(slot("FSW3"));
+    binary(slot("FSUY") + vertex, multiplyFloat64);
+    binary(slot("FSYC"), addFloat64);
+    pgfInteger(machine, linked);
+    machine.A = vertex;
+    machine.A = (machine.A + machine.A) | 0;
+    machine.C = points;
+    machine.C = (machine.C + machine.A) | 0;
+    memory[(machine.C + 1) >>> 0] = memory[fi];
+    machine.A = memory[fi] | 0;
+    if (machine.A < (memory[minYAddress] | 0)) memory[minYAddress] = machine.A;
+    if (machine.A > (memory[maxYAddress] | 0)) memory[maxYAddress] = machine.A;
+
+    vertex = (vertex + 1) | 0;
+    memory[vertexAddress] = vertex;
+    machine.A = vertex;
+  }
+}
+
+function projectMapGenericInline(linked) {
+  const p = pgfInlineLayout(linked);
+  const vertex = address(linked, "PJvr");
+  const count = address(linked, "PJvr2");
+  const minX = address(linked, "PJminx");
+  const maxX = address(linked, "PJmaxx");
+  const minY = address(linked, "BXminy");
+  const maxY = address(linked, "BXmaxy");
+  const points = address(linked, "mp");
+  const slot = (name) => address(linked, name);
+  const load = (index) => `m[${p.pgfi}]=${index};q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[${p.fa}]=m[q];m[${p.fa + 1}]=m[q+1];A=q|0;`;
+  const binary = (index, operator) => `m[${p.pgfi}]=(${index})|0;q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[${p.fb}]=m[q];m[${p.fb + 1}]=m[q+1];A=q|0;f64w(${p.fa},f64r(${p.fa})${operator}f64r(${p.fb}));`;
+  const store = (index) => `m[${p.pgfi}]=${index};q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[q]=m[${p.fa}];m[q+1]=m[${p.fa + 1}];A=q|0;`;
+  const integer = `{
+    const projectNumber=f64r(${p.fa});let projectInteger;
+    if(!Number.isFinite(projectNumber))projectInteger=-2147483648;
+    else{const projectMode=(((machine.fpu&&machine.fpu.control)||895)>>>10)&3;let projectRounded;
+      if(projectMode===0){const projectFloor=Math.floor(projectNumber),projectFraction=projectNumber-projectFloor;projectRounded=projectFraction<0.5?projectFloor:projectFraction>0.5?projectFloor+1:(projectFloor&1)===0?projectFloor:projectFloor+1;}
+      else if(projectMode===1)projectRounded=Math.floor(projectNumber);else if(projectMode===2)projectRounded=Math.ceil(projectNumber);else projectRounded=Math.trunc(projectNumber);
+      projectInteger=projectRounded < -2147483648 || projectRounded > 2147483647 ? -2147483648 : projectRounded|0;}
+    m[${p.fi}]=projectInteger;
+  }`;
+  return `{
+    let projectVertex=0;m[${vertex}]=0;m[${minX}]=311;m[${maxX}]=5;m[${minY}]=190;m[${maxY}]=10;const projectCount=m[${count}]>>>0;
+    while(projectVertex<projectCount){
+      ${load(slot("FSDPP"))}${binary(`${slot("FSUZ")}+projectVertex`, "/")}${store(slot("FSW3"))}
+      ${binary(`${slot("FSUX")}+projectVertex`, "*")}${binary(slot("FSXC"), "+")}${integer}
+      A=projectVertex;A=(A+A)|0;C=${points};C=(C+A)|0;m[C>>>0]=m[${p.fi}];A=m[${p.fi}]|0;if(A<(m[${minX}]|0))m[${minX}]=A;A=m[${p.fi}]|0;if(A>(m[${maxX}]|0))m[${maxX}]=A;
+      ${load(slot("FSW3"))}${binary(`${slot("FSUY")}+projectVertex`, "*")}${binary(slot("FSYC"), "+")}${integer}
+      A=projectVertex;A=(A+A)|0;C=${points};C=(C+A)|0;m[(C+1)>>>0]=m[${p.fi}];A=m[${p.fi}]|0;if(A<(m[${minY}]|0))m[${minY}]=A;if(A>(m[${maxY}]|0))m[${maxY}]=A;
+      projectVertex=(projectVertex+1)|0;m[${vertex}]=projectVertex;A=projectVertex;
+    }
+  }`;
+}
+
+function project3d(machine, linked) {
+  const memory = machine.memory;
+  const pgfi = address(linked, "PGFi");
+  const fi = address(linked, "FI");
+  const vertexAddress = address(linked, "PJvr");
+  const count = value(memory, linked, "PJvr2") >>> 0;
+  const points = address(linked, "mp");
+  const slot = (name) => address(linked, name);
+  const load = (index) => { memory[pgfi] = index; pgfLoadA(machine, linked); };
+  const binary = (index, operation) => {
+    memory[pgfi] = index;
+    pgfBinary(machine, linked, operation);
+  };
+  const store = (index) => { memory[pgfi] = index; pgfStoreA(machine, linked); };
+  const storeNarrow = (index) => { store(index); pgfNarrow(machine, linked); };
+
+  memory[vertexAddress] = 0;
+  let vertex = 0;
+  while (vertex < count) {
+    load(slot("FSUNO"));
+    binary(slot("FSUZ") + vertex, divideFloat64);
+    store(slot("FSW3"));
+    binary(slot("FSUX") + vertex, multiplyFloat64);
+    binary(slot("FSXC"), addFloat64);
+    store(slot("FSW0"));
+    storeNarrow(slot("FSVX0") + vertex);
+    load(slot("FSW0"));
+    pgfInteger(machine, linked);
+    machine.A = vertex;
+    machine.A = (machine.A + machine.A) | 0;
+    machine.C = points;
+    machine.C = (machine.C + machine.A) | 0;
+    memory[machine.C >>> 0] = memory[fi];
+
+    load(slot("FSW3"));
+    binary(slot("FSUY") + vertex, multiplyFloat64);
+    binary(slot("FSYC"), addFloat64);
+    store(slot("FSW0"));
+    storeNarrow(slot("FSVY0") + vertex);
+    load(slot("FSW0"));
+    pgfInteger(machine, linked);
+    machine.A = vertex;
+    machine.A = (machine.A + machine.A) | 0;
+    machine.C = points;
+    machine.C = (machine.C + machine.A) | 0;
+    memory[(machine.C + 1) >>> 0] = memory[fi];
+
+    vertex = (vertex + 1) | 0;
+    memory[vertexAddress] = vertex;
+    machine.A = vertex;
+  }
+}
+
+function project3dInline(linked) {
+  const p = pgfInlineLayout(linked);
+  const vertex = address(linked, "PJvr");
+  const count = address(linked, "PJvr2");
+  const points = address(linked, "mp");
+  const slot = (name) => address(linked, name);
+  const load = (index) => `m[${p.pgfi}]=${index};q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[${p.fa}]=m[q];m[${p.fa + 1}]=m[q+1];A=q|0;`;
+  const binary = (index, operator) => `m[${p.pgfi}]=(${index})|0;q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[${p.fb}]=m[q];m[${p.fb + 1}]=m[q+1];A=q|0;f64w(${p.fa},f64r(${p.fa})${operator}f64r(${p.fb}));`;
+  const store = (index) => `m[${p.pgfi}]=${index};q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[q]=m[${p.fa}];m[q+1]=m[${p.fa + 1}];A=q|0;`;
+  const narrow = (index) => `${store(index)}q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[${p.fa}]=m[q];m[${p.fa + 1}]=m[q+1];A=q|0;{
+    const projectNarrowInput=f64r(${p.fa}),projectControl=((machine.fpu&&machine.fpu.control)||895)&65535;let projectNarrow=Math.fround(projectNarrowInput);
+    if((projectControl&3072)!==0&&projectNarrow!==projectNarrowInput&&Number.isFinite(projectNarrowInput)){const projectMode=(projectControl>>>10)&3;let projectUp=null;if(projectMode===1&&projectNarrow>projectNarrowInput)projectUp=false;else if(projectMode===2&&projectNarrow<projectNarrowInput)projectUp=true;else if(projectMode===3){if(projectNarrowInput>0&&projectNarrow>projectNarrowInput)projectUp=false;else if(projectNarrowInput<0&&projectNarrow<projectNarrowInput)projectUp=true;}if(projectUp!==null){if(projectNarrow===0){fi[0]=projectUp?1:-2147483647;projectNarrow=ff[0];}else if(!(Number.isNaN(projectNarrow)||projectNarrow===(projectUp?Infinity:-Infinity))){ff[0]=projectNarrow;let projectBits=fi[0]|0;projectBits=projectNarrow>0?(projectBits+(projectUp?1:-1))|0:(projectBits+(projectUp?-1:1))|0;fi[0]=projectBits;projectNarrow=ff[0];}}}
+    ff[0]=projectNarrow;m[${p.fs}]=fi[0];f64w(${p.fa},fread(m[${p.fs}]|0));m[q]=m[${p.fa}];m[q+1]=m[${p.fa + 1}];A=q|0;
+  }`;
+  const integer = `{
+    const projectNumber=f64r(${p.fa});let projectInteger;
+    if(!Number.isFinite(projectNumber))projectInteger=-2147483648;
+    else{const projectMode=(((machine.fpu&&machine.fpu.control)||895)>>>10)&3;let projectRounded;if(projectMode===0){const projectFloor=Math.floor(projectNumber),projectFraction=projectNumber-projectFloor;projectRounded=projectFraction<0.5?projectFloor:projectFraction>0.5?projectFloor+1:(projectFloor&1)===0?projectFloor:projectFloor+1;}else if(projectMode===1)projectRounded=Math.floor(projectNumber);else if(projectMode===2)projectRounded=Math.ceil(projectNumber);else projectRounded=Math.trunc(projectNumber);projectInteger=projectRounded < -2147483648 || projectRounded > 2147483647 ? -2147483648 : projectRounded|0;}m[${p.fi}]=projectInteger;
+  }`;
+  return `{
+    let projectVertex=0;m[${vertex}]=0;const projectCount=m[${count}]>>>0;
+    while(projectVertex<projectCount){
+      ${load(slot("FSUNO"))}${binary(`${slot("FSUZ")}+projectVertex`, "/")}${store(slot("FSW3"))}
+      ${binary(`${slot("FSUX")}+projectVertex`, "*")}${binary(slot("FSXC"), "+")}${store(slot("FSW0"))}${narrow(`${slot("FSVX0")}+projectVertex`)}${load(slot("FSW0"))}${integer}
+      A=projectVertex;A=(A+A)|0;C=${points};C=(C+A)|0;m[C>>>0]=m[${p.fi}];
+      ${load(slot("FSW3"))}${binary(`${slot("FSUY")}+projectVertex`, "*")}${binary(slot("FSYC"), "+")}${store(slot("FSW0"))}${narrow(`${slot("FSVY0")}+projectVertex`)}${load(slot("FSW0"))}${integer}
+      A=projectVertex;A=(A+A)|0;C=${points};C=(C+A)|0;m[(C+1)>>>0]=m[${p.fi}];projectVertex=(projectVertex+1)|0;m[${vertex}]=projectVertex;A=projectVertex;
+    }
+  }`;
 }
 
 function fillBytes(machine, linked) {
@@ -4079,6 +4263,8 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.drawStickLine]: drawStickLine,
     [SERVICE_IDS.rotateVertices]: (machine, linked) => rotateVertices(machine, linked, true),
     [SERVICE_IDS.rotateSelectedVertices]: (machine, linked) => rotateVertices(machine, linked, false),
+    [SERVICE_IDS.projectMapGeneric]: projectMapGeneric,
+    [SERVICE_IDS.project3d]: project3d,
     [IDS.copyRegion]: copyRegion,
     [IDS.expandIndexed]: expandIndexed,
     [IDS.scale2x]: scale2x,
@@ -4334,6 +4520,12 @@ export function createNoctisIntrinsics(overrides = {}) {
   }
   if (!Object.hasOwn(overrides, SERVICE_IDS.antialiasingDim)) {
     implementations[SERVICE_IDS.antialiasingDim].inline = antialiasingDimInline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.projectMapGeneric)) {
+    implementations[SERVICE_IDS.projectMapGeneric].inline = projectMapGenericInline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.project3d)) {
+    implementations[SERVICE_IDS.project3d].inline = project3dInline;
   }
   return implementations;
 }
