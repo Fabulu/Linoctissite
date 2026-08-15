@@ -1,5 +1,6 @@
 import { compileProject, createNoctisIntrinsics } from "./linojava/compiler.js";
 
+const linoWindow = document.querySelector("#lino-window");
 const gameStage = document.querySelector("#game-stage");
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d", { alpha: false });
@@ -13,6 +14,9 @@ const manifest = await fetch(new URL("manifest.json", sourceRoot)).then((respons
 let pointerX = 0;
 let pointerY = 0;
 let pointerButtons = 0;
+let pointerDeltaX = 0;
+let pointerDeltaY = 0;
+const pointerTransitions = [];
 let gameLeft = 0;
 let gameTop = 0;
 let gameWidth = 320;
@@ -23,6 +27,21 @@ let frameCount = 0;
 let linoFullscreenPress = false;
 let image = context.createImageData(canvas.width, canvas.height);
 let pixels = new Uint32Array(image.data.buffer);
+
+function configureDisplay(width, height) {
+  const visible = width > 0 && height > 0;
+  gameStage.hidden = !visible;
+  if (!visible) return;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+    image = context.createImageData(width, height);
+    pixels = new Uint32Array(image.data.buffer);
+  }
+  const dormant = width === 126 && height === 25;
+  linoWindow.classList.toggle("is-dormant", dormant);
+  linoWindow.style.width = dormant ? "146px" : "";
+}
 
 async function fetchFirst(urls, kind) {
   for (const url of urls) {
@@ -58,12 +77,7 @@ const resolvers = {
 };
 
 function present(origin, width, height, memory) {
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-    image = context.createImageData(width, height);
-    pixels = new Uint32Array(image.data.buffer);
-  }
+  configureDisplay(width, height);
   const frame = new Uint32Array(memory.buffer, memory.byteOffset + origin * 4, width * height);
   for (let index = 0; index < frame.length; index += 1) {
     const colour = frame[index];
@@ -95,7 +109,21 @@ const host = {
   keys: heldKeys,
   consoleInput,
   pointer() {
-    return { status: 3 | pointerButtons, x: pointerX, y: pointerY };
+    const transition = pointerTransitions.shift();
+    const deltaX = pointerDeltaX;
+    const deltaY = pointerDeltaY;
+    pointerDeltaX = 0;
+    pointerDeltaY = 0;
+    return {
+      status: 3 | (transition?.buttons ?? pointerButtons),
+      x: transition?.x ?? pointerX,
+      y: transition?.y ?? pointerY,
+      deltaX,
+      deltaY,
+    };
+  },
+  syncDisplay({ width, height }) {
+    configureDisplay(width, height);
   },
   monotonicMilliseconds() {
     return performance.now();
@@ -145,8 +173,12 @@ function pointerPosition(event) {
   const bounds = target.getBoundingClientRect();
   const localX = Math.max(0, Math.min(target.width - 1, Math.floor((event.clientX - bounds.left) * target.width / bounds.width)));
   const localY = Math.max(0, Math.min(target.height - 1, Math.floor((event.clientY - bounds.top) * target.height / bounds.height)));
-  pointerX = target === fullscreenCanvas ? localX + gameLeft : localX;
-  pointerY = target === fullscreenCanvas ? localY + gameTop : localY;
+  const nextX = target === fullscreenCanvas ? localX + gameLeft : localX;
+  const nextY = target === fullscreenCanvas ? localY + gameTop : localY;
+  pointerDeltaX += nextX - pointerX;
+  pointerDeltaY += nextY - pointerY;
+  pointerX = nextX;
+  pointerY = nextY;
 }
 
 for (const target of [canvas, fullscreenCanvas]) {
@@ -156,12 +188,14 @@ for (const target of [canvas, fullscreenCanvas]) {
     linoFullscreenPress = event.button === 0 && target === canvas
       && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY);
     pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
+    pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY });
     target.focus();
     target.setPointerCapture(event.pointerId);
   });
   target.addEventListener("pointerup", (event) => {
     pointerPosition(event);
     pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
+    pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY });
     if (linoFullscreenPress && event.button === 0 && target === canvas
         && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY)) {
       requestGameFullscreen().catch((error) => {

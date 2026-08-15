@@ -103,3 +103,11 @@ body {
   font-size: 11px;
   color: #91a8bb;
 }
+
+.lino-window.is-dormant {
+  gap: 0;
+}
+
+.lino-window.is-dormant .status {
+  display: none;
+}
