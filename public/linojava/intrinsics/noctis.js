@@ -252,6 +252,7 @@ const rasterAddressCaches = new WeakMap();
 const poly3dAddressCaches = new WeakMap();
 const polymapAddressCaches = new WeakMap();
 const float32Scratch = new DataView(new ArrayBuffer(4));
+const float64Scratch = new DataView(new ArrayBuffer(8));
 
 function address(linked, name) {
   let cache = symbolCaches.get(linked);
@@ -380,10 +381,8 @@ function extendedFromInteger(number) {
 function extendedFromNumber(number) {
   if (!Number.isFinite(number)) return { integer: 0n, exponent: 0, special: number };
   if (number === 0) return { integer: 0n, exponent: 0, special: Object.is(number, -0) ? -0 : null };
-  const scratch = new ArrayBuffer(8);
-  const view = new DataView(scratch);
-  view.setFloat64(0, number, true);
-  const bits = view.getBigUint64(0, true);
+  float64Scratch.setFloat64(0, number, true);
+  const bits = float64Scratch.getBigUint64(0, true);
   const negative = (bits >> 63n) !== 0n;
   const encodedExponent = Number((bits >> 52n) & 0x7ffn);
   const fraction = bits & 0xfffffffffffffn;
