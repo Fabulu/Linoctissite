@@ -260,6 +260,27 @@ const SERVICE_IDS = Object.freeze({
   standardText: "service:stdwrite",
   searchEkeySession: "service:searchekeysessionslot",
   backupEkeySession: "service:backupekeysession",
+  surfaceSsmooth: "service:sussmooth",
+  surfaceLssmooth: "service:sulssmooth",
+  surfacePsmooth: "service:supsmoothgrays",
+  surfaceClear: "service:supclear",
+  surfaceNegate: "service:sunegate",
+  surfaceRandomPattern: "service:surndpat",
+  surfaceSda: "service:susda",
+  spaceFade: "service:vhsfade",
+  flareSourceStick: "service:vhfsourcestick",
+  glowRaster: "service:spglowraster",
+  drawMode2Cache: "service:vhdrawmode2cache",
+  drawCupolaPanel: "service:vhcdrawpanel",
+  stick3d: "service:vhstick3d",
+  flareSourceLine: "service:vhfsourcefline",
+  flareDraw: "service:vhfdraw",
+  panelOrbitProject: "service:vhporbitproject",
+  panelMoonProject: "service:vhpmoonproject",
+  panelIntegerStick: "service:vhpintegerstick",
+  panelMoonScoreBounds: "service:vhpmoonscorebounds",
+  glassBubble: "service:spglassbubble",
+  bodyVector: "service:vhgndbodyvector",
 });
 
 const symbolCaches = new WeakMap();
@@ -273,6 +294,18 @@ const pixelEffectCaches = new WeakMap();
 const tgaAddressCaches = new WeakMap();
 const textAddressCaches = new WeakMap();
 const ekeyAddressCaches = new WeakMap();
+const surfaceBulkAddressCaches = new WeakMap();
+const spaceFadeAddressCaches = new WeakMap();
+const flareSourceStickAddressCaches = new WeakMap();
+const glowRasterAddressCaches = new WeakMap();
+const mode2CacheAddressCaches = new WeakMap();
+const drawCupolaPanelAddressCaches = new WeakMap();
+const stick3dAddressCaches = new WeakMap();
+const flareDrawAddressCaches = new WeakMap();
+const panelRenderAddressCaches = new WeakMap();
+const glassBubbleAddressCaches = new WeakMap();
+const bodyVectorAddressCaches = new WeakMap();
+const bodyVectorValueCaches = new WeakMap();
 const float32Scratch = new DataView(new ArrayBuffer(4));
 const float64Scratch = new DataView(new ArrayBuffer(8));
 
@@ -1082,26 +1115,23 @@ function smoothStarPage(machine, linked) {
   const memory = machine.memory;
   const base = value(memory, linked, "VHTsmoothbase") >>> 0;
   let accumulator = 0;
+  const quarter = (pointer) => (((memory[pointer - 320] & 0xff)
+    + (memory[pointer] & 0xff) + (memory[pointer + 320] & 0xff)
+    + (memory[pointer + 640] & 0xff)) & 0xfc) >>> 2;
+  let destination = base + 320;
+  let q0 = quarter(destination);
+  let q1 = quarter(destination + 1);
+  let q2 = quarter(destination + 2);
+  let q3 = quarter(destination + 3);
   for (let index = 0; index < 56960; index += 1) {
-    const destination = base + 320 + index;
-    let pointer = destination;
-    let sum = (memory[pointer - 320] & 0xff) + (memory[pointer] & 0xff)
-      + (memory[pointer + 320] & 0xff) + (memory[pointer + 640] & 0xff);
-    accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
-    pointer += 1;
-    sum = (memory[pointer - 320] & 0xff) + (memory[pointer] & 0xff)
-      + (memory[pointer + 320] & 0xff) + (memory[pointer + 640] & 0xff);
-    accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
-    pointer += 1;
-    sum = (memory[pointer - 320] & 0xff) + (memory[pointer] & 0xff)
-      + (memory[pointer + 320] & 0xff) + (memory[pointer + 640] & 0xff);
-    accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
-    pointer += 1;
-    sum = (memory[pointer - 320] & 0xff) + (memory[pointer] & 0xff)
-      + (memory[pointer + 320] & 0xff) + (memory[pointer + 640] & 0xff);
-    accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
+    accumulator = (accumulator + q0 + q1 + q2 + q3) & 0xff;
     accumulator >>>= 2;
     memory[destination] = accumulator;
+    destination += 1;
+    q0 = q1;
+    q1 = q2;
+    q2 = q3;
+    q3 = quarter(destination + 3);
   }
 }
 
@@ -2550,6 +2580,11 @@ function poly3d(machine, linked) {
   }
 
   polyProject3d(machine, linked, p);
+  polyProjectedTail(machine, linked, p);
+}
+
+function polyProjectedTail(machine, linked, p) {
+  const memory = machine.memory;
   memory[p.BXn] = memory[p.PJvr2];
   polyBounds(memory, p);
   memory[p.PJgate] = 0;
@@ -5101,6 +5136,1183 @@ function backupEkeySession(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function surfaceBulkAddresses(linked) {
+  let cached = surfaceBulkAddressCaches.get(linked);
+  if (cached) return cached;
+  const names = ["nw", "SUpbase", "SUsp", "SUsi", "SUsn", "SUval", "SUg", "SUnax", "SUncx", "SUnbl"];
+  cached = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+  surfaceBulkAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function surfaceDword(memory, pointer) {
+  return ((memory[pointer] & 0xff) | ((memory[pointer + 1] & 0xff) << 8)
+    | ((memory[pointer + 2] & 0xff) << 16) | ((memory[pointer + 3] & 0xff) << 24)) | 0;
+}
+
+function surfaceSmooth(machine, linked, stride) {
+  const memory = machine.memory;
+  const p = surfaceBulkAddresses(linked);
+  const base = (p.nw + (memory[p.SUpbase] >>> 0)) >>> 0;
+  const start = stride;
+  const count = stride === 360 ? 63360 : 63520;
+  memory[p.SUsp] = base;
+  let last = 0;
+  for (let index = start, remaining = count; remaining > 0; index += 1, remaining -= 1) {
+    let packed = surfaceDword(memory, base + index - stride);
+    packed = (packed + surfaceDword(memory, base + index)) | 0;
+    packed = (packed + surfaceDword(memory, base + index + stride)) | 0;
+    packed = (packed + surfaceDword(memory, base + index + stride * 2)) | 0;
+    packed = (packed & 0xfcfcfcfc) >>> 2;
+    let output = packed & 0xff;
+    output = (output + ((packed >>> 8) & 0xff)) & 0xff;
+    packed >>>= 16;
+    output = (output + (packed & 0xff)) & 0xff;
+    output = (output + ((packed >>> 8) & 0xff)) & 0xff;
+    output >>>= 2;
+    memory[base + index] = output;
+    last = output;
+  }
+  memory[p.SUsi] = start + count;
+  machine.A = last;
+  machine.B = 0;
+  machine.X = LINO_DONE;
+}
+
+function surfaceSsmooth(machine, linked) {
+  surfaceSmooth(machine, linked, 360);
+}
+
+function surfacePsmooth(machine, linked) {
+  surfaceSmooth(machine, linked, 320);
+}
+
+function surfaceLssmooth(machine, linked) {
+  const memory = machine.memory;
+  const p = surfaceBulkAddresses(linked);
+  const base = (p.nw + (memory[p.SUpbase] >>> 0)) >>> 0;
+  memory[p.SUsp] = base;
+  let last = 0;
+  for (let index = 0; index < 64480; index += 1) {
+    const first = (memory[base + index] & 0xff) | ((memory[base + index + 1] & 0xff) << 8);
+    memory[p.SUsn] = first & 0xff;
+    const upper = (memory[base + index + 360] & 0xff) | ((memory[base + index + 361] & 0xff) << 8);
+    const low = first & 0x3f3f;
+    const high = upper & 0x3f3f;
+    let output = low & 0xff;
+    output = (output + ((low >>> 8) & 0xff)) & 0xff;
+    output = (output + (high & 0xff)) & 0xff;
+    output = (output + ((high >>> 8) & 0xff)) & 0xff;
+    output = (output >>> 2) | (first & 0xc0);
+    memory[base + index] = output;
+    last = output;
+  }
+  memory[p.SUsi] = 64480;
+  machine.A = last;
+  machine.B = 0;
+  machine.X = LINO_DONE;
+}
+
+function surfaceClear(machine, linked) {
+  const memory = machine.memory;
+  const p = surfaceBulkAddresses(linked);
+  const base = (p.nw + (memory[p.SUpbase] >>> 0)) >>> 0;
+  const output = memory[p.SUval] & 0xff;
+  memory.fill(output, base, base + 64800);
+  machine.A = base + 64800;
+  machine.B = 0;
+  machine.C = output;
+  machine.X = LINO_DONE;
+}
+
+function surfaceNegate(machine, linked) {
+  const memory = machine.memory;
+  const p = surfaceBulkAddresses(linked);
+  const base = (p.nw + (memory[p.SUpbase] >>> 0)) >>> 0;
+  let last = 0;
+  for (let index = 0; index < 64800; index += 1) {
+    last = (62 - (memory[base + index] & 0xff)) & 0xff;
+    memory[base + index] = last;
+  }
+  machine.A = base + 64800;
+  machine.B = 0;
+  machine.C = last;
+  machine.X = LINO_DONE;
+}
+
+function surfaceNoiseStep(memory, p, counter) {
+  let folded = ((memory[p.SUnax] | 0) + counter) & 0xffff;
+  const signed = (folded & 0x8000) !== 0 ? folded - 0x10000 : folded;
+  const product = Math.imul(signed, signed);
+  folded = ((product & 0xffff) + ((product >>> 16) & 0xffff)) & 0xffff;
+  memory[p.SUnax] = folded;
+  const output = folded & 0x3e;
+  memory[p.SUnbl] = output;
+  return output;
+}
+
+function surfaceRandomPattern(machine, linked) {
+  const memory = machine.memory;
+  const p = surfaceBulkAddresses(linked);
+  const base = (p.nw + (memory[p.SUpbase] >>> 0)) >>> 0;
+  memory[p.SUsp] = base;
+  for (let index = 0, counter = 64800; counter > 0; index += 1, counter -= 1) {
+    memory[base + index] = surfaceNoiseStep(memory, p, counter);
+  }
+  memory[p.SUsi] = 64800;
+  memory[p.SUncx] = 0;
+  machine.X = LINO_DONE;
+}
+
+function surfaceSda(machine, linked) {
+  const memory = machine.memory;
+  const p = surfaceBulkAddresses(linked);
+  const base = (p.nw + (memory[p.SUpbase] >>> 0)) >>> 0;
+  const threshold = memory[p.SUg] & 0xff;
+  memory[p.SUsp] = base;
+  for (let index = 0, counter = 64000; counter > 0; index += 1, counter -= 1) {
+    const current = memory[base + index] & 0xff;
+    if (current < threshold) memory[base + index] = 16;
+    else {
+      const output = (current + surfaceNoiseStep(memory, p, counter)) & 0xff;
+      memory[base + index] = output;
+      if (output >= 62) {
+        memory[base + index] = 62;
+        memory[base + index + 1] = 0;
+      }
+    }
+  }
+  memory[p.SUsi] = 64000;
+  memory[p.SUncx] = 0;
+  machine.X = LINO_DONE;
+}
+
+function spaceFade(machine, linked) {
+  const memory = machine.memory;
+  let p = spaceFadeAddressCaches.get(linked);
+  if (!p) {
+    p = {
+      nw: address(linked, "nw"), radpt: address(linked, "RADPT"),
+      base: address(linked, "VHSfadebase"), index: address(linked, "VHSfadei"),
+    };
+    spaceFadeAddressCaches.set(linked, p);
+  }
+  const relative = p.radpt + 2876;
+  const base = p.nw + relative;
+  memory[p.base] = relative;
+  let output = 0;
+  for (let index = 0; index < 57920; index += 1) {
+    output = memory[base + index] & 63;
+    output = output >= 8 ? output - 8 : 0;
+    memory[base + index] = output;
+  }
+  memory[p.index] = 57920;
+  machine.A = base + 57919;
+  machine.C = output;
+  machine.X = LINO_DONE;
+}
+
+function flareSourceStick(machine, linked) {
+  const memory = machine.memory;
+  let p = flareSourceStickAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "nw", "RADPT", "VHFx0", "VHFx1", "VHFy0", "VHFy1", "VHFlinep",
+      "VHFlinepf", "VHFlinea", "VHFlineb", "VHFlineL", "VHFlinegx",
+      "VHFlinegy", "VHFlineend", "VHFlineax", "VHFlineay",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    flareSourceStickAddressCaches.set(linked, p);
+  }
+
+  const page = p.nw + p.RADPT;
+  let x0 = memory[p.VHFx0] | 0;
+  let x1 = memory[p.VHFx1] | 0;
+  let y0 = memory[p.VHFy0] | 0;
+  let y1 = memory[p.VHFy1] | 0;
+  let pointer = 0;
+  let output = 0;
+
+  if (x0 === x1) {
+    const first = y0 <= y1 ? y0 : y1;
+    const final = (y0 <= y1 ? y1 : y0) + 1;
+    pointer = page + Math.imul(first, 320) + x0;
+    const pointerFinal = page + Math.imul(final, 320) + x0;
+    memory[p.VHFlinep] = pointer;
+    memory[p.VHFlinepf] = pointerFinal;
+    while (pointer < pointerFinal) {
+      const old = memory[pointer] & 0xff;
+      const bright = Math.min((old & 63) + 8, 62);
+      output = (old & 192) | bright;
+      memory[pointer] = output;
+      pointer += 320;
+    }
+    memory[p.VHFlinep] = pointer;
+    machine.A = pointer;
+    machine.C = output;
+    machine.D = pointer - 320;
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  if (x1 < x0) {
+    [x0, x1] = [x1, x0];
+    [y0, y1] = [y1, y0];
+    memory[p.VHFx0] = x0;
+    memory[p.VHFx1] = x1;
+    memory[p.VHFy0] = y0;
+    memory[p.VHFy1] = y1;
+  }
+  const a = x1 - x0;
+  const signedB = y1 - y0;
+  const b = Math.abs(signedB);
+  const length = Math.min(a, b) + 1;
+  let gx = Math.imul(x0, 65536) | 0;
+  let gy = Math.imul(y0, 65536) | 0;
+  const end = Math.imul(x1, 65536) | 0;
+  const ax = (Math.trunc((a * 65536) / length) * 2) | 0;
+  let ay = (Math.trunc((b * 65536) / length) * 2) | 0;
+  if (signedB < 0) ay = -ay;
+  memory[p.VHFlinea] = a;
+  memory[p.VHFlineb] = b;
+  memory[p.VHFlineL] = length;
+  memory[p.VHFlinegx] = gx;
+  memory[p.VHFlinegy] = gy;
+  memory[p.VHFlineend] = end;
+  memory[p.VHFlineax] = ax;
+  memory[p.VHFlineay] = ay;
+
+  while (gx < end) {
+    pointer = page + Math.imul(gy >>> 16, 320) + (gx >>> 16);
+    const old = memory[pointer] & 0xff;
+    output = (old & 63) <= 55 ? (old + 8) & 0xff : (old & 192) | 62;
+    memory[pointer] = output;
+    gx = (gx + ax) | 0;
+    gy = (gy + ay) | 0;
+  }
+  memory[p.VHFlinegx] = gx;
+  memory[p.VHFlinegy] = gy;
+  machine.A = gx;
+  machine.C = output;
+  machine.D = pointer;
+  machine.X = LINO_DONE;
+}
+
+function scaleSignedByteExact(byte, magnitudeBits) {
+  const dy = byte < 128 ? byte : byte - 256;
+  const bits = magnitudeBits >>> 0;
+  const exponent = (bits >>> 23) & 255;
+  let mantissa = bits & 0x7fffff;
+  if (exponent === 0 && mantissa === 0) return 0;
+  if (exponent === 255) return -32768;
+  let shift;
+  if (exponent === 0) shift = 149;
+  else {
+    mantissa += 0x800000;
+    shift = 150 - exponent;
+  }
+  const negative = ((bits >>> 31) ^ (dy < 0 ? 1 : 0)) !== 0;
+  const product = Math.abs(dy) * mantissa;
+  let rounded = 0;
+  if (shift === 0) rounded = product;
+  else if (shift > 0 && shift < 32) {
+    const divisor = 2 ** shift;
+    rounded = Math.floor(product / divisor);
+    const remainder = product - rounded * divisor;
+    const half = divisor / 2;
+    if (remainder > half || (remainder === half && (rounded & 1) !== 0)) rounded += 1;
+  }
+  if (negative) rounded = -rounded;
+  return rounded > 32767 || rounded < -32768 ? -32768 : rounded;
+}
+
+function glowRaster(machine, linked) {
+  const memory = machine.memory;
+  let p = glowRasterAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "nw", "rgt", "sprg", "GLmag", "GLcx", "GLcy", "GLstart", "GLarc",
+      "GLcol", "GLtabreg", "GLdstreg", "GLnb", "GLbl", "GLbh", "GLsi",
+      "GLdx", "GLcxr", "GLy", "GLx", "GLdi", "GLax", "GLdec", "GLylo",
+      "GLyhi", "GLrx0", "GLrx1", "GLlit", "GLdark", "GLoobmn", "GLoobmx",
+      "GLoobn", "GLwrap", "CSdraw", "CSskip", "CSoob", "CScur", "GBt",
+      "SPMk", "SPreg", "SPoff", "SPval", "SCdy", "SCmag", "SCout",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    glowRasterAddressCaches.set(linked, p);
+  }
+
+  const nw = p.nw;
+  const magnitude = memory[p.GLmag] | 0;
+  const scale = new Int32Array(256);
+  for (let byte = 0; byte < 256; byte += 1) scale[byte] = scaleSignedByteExact(byte, magnitude);
+  const cx = memory[p.GLcx] | 0;
+  const cy = memory[p.GLcy] | 0;
+  const arc = memory[p.GLarc] >>> 0;
+  const colour = memory[p.GLcol] | 0;
+  const bl = colour & 255;
+  const bh = ((colour & 63) >>> 2) | (colour & 192);
+  const tableRegister = memory[p.GLtabreg] | 0;
+  const destinationRegister = memory[p.GLdstreg] | 0;
+  const table = nw + (memory[p.rgt + Math.imul(tableRegister, 4) + 1] >>> 0);
+  const destination = nw + (memory[p.rgt + Math.imul(destinationRegister, 4) + 1] >>> 0);
+  let si = 0;
+  let dx = memory[p.GLstart] | 0;
+  let remaining = memory[p.GLnb] >>> 1;
+  let draw = 0;
+  let skip = 0;
+  let decimated = 0;
+  let yLow = 0;
+  let yHigh = 0;
+  let xLow = 0;
+  let xHigh = 0;
+  let lit = 0;
+  let dark = 0;
+  let oob = 0;
+  let oobMin = 0;
+  let oobMax = 0;
+  let wraps = 0;
+  let yByte = 0;
+  let xByte = 0;
+  let di = 0;
+  let ax = 0;
+
+  while (remaining > 0) {
+    yByte = memory[table + ((si + 4) & 0xffff)] & 255;
+    xByte = memory[table + ((si + 5) & 0xffff)] & 255;
+    if (yByte === 100) {
+      skip += 1;
+      dx = (dx + xByte) | 0;
+      while ((dx >>> 0) >= 360) {
+        dx = (dx - 360) | 0;
+        wraps += 1;
+      }
+    } else {
+      draw += 1;
+      if ((dx & 3) !== 0) decimated += 1;
+      else {
+        di = (scale[yByte] + cy) & 0xffff;
+        if ((di >>> 0) < 10) yLow += 1;
+        else if ((di >>> 0) >= 190) yHigh += 1;
+        const rowOffset = (di + di) & 0xffff;
+        let rowBase = 0;
+        if (di < 200) rowBase = memory[p.sprg + di] | 0;
+        else {
+          oob += 1;
+          if (oob === 1) oobMin = oobMax = rowOffset;
+          else {
+            if ((rowOffset >>> 0) < (oobMin >>> 0)) oobMin = rowOffset;
+            if ((rowOffset >>> 0) > (oobMax >>> 0)) oobMax = rowOffset;
+          }
+        }
+        ax = (scale[xByte] + cx) & 0xffff;
+        if ((ax >>> 0) < 9) xLow += 1;
+        else if ((ax >>> 0) >= 310) xHigh += 1;
+        else {
+          di = (rowBase + ax) & 0xffff;
+          const output = (dx >>> 0) < arc ? bh : bl;
+          memory[destination + ((di + 4) & 0xffff)] = output;
+          if ((dx >>> 0) < arc) dark += 1;
+          else lit += 1;
+        }
+      }
+      dx += 1;
+      if ((dx >>> 0) >= 360) dx = 0;
+    }
+    si += 2;
+    remaining -= 1;
+  }
+
+  memory[p.GLbl] = bl;
+  memory[p.GLbh] = bh;
+  memory[p.GLsi] = si;
+  memory[p.GLdx] = dx;
+  memory[p.GLcxr] = remaining;
+  memory[p.GLy] = yByte;
+  memory[p.GLx] = xByte;
+  memory[p.GLdi] = di;
+  memory[p.GLax] = ax;
+  memory[p.GLdec] = decimated;
+  memory[p.GLylo] = yLow;
+  memory[p.GLyhi] = yHigh;
+  memory[p.GLrx0] = xLow;
+  memory[p.GLrx1] = xHigh;
+  memory[p.GLlit] = lit;
+  memory[p.GLdark] = dark;
+  memory[p.GLoobn] = oob;
+  memory[p.GLoobmn] = oobMin;
+  memory[p.GLoobmx] = oobMax;
+  memory[p.GLwrap] = wraps;
+  memory[p.CSdraw] = draw;
+  memory[p.CSskip] = skip;
+  memory[p.CSoob] = oob;
+  memory[p.CScur] = dx;
+  memory[p.GBt] = (di + di) & 0xffff;
+  memory[p.SPMk] = oob;
+  memory[p.SPreg] = destinationRegister;
+  memory[p.SPoff] = (di + 4) & 0xffff;
+  memory[p.SPval] = (dx >>> 0) < arc ? bh : bl;
+  memory[p.SCdy] = xByte < 128 ? xByte : xByte - 256;
+  memory[p.SCmag] = magnitude;
+  memory[p.SCout] = scale[xByte];
+  machine.A = dx;
+  machine.C = 0;
+  machine.X = LINO_DONE;
+}
+
+function drawMode2Cache(machine, linked) {
+  const memory = machine.memory;
+  let p = mode2CacheAddressCaches.get(linked);
+  if (!p) {
+    p = {
+      ...poly3dAddresses(linked),
+      VHRcached: address(linked, "VHRcached"),
+      VHRcachecount: address(linked, "VHRcachecount"),
+      VHRcachep: address(linked, "VHRcachep"),
+      VHRptr: address(linked, "VHRptr"),
+      VHRi: address(linked, "VHRi"),
+      VHRdrawn: address(linked, "VHRdrawn"),
+      vhrcache: address(linked, "vhrcache"),
+      DBcol: address(linked, "DBcol"),
+      DBflar: address(linked, "DBflar"),
+      DBent: address(linked, "DBent"),
+      PGFt: address(linked, "PGFt"),
+    };
+    mode2CacheAddressCaches.set(linked, p);
+  }
+  memory[p.VHRdrawn] = 0;
+  if ((memory[p.VHRcached] | 0) === 0) {
+    machine.X = LINO_DONE;
+    return;
+  }
+  const count = memory[p.VHRcachecount] >>> 0;
+  const view = dataView(memory);
+  if (!p.topology || p.topology.count !== count) {
+    const keys = new Map();
+    const vertexIds = new Int32Array(count * 3);
+    const coordinates = [];
+    for (let leaf = 0; leaf < count; leaf += 1) {
+      const record = p.vhrcache + leaf * 10;
+      for (let vertex = 0; vertex < 3; vertex += 1) {
+        const source = record + vertex * 3;
+        const x = memory[source] | 0;
+        const y = memory[source + 1] | 0;
+        const z = memory[source + 2] | 0;
+        const key = `${x},${y},${z}`;
+        let id = keys.get(key);
+        if (id === undefined) {
+          id = coordinates.length;
+          keys.set(key, id);
+          coordinates.push([x, y, z]);
+        }
+        vertexIds[leaf * 3 + vertex] = id;
+      }
+    }
+    const size = coordinates.length;
+    p.topology = {
+      count, vertexIds, coordinates,
+      rx: new Float64Array(size), ry: new Float64Array(size), rz: new Float64Array(size),
+      screenX: new Float64Array(size), screenY: new Float64Array(size),
+      ix: new Int32Array(size), iy: new Int32Array(size), visible: new Uint8Array(size),
+    };
+  }
+  const control = floatingPoint(machine).control;
+  const cameraX = directPolySlot(memory, p, p.FSCAMX);
+  const cameraY = directPolySlot(memory, p, p.FSCAMY);
+  const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
+  const betaSin = directPolySlot(memory, p, p.FSPSB);
+  const betaCos = directPolySlot(memory, p, p.FSPCB);
+  const turnBetaCos = directPolySlot(memory, p, p.FSTCB);
+  const turnBetaSin = directPolySlot(memory, p, p.FSTSB);
+  const alphaCos = directPolySlot(memory, p, p.FSPCA);
+  const alphaSin = directPolySlot(memory, p, p.FSPSA);
+  const turnAlphaCos = directPolySlot(memory, p, p.FSTCA);
+  const turnAlphaSin = directPolySlot(memory, p, p.FSTSA);
+  const near = directPolySlot(memory, p, p.FSUNEG);
+  const numerator = directPolySlot(memory, p, p.FSUNO);
+  const centerX = directPolySlot(memory, p, p.FSXC);
+  const centerY = directPolySlot(memory, p, p.FSYC);
+  for (let id = 0; id < p.topology.coordinates.length; id += 1) {
+    const [xb, yb, zb] = p.topology.coordinates[id];
+    const z = roundFloat32(float32FromBits(zb) - cameraZ, control);
+    const x = roundFloat32(float32FromBits(xb) - cameraX, control);
+    const y = roundFloat32(float32FromBits(yb) - cameraY, control);
+    const rx = roundFloat32(x * betaCos + z * betaSin, control);
+    const z2 = roundFloat32(z * turnBetaCos - x * turnBetaSin, control);
+    const rzWide = y * turnAlphaSin + z2 * turnAlphaCos;
+    const rz = roundFloat32(rzWide, control);
+    const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
+    const visible = !Number.isNaN(rzWide) && !Number.isNaN(near) && rzWide >= near;
+    p.topology.rx[id] = rx;
+    p.topology.ry[id] = ry;
+    p.topology.rz[id] = rz;
+    p.topology.visible[id] = visible ? 1 : 0;
+    if (visible) {
+      const factor = numerator / rz;
+      const screenXWide = factor * rx + centerX;
+      const screenYWide = factor * ry + centerY;
+      p.topology.screenX[id] = roundFloat32(screenXWide, control);
+      p.topology.screenY[id] = roundFloat32(screenYWide, control);
+      p.topology.ix[id] = convertToInt32(screenXWide, control);
+      p.topology.iy[id] = convertToInt32(screenYWide, control);
+    }
+  }
+  for (let leaf = 0; leaf < count; leaf += 1) {
+    const record = p.vhrcache + leaf * 10;
+    memory[p.VHRcachep] = leaf;
+    memory[p.VHRptr] = record;
+    for (let vertex = 0; vertex < 3; vertex += 1) {
+      const source = record + vertex * 3;
+      const slots = [p.FSINX + vertex, p.FSINY + vertex, p.FSINZ + vertex];
+      for (let axis = 0; axis < 3; axis += 1) {
+        const bits = memory[source + axis] | 0;
+        const slot = slots[axis];
+        memory[p.PGFi] = slot;
+        memory[p.PGFt] = bits;
+        memory[p.FS0] = bits;
+        view.setFloat64((p.fw + slot * 2) * 4, float32FromBits(bits), true);
+      }
+      memory[p.VHRi] = vertex + 1;
+    }
+    memory[p.PJnrv] = 3;
+    memory[p.DBcol] = memory[record + 9];
+    memory[p.DBflar] = 0;
+    memory[p.DBent] = 0;
+    const id0 = p.topology.vertexIds[leaf * 3];
+    const id1 = p.topology.vertexIds[leaf * 3 + 1];
+    const id2 = p.topology.vertexIds[leaf * 3 + 2];
+    const visibleCount = p.topology.visible[id0] + p.topology.visible[id1] + p.topology.visible[id2];
+    memory[p.PJmode] = 0;
+    memory[p.PJdoflag] = visibleCount;
+      memory[p.PJgate] = 1;
+    if (visibleCount === 3) {
+      for (let vertex = 0; vertex < 3; vertex += 1) {
+        const id = vertex === 0 ? id0 : vertex === 1 ? id1 : id2;
+        writeFloat64(memory, p.fw + (p.FSRXF + vertex) * 2, p.topology.rx[id]);
+        writeFloat64(memory, p.fw + (p.FSRYF + vertex) * 2, p.topology.ry[id]);
+        writeFloat64(memory, p.fw + (p.FSRZF + vertex) * 2, p.topology.rz[id]);
+        writeFloat64(memory, p.fw + (p.FSUX + vertex) * 2, p.topology.rx[id]);
+        writeFloat64(memory, p.fw + (p.FSUY + vertex) * 2, p.topology.ry[id]);
+        writeFloat64(memory, p.fw + (p.FSUZ + vertex) * 2, p.topology.rz[id]);
+        writeFloat64(memory, p.fw + (p.FSVX0 + vertex) * 2, p.topology.screenX[id]);
+        writeFloat64(memory, p.fw + (p.FSVY0 + vertex) * 2, p.topology.screenY[id]);
+        memory[p.rwf + vertex] = 1;
+        memory[p.mp + vertex * 2] = p.topology.ix[id];
+        memory[p.mp + vertex * 2 + 1] = p.topology.iy[id];
+      }
+      memory[p.PJvr] = 3;
+      memory[p.PJvr2] = 3;
+      memory[p.PJvr22] = 6;
+      polyProjectedTail(machine, linked, p);
+    } else if (visibleCount !== 0) poly3d(machine, linked);
+    memory[p.VHRdrawn] = (memory[p.VHRdrawn] + 1) | 0;
+  }
+  memory[p.VHRcachep] = count;
+  machine.X = LINO_DONE;
+}
+
+function drawCupolaPanel(machine, linked) {
+  const memory = machine.memory;
+  let p = drawCupolaPanelAddressCaches.get(linked);
+  if (!p) {
+    p = {
+      ...polymapAddresses(linked),
+      VHCcapsule: address(linked, "VHCcapsule"),
+      VHCi: address(linked, "VHCi"),
+      VHCvi: address(linked, "VHCvi"),
+      vhcpoly: address(linked, "vhcpoly"),
+      PGFt: address(linked, "PGFt"),
+    };
+    drawCupolaPanelAddressCaches.set(linked, p);
+  }
+  const capsule = memory[p.VHCcapsule] | 0;
+  for (let vertex = 0; vertex < 4; vertex += 1) {
+    const sourceVertex = capsule !== 0 ? (vertex === 0 ? 3 : vertex - 1) : vertex;
+    const source = p.vhcpoly + sourceVertex * 3;
+    memory[p.VHCi] = vertex;
+    memory[p.VHCvi] = sourceVertex;
+    const slots = [p.FSINX + vertex, p.FSINY + vertex, p.FSINZ + vertex];
+    for (let axis = 0; axis < 3; axis += 1) {
+      const bits = memory[source + axis] | 0;
+      memory[p.PGFi] = slots[axis];
+      memory[p.PGFt] = bits;
+      memory[p.FS0] = bits;
+      writeFloat64(memory, p.fw + slots[axis] * 2, float32FromBits(bits));
+    }
+  }
+  memory[p.VHCi] = 4;
+  memory[p.PJnrv] = 4;
+  if (capsule === 0) {
+    memory[p.DBcol] = 64;
+    memory[p.DBflar] = 2;
+    memory[p.DBent] = 0;
+    poly3d(machine, linked);
+  } else {
+    memory[p.PGtexf] = 7;
+    memory[p.SPtinta] = 0;
+    memory[p.SPescr] = 0;
+    memory[p.SPflar] = 4;
+    memory[p.SPcull] = 0;
+    memory[p.SPhalf] = 0;
+    polymap(machine, linked);
+    memory[p.PGtexf] = 0;
+    memory[p.SPflar] = 0;
+  }
+  machine.X = LINO_DONE;
+}
+
+function stick3d(machine, linked) {
+  const memory = machine.memory;
+  let p = stick3dAddressCaches.get(linked);
+  if (!p) {
+    p = { ...poly3dAddresses(linked) };
+    for (const name of [
+      "VHSx0", "VHSy0", "VHSz0", "VHSx1", "VHSy1", "VHSz1",
+      "VHSpx0", "VHSpy0", "VHSpx1", "VHSpy1", "VHSdx", "VHSdy",
+      "VHSsx", "VHSsy", "VHSerr", "VHSe2", "VHSphase", "VHSnearbase",
+      "VHSclipbound",
+    ]) p[name] = address(linked, name);
+    stick3dAddressCaches.set(linked, p);
+  }
+  const control = floatingPoint(machine).control;
+  const savedNear = float32Bits(roundFloat32(directPolySlot(memory, p, p.FSUNEG), control));
+  memory[p.VHSnearbase] = savedNear;
+  writeFloat64(memory, p.fw + p.FSUNEG * 2, 200);
+  const endpoints = [
+    [memory[p.VHSx0] | 0, memory[p.VHSy0] | 0, memory[p.VHSz0] | 0],
+    [memory[p.VHSx1] | 0, memory[p.VHSy1] | 0, memory[p.VHSz1] | 0],
+  ];
+  for (let vertex = 0; vertex < 2; vertex += 1) {
+    const slots = [p.FSINX + vertex, p.FSINY + vertex, p.FSINZ + vertex];
+    for (let axis = 0; axis < 3; axis += 1) {
+      const bits = endpoints[vertex][axis];
+      memory[p.FS0] = bits;
+      memory[p.PGFi] = slots[axis];
+      writeFloat64(memory, p.fw + slots[axis] * 2, float32FromBits(bits));
+    }
+  }
+  memory[p.PJnrv] = 2;
+  memory[p.PJmode] = 0;
+  polyRotateDirect(machine, linked, p);
+  const visible = memory[p.PJdoflag] | 0;
+  if (visible === 0) {
+    writeFloat64(memory, p.fw + p.FSUNEG * 2, float32FromBits(savedNear));
+    machine.X = LINO_DONE;
+    return;
+  }
+  if (visible === 2) polyZload(machine, linked, p);
+  else {
+    const firstVisible = (memory[p.rwf] | 0) !== 0;
+    memory[p.PJbx] = firstVisible ? 1 : 0;
+    memory[p.PJvv] = firstVisible ? 0 : 1;
+    memory[p.PJdi] = 0;
+    polyZemit(machine, linked, p);
+    const surviving = memory[p.PJvv] | 0;
+    polyMove(machine, linked, p, p.FSRXF + surviving, p.FSUX + 1);
+    polyMove(machine, linked, p, p.FSRYF + surviving, p.FSUY + 1);
+    polyMove(machine, linked, p, p.FSRZF + surviving, p.FSUZ + 1);
+    memory[p.PJvr2] = 2;
+  }
+  polyProject3d(machine, linked, p);
+  let x0 = memory[p.mp] | 0;
+  let y0 = memory[p.mp + 1] | 0;
+  let x1 = memory[p.mp + 2] | 0;
+  let y1 = memory[p.mp + 3] | 0;
+  memory[p.VHSpx0] = x0;
+  memory[p.VHSpy0] = y0;
+  memory[p.VHSpx1] = x1;
+  memory[p.VHSpy1] = y1;
+  const left = p.PGLBX;
+  const top = p.PGLBY;
+  const right = p.PGUBX;
+  const bottom = p.PGUBY;
+  const rejected = (x0 < left && x1 < left) || (x0 > right && x1 > right)
+    || (y0 < top && y1 < top) || (y0 > bottom && y1 > bottom);
+  if (!rejected) {
+    const clipX0 = (bound) => {
+      const diff = roundFloat32(x0 - x1, control);
+      const k = roundFloat32((bound - x1) / diff, control);
+      y0 = convertToInt32((y0 - y1) * k + y1, control);
+      x0 = bound;
+    };
+    const clipX1 = (bound) => {
+      const diff = roundFloat32(x1 - x0, control);
+      const k = roundFloat32((bound - x0) / diff, control);
+      y1 = convertToInt32((y1 - y0) * k + y0, control);
+      x1 = bound;
+    };
+    const clipY0 = (bound) => {
+      const diff = roundFloat32(y0 - y1, control);
+      const k = roundFloat32((bound - y1) / diff, control);
+      x0 = convertToInt32((x0 - x1) * k + x1, control);
+      y0 = bound;
+    };
+    const clipY1 = (bound) => {
+      const diff = roundFloat32(y1 - y0, control);
+      const k = roundFloat32((bound - y0) / diff, control);
+      x1 = convertToInt32((x1 - x0) * k + x0, control);
+      y1 = bound;
+    };
+    if (x0 < left) clipX0(left);
+    if (x1 < left) clipX1(left);
+    if (y0 < top) clipY0(top);
+    if (y1 < top) clipY1(top);
+    if (x0 > right) clipX0(right);
+    if (x1 > right) clipX1(right);
+    if (y0 > bottom) clipY0(bottom);
+    if (y1 > bottom) clipY1(bottom);
+    memory[p.VHSpx0] = x0;
+    memory[p.VHSpy0] = y0;
+    memory[p.VHSpx1] = x1;
+    memory[p.VHSpy1] = y1;
+    if (x0 !== x1 || y0 !== y1) {
+      if (x1 < x0) {
+        [x0, x1] = [x1, x0];
+        [y0, y1] = [y1, y0];
+        memory[p.VHSpx0] = x0;
+        memory[p.VHSpy0] = y0;
+        memory[p.VHSpx1] = x1;
+        memory[p.VHSpy1] = y1;
+      }
+      const rawDx = x1 - x0;
+      const rawDy = y1 - y0;
+      const sx = rawDx >= 0 ? 1 : -1;
+      const sy = rawDy >= 0 ? 1 : -1;
+      const dx = Math.abs(rawDx);
+      const dy = -Math.abs(rawDy);
+      memory[p.VHSsx] = sx;
+      memory[p.VHSsy] = sy;
+      memory[p.VHSdx] = dx;
+      memory[p.VHSdy] = dy;
+      memory[p.VHSerr] = dx + dy;
+      memory[p.VHSphase] = 0;
+      drawStickLine(machine, linked);
+    }
+  }
+  writeFloat64(memory, p.fw + p.FSUNEG * 2, float32FromBits(savedNear));
+  memory[p.PGFi] = p.FSUNEG;
+  machine.X = LINO_DONE;
+}
+
+function flareDrawAddresses(linked) {
+  let p = flareDrawAddressCaches.get(linked);
+  if (p) return p;
+  const names = [
+    "VHFcx", "VHFcy", "VHFang", "VHFk0", "VHFl0", "VHFu0", "VHFadd",
+    "VHFghost", "VHFdx", "VHFdy", "VHFx0", "VHFy0", "VHFx1", "VHFy1",
+    "VHFclipbound", "VHFlineleft", "VHFlinetop", "VHFgdx", "VHFgdy",
+    "VHFgr", "VHFgfx", "VHFgfy", "VHFsintab", "VHFcostab", "VHVsin",
+    "VHVcos",
+  ];
+  p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+  flareDrawAddressCaches.set(linked, p);
+  return p;
+}
+
+function flareSourceLine(machine, linked) {
+  const memory = machine.memory;
+  const p = flareDrawAddresses(linked);
+  const control = floatingPoint(machine).control;
+  let x0 = memory[p.VHFx0] | 0;
+  let y0 = memory[p.VHFy0] | 0;
+  let x1 = memory[p.VHFx1] | 0;
+  let y1 = memory[p.VHFy1] | 0;
+  const left = -150;
+  const top = -90;
+  memory[p.VHFlineleft] = left;
+  memory[p.VHFlinetop] = top;
+  const clipX0 = (bound) => {
+    memory[p.VHFclipbound] = bound;
+    const diff = roundFloat32(x0 - x1, control);
+    const k = roundFloat32((bound - x1) / diff, control);
+    y0 = convertToInt32((y0 - y1) * k + y1, control);
+    x0 = bound;
+  };
+  const clipX1 = (bound) => {
+    memory[p.VHFclipbound] = bound;
+    const diff = roundFloat32(x1 - x0, control);
+    const k = roundFloat32((bound - x0) / diff, control);
+    y1 = convertToInt32((y1 - y0) * k + y0, control);
+    x1 = bound;
+  };
+  const clipY0 = (bound) => {
+    memory[p.VHFclipbound] = bound;
+    const diff = roundFloat32(y0 - y1, control);
+    const k = roundFloat32((bound - y1) / diff, control);
+    x0 = convertToInt32((x0 - x1) * k + x1, control);
+    y0 = bound;
+  };
+  const clipY1 = (bound) => {
+    memory[p.VHFclipbound] = bound;
+    const diff = roundFloat32(y1 - y0, control);
+    const k = roundFloat32((bound - y0) / diff, control);
+    x1 = convertToInt32((x1 - x0) * k + x0, control);
+    y1 = bound;
+  };
+  if (x0 < left && x0 !== x1) clipX0(left);
+  if (x1 < left && x1 !== x0) clipX1(left);
+  if (y0 < top && y0 !== y1) clipY0(top);
+  if (y1 < top && y1 !== y0) clipY1(top);
+  if (x0 > 160 && x0 !== x1) clipX0(160);
+  if (x1 > 160 && x1 !== x0) clipX1(160);
+  if (y0 > 90 && y0 !== y1) clipY0(90);
+  if (y1 > 90 && y1 !== y0) clipY1(90);
+  memory[p.VHFx0] = x0;
+  memory[p.VHFy0] = y0;
+  memory[p.VHFx1] = x1;
+  memory[p.VHFy1] = y1;
+  const point = x0 === x1 && y0 === y1;
+  const outside = y0 < top || y0 > 90 || y1 < top || y1 > 90
+    || x0 < left || x0 > 160 || x1 < left || x1 > 160;
+  if (!point && !outside) {
+    memory[p.VHFx0] = x0 + 158;
+    memory[p.VHFx1] = x1 + 158;
+    memory[p.VHFy0] = y0 + 100;
+    memory[p.VHFy1] = y1 + 100;
+    flareSourceStick(machine, linked);
+  }
+  machine.X = LINO_DONE;
+}
+
+function flareDraw(machine, linked) {
+  const memory = machine.memory;
+  const p = flareDrawAddresses(linked);
+  const k = readFloat64(memory, p.VHFk0);
+  let length = 1;
+  let scale = float32FromBits(1069547520);
+  let angle = 0;
+  const add = memory[p.VHFadd] | 0;
+  const centerX = memory[p.VHFcx] | 0;
+  const centerY = memory[p.VHFcy] | 0;
+  const ghost = memory[p.VHFghost] | 0;
+  const chop = (number) => Number.isFinite(number) && number >= -2147483648 && number <= 2147483647
+    ? Math.trunc(number) | 0 : -2147483648;
+  while (angle < 180) {
+    const cosineBits = memory[p.VHFcostab + angle] | 0;
+    const sineBits = memory[p.VHFsintab + angle] | 0;
+    memory[p.VHVcos] = cosineBits;
+    memory[p.VHVsin] = sineBits;
+    const dx = chop(float32FromBits(cosineBits) * k * length);
+    const dy = chop(float32FromBits(sineBits) * k * length);
+    memory[p.VHFdx] = dx;
+    memory[p.VHFdy] = dy;
+    memory[p.VHFx0] = centerX - 160 - dx;
+    memory[p.VHFy0] = centerY - 100 - dy;
+    memory[p.VHFx1] = centerX - 160 + dx;
+    memory[p.VHFy1] = centerY - 100 + dy;
+    flareSourceLine(machine, linked);
+    if (ghost !== 0 && angle % 8 === 0) {
+      let ghostDx = Math.trunc(dx / 10) | 0;
+      let ghostDy = Math.trunc(dy / 10) | 0;
+      let ghostX = Math.fround((centerX - 160) * -0.1);
+      let ghostY = Math.fround((centerY - 100) * -0.1);
+      memory[p.VHFgdx] = ghostDx;
+      memory[p.VHFgdy] = ghostDy;
+      memory[p.VHFgfx] = float32Bits(ghostX);
+      memory[p.VHFgfy] = float32Bits(ghostY);
+      for (let reflection = 0; reflection < 3; reflection += 1) {
+        memory[p.VHFgr] = reflection;
+        memory[p.VHFx0] = chop(ghostX - ghostDx);
+        memory[p.VHFx1] = chop(ghostX + ghostDx);
+        memory[p.VHFy0] = chop(ghostY - ghostDy);
+        memory[p.VHFy1] = chop(ghostY + ghostDy);
+        flareSourceLine(machine, linked);
+        ghostDx = Math.imul(ghostDx, 4);
+        ghostDy = Math.imul(ghostDy, 4);
+        ghostX = Math.fround(ghostX * 3);
+        ghostY = Math.fround(ghostY * 3);
+        memory[p.VHFgdx] = ghostDx;
+        memory[p.VHFgdy] = ghostDy;
+        memory[p.VHFgfx] = float32Bits(ghostX);
+        memory[p.VHFgfy] = float32Bits(ghostY);
+      }
+      memory[p.VHFgr] = 3;
+    }
+    length *= scale;
+    if (length > 3 || length < 1) scale = 1 / scale;
+    angle += add;
+    memory[p.VHFang] = angle;
+  }
+  writeFloat64(memory, p.VHFl0, length);
+  writeFloat64(memory, p.VHFu0, scale);
+  machine.X = LINO_DONE;
+}
+
+function panelRenderAddresses(linked) {
+  let p = panelRenderAddressCaches.get(linked);
+  if (p) return p;
+  const names = [
+    "VHPangle", "VHPradius", "VHPdoty", "VHPdotz", "VHPowner", "VHPbodyy",
+    "VHPbodyz", "VHPsx0", "VHPsy0", "VHPsz0", "VHPsx1", "VHPsy1", "VHPsz1",
+    "VHSx0", "VHSy0", "VHSz0", "VHSx1", "VHSy1", "VHSz1", "VHVangle",
+    "VHVanglekey", "VHVsin", "VHVcos", "vhvsintab", "vhvcostab", "vhvtrigvalid",
+    "VHPscan", "VHPowner", "VHPscoreindex", "VHPscore", "VHPminscore",
+    "VHPmaxscore", "nsnop", "nsnob", "nspowner", "nsporbray",
+  ];
+  p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+  panelRenderAddressCaches.set(linked, p);
+  return p;
+}
+
+function panelSincos(memory, p, angle) {
+  let normalized = angle % 360;
+  if (normalized < 0) normalized += 360;
+  memory[p.VHVangle] = angle;
+  memory[p.VHVanglekey] = normalized;
+  if ((memory[p.vhvtrigvalid + normalized] | 0) === 0) {
+    const radians = normalized * (Math.PI / 180);
+    memory[p.vhvsintab + normalized] = float32Bits(Math.fround(Math.sin(radians)));
+    memory[p.vhvcostab + normalized] = float32Bits(Math.fround(Math.cos(radians)));
+    memory[p.vhvtrigvalid + normalized] = 1;
+  }
+  const sineBits = memory[p.vhvsintab + normalized] | 0;
+  const cosineBits = memory[p.vhvcostab + normalized] | 0;
+  memory[p.VHVsin] = sineBits;
+  memory[p.VHVcos] = cosineBits;
+  return [float32FromBits(sineBits), float32FromBits(cosineBits)];
+}
+
+function panelOrbitProject(machine, linked) {
+  const memory = machine.memory;
+  const p = panelRenderAddresses(linked);
+  const [sine, cosine] = panelSincos(memory, p, memory[p.VHPangle] | 0);
+  const radius = memory[p.VHPradius] | 0;
+  memory[p.VHPdoty] = convertToInt32(sine * radius, floatingPoint(machine).control) - 45;
+  memory[p.VHPdotz] = convertToInt32(cosine * radius, floatingPoint(machine).control) - 1935;
+  machine.X = LINO_DONE;
+}
+
+function panelMoonProject(machine, linked) {
+  const memory = machine.memory;
+  const p = panelRenderAddresses(linked);
+  const [sine, cosine] = panelSincos(memory, p, memory[p.VHPangle] | 0);
+  const radius = memory[p.VHPradius] | 0;
+  const owner = memory[p.VHPowner] | 0;
+  memory[p.VHPdoty] = (memory[p.VHPbodyy + owner] | 0)
+    + convertToInt32(sine * radius, floatingPoint(machine).control);
+  memory[p.VHPdotz] = (memory[p.VHPbodyz + owner] | 0)
+    + convertToInt32(cosine * radius, floatingPoint(machine).control);
+  machine.X = LINO_DONE;
+}
+
+function panelIntegerStick(machine, linked) {
+  const memory = machine.memory;
+  const p = panelRenderAddresses(linked);
+  const control = floatingPoint(machine).control;
+  for (const [source, destination] of [
+    [p.VHPsx0, p.VHSx0], [p.VHPsy0, p.VHSy0], [p.VHPsz0, p.VHSz0],
+    [p.VHPsx1, p.VHSx1], [p.VHPsy1, p.VHSy1], [p.VHPsz1, p.VHSz1],
+  ]) memory[destination] = float32Bits(roundFloat32(memory[source] | 0, control));
+  stick3d(machine, linked);
+  machine.X = LINO_DONE;
+}
+
+function panelMoonScoreBounds(machine, linked) {
+  const memory = machine.memory;
+  const p = panelRenderAddresses(linked);
+  const owner = memory[p.VHPowner] | 0;
+  let minimum = memory[p.VHPminscore] | 0;
+  let maximum = memory[p.VHPmaxscore] | 0;
+  let scan = memory[p.VHPscan] | 0;
+  const end = memory[p.nsnob] | 0;
+  for (; scan < end; scan += 1) {
+    if ((memory[p.nspowner + scan] | 0) !== owner) continue;
+    const high = memory[p.nsporbray + scan * 2 + 1] | 0;
+    const score = ((((high >>> 20) & 0x7ff) - 1023) * 256) + ((high >>> 12) & 255);
+    memory[p.VHPscoreindex] = scan;
+    memory[p.VHPscore] = score;
+    if (score < minimum) minimum = score;
+    if (score > maximum) maximum = score;
+  }
+  memory[p.VHPscan] = scan;
+  memory[p.VHPminscore] = minimum;
+  memory[p.VHPmaxscore] = maximum;
+  machine.X = LINO_DONE;
+}
+
+function glassBubble(machine, linked) {
+  const memory = machine.memory;
+  let p = glassBubbleAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "nw", "rgt", "GBbubble", "GBmag", "GBcx", "GBcy", "GBdstreg", "SAr",
+      "SArs", "SAtcx", "SAtcy", "SAdif", "SAx1", "SAy1", "SAx2", "SAy2",
+      "SApx", "SApy", "SAcp", "SAp0", "SAp1", "SAp2", "SAp3", "SAavg",
+      "SFMAG", "SFRX", "SFRY", "SFRZ", "SFZ2",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    glassBubbleAddressCaches.set(linked, p);
+  }
+  if ((memory[p.GBbubble] | 0) === 0) {
+    machine.X = LINO_DONE;
+    return;
+  }
+  const magnitude = float32FromBits(memory[p.GBmag] | 0);
+  let radius = Math.trunc(magnitude * 7.25) | 0;
+  radius = (radius << 16) >> 16;
+  memory[p.SAr] = radius;
+  if (radius === 0) {
+    machine.X = LINO_DONE;
+    return;
+  }
+  const rx = magnitude * 110;
+  const step = (1.2 * (Math.PI / 180)) / magnitude;
+  let angle = 0.5 * step;
+  const z2 = 0.833 * rx;
+  writeFloat64(memory, address(linked, "fw") + p.SFMAG * 2, magnitude);
+  writeFloat64(memory, address(linked, "fw") + p.SFRX * 2, rx);
+  writeFloat64(memory, address(linked, "fw") + p.SFRY * 2, step);
+  writeFloat64(memory, address(linked, "fw") + p.SFZ2 * 2, z2);
+  const register = memory[p.GBdstreg] | 0;
+  const page = p.nw + (memory[p.rgt + register * 4 + 1] >>> 0);
+  const radiusSquared = Math.imul(radius, radius);
+  memory[p.SArs] = radiusSquared;
+  memory[p.SAdif] = 1;
+  const smooth = (centerX, centerY) => {
+    memory[p.SAtcx] = centerX;
+    memory[p.SAtcy] = centerY;
+    let x1 = centerX - radius;
+    let y1 = centerY - radius;
+    let x2 = centerX + radius;
+    let y2 = centerY + radius;
+    memory[p.SAx1] = x1;
+    memory[p.SAy1] = y1;
+    memory[p.SAx2] = x2;
+    memory[p.SAy2] = y2;
+    if (x1 > 318 || y1 > 198 || x2 < 0 || y2 < 0) return;
+    if (y1 < 0) y1 = 0;
+    if (x2 > 318) x2 = 318;
+    if (y2 > 198) y2 = 198;
+    memory[p.SAy1] = y1;
+    memory[p.SAx2] = x2;
+    memory[p.SAy2] = y2;
+    let py = -radius;
+    for (let y = y1; y <= y2; y += 1, py += 1) {
+      let px = -radius;
+      x1 = centerX - radius;
+      if (x1 < 0) {
+        px -= x1;
+        x1 = 0;
+      }
+      let cp = (Math.imul(y, 320) + x1) & 0xffff;
+      for (let x = x1; x <= x2; x += 1, px += 1, cp = (cp + 1) & 0xffff) {
+        if (Math.imul(px, px) + Math.imul(py, py) >= radiusSquared) continue;
+        const a0 = page + ((cp + 4) & 0xffff);
+        const a1 = page + ((cp + 5) & 0xffff);
+        const a2 = page + ((cp + 324) & 0xffff);
+        const a3 = page + ((cp + 325) & 0xffff);
+        const v0 = memory[a0] & 255;
+        const v1 = memory[a1] & 255;
+        const v2 = memory[a2] & 255;
+        const v3 = memory[a3] & 255;
+        const average = ((v0 & 63) + (v1 & 63) + (v2 & 63) + (v3 & 63)) >>> 2;
+        memory[a0] = (v0 & 192) | average;
+        memory[a1] = (v1 & 192) | average;
+        memory[a2] = (v2 & 192) | average;
+        memory[a3] = (v3 & 192) | average;
+        memory[p.SAcp] = cp;
+        memory[p.SAp0] = v0;
+        memory[p.SAp1] = v1;
+        memory[p.SAp2] = v2;
+        memory[p.SAp3] = v3;
+        memory[p.SAavg] = average;
+      }
+      memory[p.SApx] = px;
+      memory[p.SApy] = py + 1;
+    }
+  };
+  while (angle < Math.PI * 2) {
+    const centerX = Math.trunc(memory[p.GBcx] + rx * Math.cos(angle)) | 0;
+    const centerY = Math.trunc(memory[p.GBcy] + z2 * Math.sin(angle)) | 0;
+    smooth(centerX, centerY);
+    angle += step;
+  }
+  writeFloat64(memory, address(linked, "fw") + p.SFRZ * 2, angle);
+  machine.X = LINO_DONE;
+}
+
+function float64FromWords(low, high) {
+  float64Scratch.setInt32(0, low | 0, true);
+  float64Scratch.setInt32(4, high | 0, true);
+  return float64Scratch.getFloat64(0, true);
+}
+
+function bodyVector(machine, linked) {
+  const memory = machine.memory;
+  let p = bodyVectorAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "VHGNDvecindex", "VHGNDvecowner", "VHGNDmass0", "VHGNDorbit0",
+      "VHGNDangle0", "VHGNDsin0", "VHGNDcos0", "VHGNDct0", "VHGNDxx0",
+      "VHGNDzz0", "VHGNDso0", "VHGNDco0", "VHGNDvecx0", "VHGNDvecy0",
+      "VHGNDvecz0", "nsstarray", "nspowner", "nspray", "nsporbray",
+      "nsporbtlt", "nsporbecc", "nspororient", "SUsec0",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    bodyVectorAddressCaches.set(linked, p);
+  }
+  const index = memory[p.VHGNDvecindex] | 0;
+  const secondsLow = memory[p.SUsec0] | 0;
+  const secondsHigh = memory[p.SUsec0 + 1] | 0;
+  let cache = bodyVectorValueCaches.get(linked);
+  if (!cache || cache.secondsLow !== secondsLow || cache.secondsHigh !== secondsHigh) {
+    cache = { secondsLow, secondsHigh, values: new Map() };
+    bodyVectorValueCaches.set(linked, cache);
+  }
+  let result = cache.values.get(index);
+  if (!result) {
+    const owner = memory[p.nspowner + index] | 0;
+    const baseMass = owner < 0
+      ? float32FromBits(memory[p.nsstarray] | 0)
+      : readFloat64(memory, p.nspray + owner * 2);
+    let mass = baseMass * baseMass;
+    mass *= baseMass;
+    mass *= owner < 0
+      ? float64FromWords(0xa01627ee, 0x3e31fd9f)
+      : float64FromWords(0x1735c01d, 0x3f28284f);
+    const orbit = readFloat64(memory, p.nsporbray + index * 2);
+    const seconds = float64FromWords(secondsLow, secondsHigh);
+    let angle = Math.sqrt(mass / (orbit * orbit));
+    angle *= seconds;
+    angle *= Math.PI;
+    angle /= 180;
+    const sine = Math.sin(angle);
+    const cosine = Math.cos(angle);
+    const tiltRadians = readFloat64(memory, p.nsporbtlt + index * 2) * (Math.PI / 180);
+    const tiltSine = Math.sin(tiltRadians);
+    const y = tiltSine * orbit;
+    const tiltCosine = Math.cos(tiltRadians);
+    const xx = -(sine * orbit * tiltCosine);
+    const eccentricity = readFloat64(memory, p.nsporbecc + index * 2);
+    const zz = cosine * orbit * tiltCosine * eccentricity;
+    const orientation = readFloat64(memory, p.nspororient + index * 2);
+    const orientationSine = Math.sin(orientation);
+    const orientationCosine = Math.cos(orientation);
+    const x = xx * orientationCosine + zz * orientationSine;
+    const z = zz * orientationCosine - xx * orientationSine;
+    result = {
+      owner, mass, orbit, angle, sine, cosine, tiltCosine, xx, zz,
+      orientationSine, orientationCosine, x, y, z,
+    };
+    cache.values.set(index, result);
+  }
+  memory[p.VHGNDvecowner] = result.owner;
+  writeFloat64(memory, p.VHGNDmass0, result.mass);
+  writeFloat64(memory, p.VHGNDorbit0, result.orbit);
+  writeFloat64(memory, p.VHGNDangle0, result.angle);
+  writeFloat64(memory, p.VHGNDsin0, result.sine);
+  writeFloat64(memory, p.VHGNDcos0, result.cosine);
+  writeFloat64(memory, p.VHGNDct0, result.tiltCosine);
+  writeFloat64(memory, p.VHGNDxx0, result.xx);
+  writeFloat64(memory, p.VHGNDzz0, result.zz);
+  writeFloat64(memory, p.VHGNDso0, result.orientationSine);
+  writeFloat64(memory, p.VHGNDco0, result.orientationCosine);
+  writeFloat64(memory, p.VHGNDvecx0, result.x);
+  writeFloat64(memory, p.VHGNDvecy0, result.y);
+  writeFloat64(memory, p.VHGNDvecz0, result.z);
+  machine.X = LINO_DONE;
+}
+
 function rectangleAddresses(linked) {
   let cached = rectangleAddressCaches.get(linked);
   if (cached) return cached;
@@ -5177,6 +6389,7 @@ function pixelAlphaDim(background, foreground) {
 }
 
 function applyPixelEffect(memory, linked, p, handle, pointer, color) {
+  if (handle === 0) return;
   const effect = pixelEffects(linked).get(handle);
   if (!effect) throw new RangeError(`Unsupported Rectangle pixel effect handle ${handle}`);
   if (effect.transparent && color === (memory[p.fxtransparentcolor] | 0)) return;
@@ -6745,6 +7958,27 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.standardText]: standardText,
     [SERVICE_IDS.searchEkeySession]: searchEkeySession,
     [SERVICE_IDS.backupEkeySession]: backupEkeySession,
+    [SERVICE_IDS.surfaceSsmooth]: surfaceSsmooth,
+    [SERVICE_IDS.surfaceLssmooth]: surfaceLssmooth,
+    [SERVICE_IDS.surfacePsmooth]: surfacePsmooth,
+    [SERVICE_IDS.surfaceClear]: surfaceClear,
+    [SERVICE_IDS.surfaceNegate]: surfaceNegate,
+    [SERVICE_IDS.surfaceRandomPattern]: surfaceRandomPattern,
+    [SERVICE_IDS.surfaceSda]: surfaceSda,
+    [SERVICE_IDS.spaceFade]: spaceFade,
+    [SERVICE_IDS.flareSourceStick]: flareSourceStick,
+    [SERVICE_IDS.glowRaster]: glowRaster,
+    [SERVICE_IDS.drawMode2Cache]: drawMode2Cache,
+    [SERVICE_IDS.drawCupolaPanel]: drawCupolaPanel,
+    [SERVICE_IDS.stick3d]: stick3d,
+    [SERVICE_IDS.flareSourceLine]: flareSourceLine,
+    [SERVICE_IDS.flareDraw]: flareDraw,
+    [SERVICE_IDS.panelOrbitProject]: panelOrbitProject,
+    [SERVICE_IDS.panelMoonProject]: panelMoonProject,
+    [SERVICE_IDS.panelIntegerStick]: panelIntegerStick,
+    [SERVICE_IDS.panelMoonScoreBounds]: panelMoonScoreBounds,
+    [SERVICE_IDS.glassBubble]: glassBubble,
+    [SERVICE_IDS.bodyVector]: bodyVector,
     [IDS.copyRegion]: copyRegion,
     [IDS.expandIndexed]: expandIndexed,
     [IDS.scale2x]: scale2x,
