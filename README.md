@@ -1,7 +1,7 @@
 # Linoctis
 
 The browser home of the L.in.oleum Noctis port. This repository owns the
-playable website, the Lino-inspired GUI host, browser input and fullscreen,
+playable website, browser input and fullscreen,
 and Cloudflare Pages deployment. The reusable language compiler/runtime lives
 in [Fabulu/linojava](https://github.com/Fabulu/linojava).
 
@@ -11,6 +11,13 @@ inside the browser GUI, and lets the player move the probe with WASD or the
 arrow keys. This gives the real compiler, execution, rendering, input, resize,
 and fullscreen path a small end-to-end workload while the full Noctis language
 surface is brought across.
+
+The HTML and CSS window around that slice is temporary bring-up scaffolding.
+The product target is the real iGUI drawn and operated by the Lino program,
+including its title bar, menus, controls, game page, and fullscreen affordance.
+Stable player-visible improvements are pushed to GitHub and published to the
+live Cloudflare Pages site intermittently; internal edits are not deployed one
+at a time.
 
 ## Local build
 
