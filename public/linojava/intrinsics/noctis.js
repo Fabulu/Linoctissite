@@ -1,5 +1,8 @@
 import { canonicalName } from "../compiler/lexer.js";
 
+const LINO_DONE = 0x646f6e65;
+const LINO_FAIL = 0x6661696c;
+
 const IDS = Object.freeze({
   copyRegion: "native:igui.txt:6ce302b9",
   expandIndexed: "native:vhgui.txt:b4c87005",
@@ -246,6 +249,17 @@ const SERVICE_IDS = Object.freeze({
   polymap: "service:pgpolymap",
   terrainMapped: "service:vhgndterrainmapped",
   terrainFacing: "service:vhgndterrainfacing",
+  terrainTraverse: "service:vhgndtraversefaithful",
+  terrainRenderRandom: "service:vhgndrenderrandom",
+  terrainVertexLoad: "service:vhgndvload",
+  rectangle: "service:rectangle",
+  surroundingBorder: "service:vhgndsurroundingborder",
+  surroundingCompass: "service:vhgndcompass",
+  surroundingHudString: "service:vhgndhuddrawstring",
+  loadTgaPicture: "service:loadtgapicture",
+  standardText: "service:stdwrite",
+  searchEkeySession: "service:searchekeysessionslot",
+  backupEkeySession: "service:backupekeysession",
 });
 
 const symbolCaches = new WeakMap();
@@ -254,8 +268,25 @@ const rasterAddressCaches = new WeakMap();
 const poly3dAddressCaches = new WeakMap();
 const polymapAddressCaches = new WeakMap();
 const landedTerrainAddressCaches = new WeakMap();
+const rectangleAddressCaches = new WeakMap();
+const pixelEffectCaches = new WeakMap();
+const tgaAddressCaches = new WeakMap();
+const textAddressCaches = new WeakMap();
+const ekeyAddressCaches = new WeakMap();
 const float32Scratch = new DataView(new ArrayBuffer(4));
 const float64Scratch = new DataView(new ArrayBuffer(8));
+
+const TERRAIN_HUD_GLYPHS = Object.freeze({
+  38: 128, 40: 17556, 41: 5265, 42: 9664, 43: 1488, 44: 5120,
+  45: 448, 46: 8192, 47: 672, 48: 31599, 49: 29843, 50: 29671,
+  51: 31143, 52: 20340, 53: 31183, 54: 31695, 55: 18727, 56: 31727,
+  57: 18927, 58: 1040, 63: 8615, 64: 16, 65: 23535, 66: 31471,
+  67: 29263, 68: 15211, 69: 29391, 70: 4815, 71: 31567, 72: 23533,
+  73: 9362, 74: 31524, 75: 23277, 76: 29257, 77: 23423, 78: 24573,
+  79: 31599, 80: 5103, 81: 21359, 82: 23279, 83: 31183, 84: 9367,
+  85: 31597, 86: 11117, 87: 24557, 88: 23213, 89: 9709, 90: 29351,
+  92: 6105,
+});
 
 function address(linked, name) {
   let cache = symbolCaches.get(linked);
@@ -286,12 +317,25 @@ function dataView(memory) {
   return view;
 }
 
+function codeHandle(linked, name) {
+  const instruction = linked.labels.get(canonicalName(name.replace(/^service\s+/i, "")));
+  return instruction === undefined ? -1 : instruction + 1;
+}
+
 function readFloat64(memory, unit) {
   return dataView(memory).getFloat64(unit * 4, true);
 }
 
 function writeFloat64(memory, unit, number) {
   dataView(memory).setFloat64(unit * 4, number, true);
+}
+
+function readFloat64View(view, unit) {
+  return view.getFloat64(unit * 4, true);
+}
+
+function writeFloat64View(view, unit, number) {
+  view.setFloat64(unit * 4, number, true);
 }
 
 function float32Bits(number) {
@@ -2547,13 +2591,14 @@ function polymapAddresses(linked) {
     "SPtrifast", "SPcull", "SPhalf", "SPflar", "SPtinta", "SPescr", "SPsrc",
     "SPi", "SPsec", "SPdi", "SPcl", "SPu", "SPv", "SPun", "SPvn", "SPax",
     "SPdx", "SPbp", "SPsi", "SPch", "SPbx", "SPt", "SPn", "SPsave",
-    "PGfwbase", "PGnwbase", "PGfpartbase", "PGipartbase", "PGtexf", "PGtexoff",
+    "PJfwbase", "PJipartbase", "PGfwbase", "PGnwbase", "PGfpartbase", "PGipartbase", "PGtexf", "PGtexoff",
     "PGtexi", "PGtexv", "PGtmp", "PGdi", "PGval", "PGi", "PGj", "CSpix",
     "EWvr22", "EWminy", "EWmaxy", "EWsi", "EWx1", "EWy1", "EWx2", "EWy2",
     "EWity", "EWjty", "EWax", "EWcx", "EWh", "FS16", "FSVX", "FSVY",
     "FSVZ", "FSK1", "FSK2", "FSK3", "D64THLO", "D64THHI", "D64QLO",
     "D64QHI", "PJthird0", "PJthird1", "ipart", "fpart", "nw", "SADPT",
     "RPSM", "RPBG", "RNGLB", "PGSCRT", "PGSCRE", "PGDOFF",
+    "PGUVZ", "PGUVX", "PGUVY", "PGUVK4",
   ];
   cached = {
     ...poly3dAddresses(linked),
@@ -2578,6 +2623,10 @@ const POLYGON_GRADIENTS = Object.freeze([
 
 function prepareMappedVectors(machine, linked, p, vertices, fast) {
   const memory = machine.memory;
+  if (fast && (memory[p.SPterrain] | 0) !== 0) {
+    prepareTerrainVectorsFast(machine, p, vertices);
+    return;
+  }
   memory[p.PJdx] = vertices;
   if (vertices === 3) {
     memory[p.PJthird0] = p.D64THLO;
@@ -2601,24 +2650,159 @@ function prepareMappedVectors(machine, linked, p, vertices, fast) {
   }
 }
 
+function prepareTerrainVectorsFast(machine, p, vertices) {
+  const memory = machine.memory;
+  const control = floatingPoint(machine).control;
+  const view = dataView(memory);
+  const floats = p.fw;
+  memory[p.PJdx] = vertices;
+  memory[p.PJthird0] = p.D64THLO;
+  memory[p.PJthird1] = p.D64THHI;
+  const factor = readFloat64View(view, p.PJthird0);
+  let lastNarrowed = 0;
+  const nearest = (control & 0x0c00) === 0;
+
+  if (vertices === 3 && nearest) {
+    const x0 = readFloat64View(view, floats + 64);
+    const x1 = readFloat64View(view, floats + 66);
+    const x2 = readFloat64View(view, floats + 68);
+    const y0 = readFloat64View(view, floats + 72);
+    const y1 = readFloat64View(view, floats + 74);
+    const y2 = readFloat64View(view, floats + 76);
+    const z0 = readFloat64View(view, floats + 80);
+    const z1 = readFloat64View(view, floats + 82);
+    const z2 = readFloat64View(view, floats + 84);
+    const centerX = Math.fround(((x0 + x1) + x2) * factor);
+    const centerY = Math.fround(((y0 + y1) + y2) * factor);
+    const centerZ = Math.fround(((z0 + z1) + z2) * factor);
+    writeFloat64View(view, floats + 408, centerX);
+    writeFloat64View(view, floats + 410, centerY);
+    writeFloat64View(view, floats + 412, centerZ);
+    const scaleX = readFloat64View(view, floats + 416);
+    const scaleY = readFloat64View(view, floats + 418);
+    const scaleZ = readFloat64View(view, floats + 420);
+    const tx0 = Math.fround((x0 - centerX) * scaleX + centerX);
+    const tx1 = Math.fround((x1 - centerX) * scaleX + centerX);
+    const tx2 = Math.fround((x2 - centerX) * scaleX + centerX);
+    const ty0 = Math.fround((y0 - centerY) * scaleY + centerY);
+    const ty1 = Math.fround((y1 - centerY) * scaleY + centerY);
+    const ty2 = Math.fround((y2 - centerY) * scaleY + centerY);
+    const tz0 = Math.fround((z0 - centerZ) * scaleZ + centerZ);
+    const tz1 = Math.fround((z1 - centerZ) * scaleZ + centerZ);
+    const tz2 = Math.fround((z2 - centerZ) * scaleZ + centerZ);
+    writeFloat64View(view, floats + 384, tx0); writeFloat64View(view, floats + 386, tx1); writeFloat64View(view, floats + 388, tx2);
+    writeFloat64View(view, floats + 392, ty0); writeFloat64View(view, floats + 394, ty1); writeFloat64View(view, floats + 396, ty2);
+    writeFloat64View(view, floats + 400, tz0); writeFloat64View(view, floats + 402, tz1); writeFloat64View(view, floats + 404, tz2);
+    memory[p.PJvr] = 3;
+    memory[p.PJvv] = 2;
+
+    const ex1 = Math.fround(tx1 - tx0);
+    const ey1 = Math.fround(ty1 - ty0);
+    const ez1 = Math.fround(tz1 - tz0);
+    const ex2 = Math.fround(tx0 - tx2);
+    const ey2 = Math.fround(ty0 - ty2);
+    const ez2 = Math.fround(tz0 - tz2);
+    writeFloat64View(view, floats + 458, ex1); writeFloat64View(view, floats + 460, ey1); writeFloat64View(view, floats + 462, ez1);
+    writeFloat64View(view, floats + 464, ex2); writeFloat64View(view, floats + 466, ey2); writeFloat64View(view, floats + 468, ez2);
+    writeFloat64View(view, floats + 470, tx0); writeFloat64View(view, floats + 472, ty0); writeFloat64View(view, floats + 474, tz0);
+
+    const scale0 = readFloat64View(view, floats + 492);
+    const scale3 = readFloat64View(view, floats + 490);
+    const scale6 = readFloat64View(view, floats + 488);
+    const g0 = Math.fround((tx0 * ez1 - tz0 * ex1) * scale0);
+    const g1 = Math.fround((tx0 * ez2 - tz0 * ex2) * scale0);
+    const g2 = Math.fround((ex2 * ez1 - ez2 * ex1) * readFloat64View(view, floats + 52));
+    const g3 = Math.fround((tz0 * ey1 - ty0 * ez1) * scale3);
+    const g4 = Math.fround((tz0 * ey2 - ty0 * ez2) * scale3);
+    const g5 = Math.fround((ez2 * ey1 - ey2 * ez1) * readFloat64View(view, floats + 52));
+    const g6 = Math.fround((ty0 * ex1 - tx0 * ey1) * scale6);
+    const g7 = Math.fround((ty0 * ex2 - tx0 * ey2) * scale6);
+    const g8 = Math.fround((ey2 * ex1 - ex2 * ey1) * readFloat64View(view, floats + 36));
+    writeFloat64View(view, floats, g0); writeFloat64View(view, floats + 2, g1); writeFloat64View(view, floats + 4, g2);
+    writeFloat64View(view, floats + 6, g3); writeFloat64View(view, floats + 8, g4); writeFloat64View(view, floats + 10, g5);
+    writeFloat64View(view, floats + 12, g6); writeFloat64View(view, floats + 14, g7); writeFloat64View(view, floats + 16, g8);
+    memory[p.FS0] = float32Bits(g8);
+    writeFloat64View(view, p.FA0, g8);
+    return;
+  }
+
+  for (let axis = 0; axis < 3; axis += 1) {
+    const source = 64 + axis * 8;
+    let sum = readFloat64View(view, floats + source);
+    for (let vertex = 1; vertex < vertices; vertex += 1) {
+      sum += readFloat64View(view, floats + source + vertex * 2);
+    }
+    lastNarrowed = nearest ? Math.fround(sum * factor) : roundFloat32(sum * factor, control);
+    writeFloat64View(view, floats + 408 + axis * 2, lastNarrowed);
+  }
+
+  for (let vertex = 0; vertex < vertices; vertex += 1) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      const source = 64 + axis * 8;
+      const destination = 384 + axis * 8;
+      const center = readFloat64View(view, floats + 408 + axis * 2);
+      const transformed = (readFloat64View(view, floats + source + vertex * 2) - center)
+        * readFloat64View(view, floats + 416 + axis * 2) + center;
+      lastNarrowed = nearest ? Math.fround(transformed) : roundFloat32(transformed, control);
+      writeFloat64View(view, floats + destination + vertex * 2, lastNarrowed);
+    }
+  }
+  memory[p.PJvr] = vertices;
+  memory[p.PJvv] = vertices - 1;
+
+  for (let axis = 0; axis < 3; axis += 1) {
+    const source = 384 + axis * 8;
+    let first = readFloat64View(view, floats + source);
+    first = nearest ? Math.fround(first) : roundFloat32(first, control);
+    lastNarrowed = first;
+    writeFloat64View(view, floats + 470 + axis * 2, first);
+    let result = readFloat64View(view, floats + source + 2) - first;
+    result = nearest ? Math.fround(result) : roundFloat32(result, control);
+    lastNarrowed = result;
+    writeFloat64View(view, floats + 458 + axis * 2, result);
+    result = first - readFloat64View(view, floats + source + (vertices - 1) * 2);
+    result = nearest ? Math.fround(result) : roundFloat32(result, control);
+    lastNarrowed = result;
+    writeFloat64View(view, floats + 464 + axis * 2, result);
+  }
+
+  for (let index = 0; index < POLYGON_GRADIENTS.length; index += 1) {
+    const record = POLYGON_GRADIENTS[index];
+    const first = readFloat64View(view, floats + record[0] * 2)
+      * readFloat64View(view, floats + record[1] * 2);
+    let result = first - readFloat64View(view, floats + record[2] * 2)
+      * readFloat64View(view, floats + record[3] * 2);
+    result *= readFloat64View(view, floats + record[4] * 2);
+    lastNarrowed = nearest ? Math.fround(result) : roundFloat32(result, control);
+    writeFloat64View(view, floats + record[5] * 2, lastNarrowed);
+  }
+  memory[p.FS0] = float32Bits(lastNarrowed);
+  writeFloat64View(view, p.FA0, lastNarrowed);
+}
+
 function prepareMappedBlockSteps(machine, linked, p) {
   const memory = machine.memory;
   const control = floatingPoint(machine).control;
-  for (const [source, destination] of [
-    [p.FSVX, p.FSK1], [p.FSVY, p.FSK2], [p.FSVZ, p.FSK3],
-  ]) {
-    let result = ((readFloat64(memory, p.fw + source * 2)) * (readFloat64(memory, p.fw + p.FS16 * 2)));
-    writeScalarScratch(machine, linked, result);
-    result = narrowScalar(machine, linked, result);
-    writeFloat64(memory, p.fw + destination * 2, result);
+  const view = dataView(memory);
+  const nearest = (control & 0x0c00) === 0;
+  const scale = readFloat64View(view, p.fw + p.FS16 * 2);
+  const sources = [p.FSVX, p.FSVY, p.FSVZ];
+  const destinations = [p.FSK1, p.FSK2, p.FSK3];
+  for (let axis = 0; axis < 3; axis += 1) {
+    let result = readFloat64View(view, p.fw + sources[axis] * 2) * scale;
+    writeFloat64View(view, p.FA0, result);
+    result = nearest ? Math.fround(result) : roundFloat32(result, control);
+    memory[p.FS0] = float32Bits(result);
+    writeFloat64View(view, p.fw + destinations[axis] * 2, result);
   }
   if ((memory[p.SPcull] | 0) !== 0) {
     for (const slot of [p.FSK1, p.FSK2, p.FSK3]) {
-      const input = readFloat64(memory, p.fw + slot * 2);
-      let result = ((input) + (input));
-      writeScalarScratch(machine, linked, result);
-      result = narrowScalar(machine, linked, result);
-      writeFloat64(memory, p.fw + slot * 2, result);
+      const input = readFloat64View(view, p.fw + slot * 2);
+      let result = input + input;
+      writeFloat64View(view, p.FA0, result);
+      result = nearest ? Math.fround(result) : roundFloat32(result, control);
+      memory[p.FS0] = float32Bits(result);
+      writeFloat64View(view, p.fw + slot * 2, result);
     }
   }
 }
@@ -2631,8 +2815,8 @@ function drawConstantMergerPolygon(machine, linked, p) {
   memory[p.PGfwbase] = p.fw;
   memory[p.PGfpartbase] = p.fpart;
   memory[p.PGipartbase] = p.ipart;
-  initializePolygonRows(machine, linked);
-  polygonEdges(machine, linked);
+  initializePolygonRows(machine, linked, p);
+  polygonEdges(machine, linked, p);
   memory[p.SPsrc] = 1;
   mappedPageStore(memory, p, (p.PGSCRT + p.PGDOFF) & 0xffff, memory[p.SPtinta]);
   mappedPageStore(memory, p, (p.PGSCRE + p.PGDOFF) & 0xffff, memory[p.SPescr]);
@@ -2727,25 +2911,55 @@ function polymap(machine, linked) {
   memory[p.PGfwbase] = p.fw;
   memory[p.PGfpartbase] = p.fpart;
   memory[p.PGipartbase] = p.ipart;
-  initializePolygonRows(machine, linked);
-  polygonEdges(machine, linked);
+  initializePolygonRows(machine, linked, p);
+  polygonEdges(machine, linked, p);
   memory[p.SPsrc] = 1;
   mappedTrace(machine, linked, p);
   memory[p.PJgate] = 0;
 }
 
-function initializePolygonRows(machine, linked) {
+function rasterProjectedTerrain(machine, linked, p) {
   const memory = machine.memory;
-  let row = value(memory, linked, "EWminy") | 0;
-  const maximum = value(memory, linked, "EWmaxy") | 0;
-  const fractions = value(memory, linked, "PGfpartbase") >>> 0;
-  const integers = value(memory, linked, "PGipartbase") >>> 0;
+  memory[p.PJgate] = 7;
+  if ((memory[p.PJminx] | 0) > p.PGUBX || (memory[p.PJmaxx] | 0) < p.PGLBX
+    || (memory[p.BXminy] | 0) > p.PGUBY || (memory[p.BXmaxy] | 0) < p.PGLBY) return;
+  if ((memory[p.BXminy] | 0) < p.PGLBY) memory[p.BXminy] = p.PGLBY;
+  if ((memory[p.BXmaxy] | 0) > p.PGUBY) memory[p.BXmaxy] = p.PGUBY;
+  memory[p.PJgate] = 8;
+  if ((memory[p.BXminy] | 0) > (memory[p.BXmaxy] | 0)) return;
+  memory[p.PJdx] = 3;
+  memory[p.PJnrv] = 3;
+  prepareTerrainVectorsFast(machine, p, 3);
+  memory[p.PJnrv] = 4;
+  prepareMappedBlockSteps(machine, linked, p);
+  memory[p.EWvr22] = 8;
+  memory[p.EWminy] = memory[p.BXminy];
+  memory[p.EWmaxy] = memory[p.BXmaxy];
+  memory[p.PGfwbase] = p.fw;
+  memory[p.PGfpartbase] = p.fpart;
+  memory[p.PGipartbase] = p.ipart;
+  initializePolygonRows(machine, linked, p);
+  polygonEdges(machine, linked, p);
+  memory[p.SPsrc] = 1;
+  mappedTrace(machine, linked, p);
+}
+
+function initializePolygonRows(machine, linked, p = null) {
+  const memory = machine.memory;
+  const minimumAddress = p?.EWminy ?? address(linked, "EWminy");
+  const maximumAddress = p?.EWmaxy ?? address(linked, "EWmaxy");
+  const fractionBaseAddress = p?.PGfpartbase ?? address(linked, "PGfpartbase");
+  const integerBaseAddress = p?.PGipartbase ?? address(linked, "PGipartbase");
+  let row = memory[minimumAddress] | 0;
+  const maximum = memory[maximumAddress] | 0;
+  const fractions = memory[fractionBaseAddress] >>> 0;
+  const integers = memory[integerBaseAddress] >>> 0;
   do {
     memory[fractions + row] = 5;
     memory[integers + row] = 311;
     row = (row + 1) | 0;
   } while (row <= maximum);
-  memory[address(linked, "PGi")] = row;
+  memory[p?.PGi ?? address(linked, "PGi")] = row;
 }
 
 function texturePixel(memory, texture, textureOffset, u, v) {
@@ -3097,26 +3311,27 @@ function projectMappedPoint(machine, linked) {
   }
 }
 
-function terrainFacingDot(machine, linked) {
+function terrainFacingDot(machine, linked, p = null) {
   const memory = machine.memory;
-  const floats = value(memory, linked, "PJfwbase") >>> 0;
-  const control = floatingPoint(machine).control;
-  let difference = ((readFloat64(memory, floats + 448)) - (readFloat64(memory, floats + 508)));
-  writeScalarScratch(machine, linked, difference);
-  let sum = ((difference) * (readFloat64(memory, floats + 470)));
-  writeFloat64(memory, floats + 496, sum);
-  for (const [camera, vertex, normal, spillSum] of [
-    [450, 516, 472, true],
-    [452, 524, 474, false],
-  ]) {
-    difference = ((readFloat64(memory, floats + camera)) - (readFloat64(memory, floats + vertex)));
-    writeScalarScratch(machine, linked, difference);
-    let product = ((difference) * (readFloat64(memory, floats + normal)));
-    writeScalarScratch(machine, linked, product);
-    sum = ((product) + (sum));
-    if (spillSum) writeFloat64(memory, floats + 496, sum);
-  }
-  writeScalarScratch(machine, linked, sum);
+  p ??= polymapAddresses(linked);
+  const floats = memory[p.PJfwbase] >>> 0;
+  const view = dataView(memory);
+  let difference = readFloat64View(view, floats + 448) - readFloat64View(view, floats + 508);
+  writeFloat64View(view, p.FA0, difference);
+  let sum = difference * readFloat64View(view, floats + 470);
+  writeFloat64View(view, floats + 496, sum);
+  difference = readFloat64View(view, floats + 450) - readFloat64View(view, floats + 516);
+  writeFloat64View(view, p.FA0, difference);
+  let product = difference * readFloat64View(view, floats + 472);
+  writeFloat64View(view, p.FA0, product);
+  sum = product + sum;
+  writeFloat64View(view, floats + 496, sum);
+  difference = readFloat64View(view, floats + 452) - readFloat64View(view, floats + 524);
+  writeFloat64View(view, p.FA0, difference);
+  product = difference * readFloat64View(view, floats + 474);
+  writeFloat64View(view, p.FA0, product);
+  sum = product + sum;
+  writeFloat64View(view, p.FA0, sum);
 }
 
 function polygonMidpoint(machine, linked, vertices) {
@@ -3310,69 +3525,100 @@ function polygonCrossGradient(machine, linked) {
   );
 }
 
-function terrainTraceRow(machine, linked) {
+function terrainTraceRow(machine, linked, p = null) {
   const memory = machine.memory;
-  const floats = value(memory, linked, "PJfwbase") >>> 0;
+  p ??= polymapAddresses(linked);
+  const floats = memory[p.PJfwbase] >>> 0;
   const control = floatingPoint(machine).control;
-  const row = value(memory, linked, "SPi") | 0;
-  const ipart = value(memory, linked, "PJipartbase") >>> 0;
-  const spill = (number) => {
-    writeScalarScratch(machine, linked, number);
-    return number;
-  };
-  let factor = spill(memory[ipart + row] | 0);
-  factor = spill(((factor) - (readFloat64(memory, floats + 38))));
-  factor = ((factor) + (readFloat64(memory, floats + 36)));
-  writeFloat64(memory, floats + 502, factor);
+  const nearest = (control & 0x0c00) === 0;
+  const view = dataView(memory);
+  const row = memory[p.SPi] | 0;
+  const ipart = memory[p.PJipartbase] >>> 0;
+  let factor = memory[ipart + row] | 0;
+  writeFloat64View(view, p.FA0, factor);
+  factor -= readFloat64View(view, floats + 38);
+  writeFloat64View(view, p.FA0, factor);
+  factor += readFloat64View(view, floats + 36);
+  writeFloat64View(view, floats + 502, factor);
 
-  let z = ((factor) * (readFloat64(memory, floats + 10)));
-  writeFloat64(memory, floats + 496, z);
-  let vertical = spill(row);
-  vertical = spill(((vertical) - (readFloat64(memory, floats + 40))));
-  vertical = spill(((vertical) * (readFloat64(memory, floats + 4))));
-  z = spill(((vertical) + (z)));
-  z = ((z) + (readFloat64(memory, floats + 16)));
-  writeFloat64(memory, floats + 498, z);
-  writeFloat64(memory, floats + 30, narrowScalar(machine, linked, z));
+  let z = factor * readFloat64View(view, floats + 10);
+  writeFloat64View(view, floats + 496, z);
+  let vertical = row;
+  writeFloat64View(view, p.FA0, vertical);
+  vertical -= readFloat64View(view, floats + 40);
+  writeFloat64View(view, p.FA0, vertical);
+  vertical *= readFloat64View(view, floats + 4);
+  writeFloat64View(view, p.FA0, vertical);
+  z = vertical + z;
+  writeFloat64View(view, p.FA0, z);
+  z += readFloat64View(view, floats + 16);
+  writeFloat64View(view, floats + 498, z);
+  let narrowed = nearest ? Math.fround(z) : roundFloat32(z, control);
+  memory[p.FS0] = float32Bits(narrowed);
+  writeFloat64View(view, floats + 30, narrowed);
 
-  let reciprocal = spill(((readFloat64(memory, floats + 36)) / (z)));
-  reciprocal = narrowScalar(machine, linked, reciprocal);
-  writeFloat64(memory, floats + 24, reciprocal);
+  let reciprocal = readFloat64View(view, floats + 36) / z;
+  writeFloat64View(view, p.FA0, reciprocal);
+  reciprocal = nearest ? Math.fround(reciprocal) : roundFloat32(reciprocal, control);
+  memory[p.FS0] = float32Bits(reciprocal);
+  writeFloat64View(view, floats + 24, reciprocal);
 
-  const coordinate = (axisVector, gradient, origin, destination) => {
-    let result = ((factor) * (readFloat64(memory, floats + axisVector)));
-    writeFloat64(memory, floats + 496, result);
-    let rowPart = spill(row);
-    rowPart = spill(((rowPart) - (readFloat64(memory, floats + 40))));
-    rowPart = spill(((rowPart) * (readFloat64(memory, floats + gradient))));
-    result = spill(((rowPart) + (result)));
-    result = spill(((result) + (readFloat64(memory, floats + origin))));
-    result = narrowScalar(machine, linked, result);
-    writeFloat64(memory, floats + destination, result);
-    return result;
-  };
-  const x = coordinate(6, 0, 12, 26);
-  const y = coordinate(8, 2, 14, 28);
+  let x = factor * readFloat64View(view, floats + 6);
+  writeFloat64View(view, floats + 496, x);
+  let rowPart = row;
+  writeFloat64View(view, p.FA0, rowPart);
+  rowPart -= readFloat64View(view, floats + 40);
+  writeFloat64View(view, p.FA0, rowPart);
+  rowPart *= readFloat64View(view, floats);
+  writeFloat64View(view, p.FA0, rowPart);
+  x = rowPart + x;
+  writeFloat64View(view, p.FA0, x);
+  x += readFloat64View(view, floats + 12);
+  writeFloat64View(view, p.FA0, x);
+  x = nearest ? Math.fround(x) : roundFloat32(x, control);
+  memory[p.FS0] = float32Bits(x);
+  writeFloat64View(view, floats + 26, x);
 
-  let texture = spill(((x) * (readFloat64(memory, floats + 32))));
-  texture = spill(((texture) * (reciprocal)));
-  memory[address(linked, "SPu")] = convertToInt32(texture, control);
-  texture = spill(((y) * (readFloat64(memory, floats + 34))));
-  texture = spill(((texture) * (reciprocal)));
-  memory[address(linked, "SPv")] = convertToInt32(texture, control);
+  let y = factor * readFloat64View(view, floats + 8);
+  writeFloat64View(view, floats + 496, y);
+  rowPart = row;
+  writeFloat64View(view, p.FA0, rowPart);
+  rowPart -= readFloat64View(view, floats + 40);
+  writeFloat64View(view, p.FA0, rowPart);
+  rowPart *= readFloat64View(view, floats + 2);
+  writeFloat64View(view, p.FA0, rowPart);
+  y = rowPart + y;
+  writeFloat64View(view, p.FA0, y);
+  y += readFloat64View(view, floats + 14);
+  writeFloat64View(view, p.FA0, y);
+  y = nearest ? Math.fround(y) : roundFloat32(y, control);
+  memory[p.FS0] = float32Bits(y);
+  writeFloat64View(view, floats + 28, y);
+
+  let texture = x * readFloat64View(view, floats + 32);
+  writeFloat64View(view, p.FA0, texture);
+  texture *= reciprocal;
+  writeFloat64View(view, p.FA0, texture);
+  memory[p.SPu] = convertToInt32(texture, control);
+  texture = y * readFloat64View(view, floats + 34);
+  writeFloat64View(view, p.FA0, texture);
+  texture *= reciprocal;
+  writeFloat64View(view, p.FA0, texture);
+  memory[p.SPv] = convertToInt32(texture, control);
 }
 
-function runTerrainEdgeRows(machine, linked, bndx, slope, row, count) {
+function runTerrainEdgeRows(machine, linked, bndx, slope, row, count, p = null) {
   const memory = machine.memory;
+  p ??= polymapAddresses(linked);
   const control = floatingPoint(machine).control;
-  const floats = value(memory, linked, "PGfwbase") >>> 0;
-  const fpart = value(memory, linked, "PGfpartbase") >>> 0;
-  const ipart = value(memory, linked, "PGipartbase") >>> 0;
+  const floats = memory[p.PGfwbase] >>> 0;
+  const fpart = memory[p.PGfpartbase] >>> 0;
+  const ipart = memory[p.PGipartbase] >>> 0;
   while (count !== 0) {
     let edge = convertToInt32(bndx, control);
     if (edge < -10000) edge = -10000;
     if (edge > 10000) edge = 10000;
-    memory[address(linked, "EWax")] = edge;
+    memory[p.EWax] = edge;
     if (edge > (memory[fpart + row] | 0)) memory[fpart + row] = Math.min(edge, 311);
     if (edge < (memory[ipart + row] | 0)) memory[ipart + row] = Math.max(edge, 5);
     bndx = ((bndx) + (slope));
@@ -3380,9 +3626,9 @@ function runTerrainEdgeRows(machine, linked, bndx, slope, row, count) {
     row += 1;
     count -= 1;
   }
-  memory[address(linked, "EWh")] = row;
-  memory[address(linked, "EWcx")] = count;
-  writeScalarScratch(machine, linked, bndx);
+  memory[p.EWh] = row;
+  memory[p.EWcx] = count;
+  writeFloat64(memory, p.FA0, bndx);
   return bndx;
 }
 
@@ -3399,97 +3645,106 @@ function terrainEdgeRows(machine, linked) {
   );
 }
 
-function polygonEdges(machine, linked) {
+function polygonEdges(machine, linked, p = null) {
   const memory = machine.memory;
+  p ??= polymapAddresses(linked);
   const control = floatingPoint(machine).control;
-  const floats = value(memory, linked, "PGfwbase") >>> 0;
-  const points = address(linked, "mp");
-  const vr22 = value(memory, linked, "EWvr22") >>> 0;
+  const floats = memory[p.PGfwbase] >>> 0;
+  const points = p.mp;
+  const vr22 = memory[p.EWvr22] >>> 0;
   memory[points + vr22] = memory[points];
   memory[points + vr22 + 1] = memory[points + 1];
   let edgeCount = vr22 >>> 1;
   let source = 0;
-  memory[address(linked, "EWsi")] = source;
-  memory[address(linked, "PGj")] = edgeCount;
+  memory[p.EWsi] = source;
+  memory[p.PGj] = edgeCount;
   while (edgeCount !== 0) {
     let x1 = memory[points + source] | 0;
     let y1 = memory[points + source + 1] | 0;
     let x2 = memory[points + source + 2] | 0;
     let y2 = memory[points + source + 3] | 0;
-    memory[address(linked, "SPt")] = x2;
+    memory[p.SPt] = x2;
     if (y2 < y1) {
       [x1, x2] = [x2, x1];
       [y1, y2] = [y2, y1];
     }
-    memory[address(linked, "EWx1")] = x1;
-    memory[address(linked, "EWy1")] = y1;
-    memory[address(linked, "EWx2")] = x2;
-    memory[address(linked, "EWy2")] = y2;
+    memory[p.EWx1] = x1;
+    memory[p.EWy1] = y1;
+    memory[p.EWx2] = x2;
+    memory[p.EWy2] = y2;
     if (y2 !== y1) {
       let slope = ((x2 - x1) / (y2 - y1));
-      writeScalarScratch(machine, linked, slope);
+      writeFloat64(memory, p.FA0, slope);
       slope = narrowScalar(machine, linked, slope);
       writeFloat64(memory, floats + 42, slope);
-      memory[address(linked, "PGFi")] = 22;
+      memory[p.PGFi] = 22;
       let firstRow = y1;
       if (y1 < 5) {
         firstRow = 5;
         let correction = ((5 - y1) * (slope));
-        writeScalarScratch(machine, linked, correction);
+        writeFloat64(memory, p.FA0, correction);
         correction = ((x1) + (correction));
-        writeScalarScratch(machine, linked, correction);
+        writeFloat64(memory, p.FA0, correction);
         x1 = convertToInt32(correction, control);
-        memory[address(linked, "EWx1")] = x1;
+        memory[p.EWx1] = x1;
       }
       const lastRow = Math.min(y2, 190);
-      memory[address(linked, "EWity")] = firstRow;
-      memory[address(linked, "EWjty")] = lastRow;
+      memory[p.EWity] = firstRow;
+      memory[p.EWjty] = lastRow;
       let bndx = x1;
       writeFloat64(memory, floats + 44, bndx);
-      writeScalarScratch(machine, linked, bndx);
+      writeFloat64(memory, p.FA0, bndx);
       if (firstRow < lastRow) {
         const count = lastRow - firstRow + 1;
-        memory[address(linked, "EWcx")] = count;
-        memory[address(linked, "EWh")] = firstRow;
-        bndx = runTerrainEdgeRows(machine, linked, bndx, slope, firstRow, count);
+        memory[p.EWcx] = count;
+        memory[p.EWh] = firstRow;
+        bndx = runTerrainEdgeRows(machine, linked, bndx, slope, firstRow, count, p);
       }
     }
     source += 2;
     edgeCount -= 1;
-    memory[address(linked, "EWsi")] = source;
-    memory[address(linked, "PGj")] = edgeCount;
+    memory[p.EWsi] = source;
+    memory[p.PGj] = edgeCount;
   }
 }
 
-function terrainUvNext(machine, linked) {
+function terrainUvNext(machine, linked, p = null) {
   const memory = machine.memory;
-  const floats = value(memory, linked, "PGfwbase") >>> 0;
+  p ??= polymapAddresses(linked);
+  const floats = memory[p.PGfwbase] >>> 0;
   const control = floatingPoint(machine).control;
-  const advance = (position, step, wide, narrowName) => {
-    const result = ((readFloat64(memory, floats + position)) + (readFloat64(memory, floats + step)));
-    writeFloat64(memory, floats + wide, result);
-    writeNamedFloat32(machine, linked, narrowName, result);
-    const narrowed = readNamedFloat32(memory, linked, narrowName);
-    writeFloat64(memory, floats + position, narrowed);
-    return result;
-  };
-  const z = advance(30, 22, 48, "PGUVZ");
-  const x = advance(26, 18, 50, "PGUVX");
-  const y = advance(28, 20, 52, "PGUVY");
-  let reciprocal = ((readFloat64(memory, floats + 36)) / (z));
-  writeFloat64(memory, floats + 54, reciprocal);
-  writeNamedFloat32(machine, linked, "PGUVK4", reciprocal);
-  reciprocal = readNamedFloat32(memory, linked, "PGUVK4");
-  writeFloat64(memory, floats + 24, reciprocal);
-  const project = (coordinate, scale, outputName) => {
-    let result = ((coordinate) * (readFloat64(memory, floats + scale)));
-    writeFloat64(memory, floats + 54, result);
-    result = ((result) * (reciprocal));
-    writeFloat64(memory, floats + 54, result);
-    memory[address(linked, outputName)] = convertToInt32(result, control);
-  };
-  project(x, 32, "SPun");
-  project(y, 34, "SPvn");
+  const nearest = (control & 0x0c00) === 0;
+  const view = dataView(memory);
+  let z = readFloat64View(view, floats + 30) + readFloat64View(view, floats + 22);
+  writeFloat64View(view, floats + 48, z);
+  let narrowed = nearest ? Math.fround(z) : roundFloat32(z, control);
+  memory[p.PGUVZ] = float32Bits(narrowed);
+  writeFloat64View(view, floats + 30, narrowed);
+  let x = readFloat64View(view, floats + 26) + readFloat64View(view, floats + 18);
+  writeFloat64View(view, floats + 50, x);
+  narrowed = nearest ? Math.fround(x) : roundFloat32(x, control);
+  memory[p.PGUVX] = float32Bits(narrowed);
+  writeFloat64View(view, floats + 26, narrowed);
+  let y = readFloat64View(view, floats + 28) + readFloat64View(view, floats + 20);
+  writeFloat64View(view, floats + 52, y);
+  narrowed = nearest ? Math.fround(y) : roundFloat32(y, control);
+  memory[p.PGUVY] = float32Bits(narrowed);
+  writeFloat64View(view, floats + 28, narrowed);
+  let reciprocal = readFloat64View(view, floats + 36) / z;
+  writeFloat64View(view, floats + 54, reciprocal);
+  reciprocal = nearest ? Math.fround(reciprocal) : roundFloat32(reciprocal, control);
+  memory[p.PGUVK4] = float32Bits(reciprocal);
+  writeFloat64View(view, floats + 24, reciprocal);
+  let result = x * readFloat64View(view, floats + 32);
+  writeFloat64View(view, floats + 54, result);
+  result *= reciprocal;
+  writeFloat64View(view, floats + 54, result);
+  memory[p.SPun] = convertToInt32(result, control);
+  result = y * readFloat64View(view, floats + 34);
+  writeFloat64View(view, floats + 54, result);
+  result *= reciprocal;
+  writeFloat64View(view, floats + 54, result);
+  memory[p.SPvn] = convertToInt32(result, control);
 }
 
 function mappedTextureByte(machine, linked, p, u, v, publish = true) {
@@ -3681,7 +3936,7 @@ function mappedScanline(machine, linked, p) {
       count >>>= 1;
     } else if (count === 0) continue;
     memory[p.SPcl] = count;
-    terrainUvNext(machine, linked);
+    terrainUvNext(machine, linked, p);
     memory[p.SPsi] = ((memory[p.SPvn] - memory[p.SPv]) >> 4) & 0xffff;
     memory[p.SPbp] = ((memory[p.SPun] - memory[p.SPu]) >> 4) & 0xffff;
     memory[p.SPax] = memory[p.SPu] & 0xffff;
@@ -3742,7 +3997,7 @@ function mappedTrace(machine, linked, p) {
   const fastHalfScan = (memory[p.SPterrain] | memory[p.SPpixfast]) !== 0;
   memory[p.SPi] = row;
   while (row <= maximum) {
-    terrainTraceRow(machine, linked);
+    terrainTraceRow(machine, linked, p);
     const first = memory[p.ipart + row] | 0;
     const last = memory[p.fpart + row] | 0;
     memory[p.SPsec] = (last - first) | 0;
@@ -4008,9 +4263,14 @@ function groundLimitFloat(machine, linked) {
 function landedFastRandom(machine, linked, mask) {
   const memory = machine.memory;
   const seed = value(memory, linked, "SUfseed") >>> 0;
-  const product = BigInt(seed) * BigInt(seed);
-  const low = Number(product & 0xffffffffn) | 0;
-  const high = Number((product >> 32n) & 0xffffffffn) | 0;
+  const lowHalf = seed & 0xffff;
+  const highHalf = seed >>> 16;
+  const lowProduct = lowHalf * lowHalf;
+  const middle = 2 * lowHalf * highHalf;
+  const lowerWide = lowProduct + (middle & 0xffff) * 0x10000;
+  const low = lowerWide | 0;
+  const high = (highHalf * highHalf + Math.floor(middle / 0x10000)
+    + Math.floor(lowerWide / 0x100000000)) | 0;
   const raw = (low & 0xffffff00) | (((low & 0xff) + (high & 0xff)) & 0xff);
   const nextSeed = (seed + (raw >>> 0)) | 0;
   const result = raw & mask;
@@ -4500,24 +4760,31 @@ function landedTileDistance(machine, linked) {
 
 function landedTileAdmission(machine, linked) {
   const memory = machine.memory;
-  const x = value(memory, linked, "VHGNDx");
-  const z = value(memory, linked, "VHGNDz");
-  const manhattan = Math.abs(value(memory, linked, "VHGNDcamtx") - x)
-    + Math.abs(value(memory, linked, "VHGNDcamtz") - z);
-  memory[address(linked, "VHGNDmanhattan")] = manhattan;
+  const p = landedTerrainAddresses(linked);
+  landedTileAdmissionAt(
+    machine, linked, p,
+    memory[p.VHGNDx] | 0, memory[p.VHGNDz] | 0,
+    memory[p.VHGNDcamtx] | 0, memory[p.VHGNDcamtz] | 0,
+  );
+}
+
+function landedTileAdmissionAt(machine, linked, p, x, z, camtx, camtz) {
+  const memory = machine.memory;
+  const manhattan = Math.abs(camtx - x) + Math.abs(camtz - z);
+  memory[p.VHGNDmanhattan] = manhattan;
   if (manhattan > 90) {
-    memory[address(linked, "VHGNDnativecomplete")] = 2;
+    memory[p.VHGNDnativecomplete] = 2;
     return;
   }
-  memory[address(linked, "VHGNDh1")] = Math.imul(z, 200) + x;
-  const dx = value(memory, linked, "VHGNDcamx") - ((x << 14) + 8192);
-  const dz = value(memory, linked, "VHGNDcamz") - ((z << 14) + 8192);
-  memory[address(linked, "VHGNDdx")] = dx;
-  memory[address(linked, "VHGNDdz")] = dz;
+  memory[p.VHGNDh1] = Math.imul(z, 200) + x;
+  const dx = (memory[p.VHGNDcamx] - ((x << 14) + 8192)) | 0;
+  const dz = (memory[p.VHGNDcamz] - ((z << 14) + 8192)) | 0;
+  memory[p.VHGNDdx] = dx;
+  memory[p.VHGNDdz] = dz;
   const distance = landedDistance(machine, linked, dx, dz);
   const raw = distance >> 14;
-  memory[address(linked, "VHGNDrawdepth")] = raw;
-  memory[address(linked, "VHGNDdepth")] = Math.max(raw - 1, 0);
+  memory[p.VHGNDrawdepth] = raw;
+  memory[p.VHGNDdepth] = Math.max(raw - 1, 0);
   landedTerrainTileCore(machine, linked, manhattan, raw);
 }
 
@@ -4530,8 +4797,21 @@ function landedTerrainAddresses(linked) {
     "GRiptype", "VHGNDsctype", "VHGNDruined", "SPtinta", "DBcol", "SPescr", "DBflar", "DBent",
     "SPcull", "VHGNDtilepolys", "PJfwbase", "fw", "VHGNDvctri", "FCret", "PGtexf", "RPSM",
     "VHGNDnormindex", "VHGNDnormgen", "VHGNDnormstamp", "VHGNDnormx", "VHGNDnormy", "VHGNDnormz",
+    "VHGNDvcgen", "VHGNDvcindex", "VHGNDvcstamp", "VHGNDvcvisible",
+    "VHGNDvcrx0", "VHGNDvcrx1", "VHGNDvcry0", "VHGNDvcry1",
+    "VHGNDvcrz0", "VHGNDvcrz1", "VHGNDvcpx", "VHGNDvcpy", "VHGNDmpbase",
     "FI", "VHGNDvslot", "VHGNDvi", "PGFi", "FA0",
-    "VHGNDx", "VHGNDz", "VHGNDlodstep", "VHGNDvv",
+    "VHGNDx", "VHGNDz", "VHGNDxlo", "VHGNDxhi", "VHGNDzlo", "VHGNDzhi",
+    "VHGNDlodstep", "VHGNDlodradius", "VHGNDbackspan", "VHGNDmindepth", "VHGNDmaxdepth",
+    "VHGNDcamtx", "VHGNDcamtz", "VHGNDcamx", "VHGNDcamz", "VHGlanded", "VHGNDbeta", "VHGNDtmp",
+    "VHGNDmanhattan", "VHGNDrawdepth", "VHGNDvv",
+    "VHGdrawhud", "VHGhudcount", "VHGNDsurlight", "VHGseamless",
+    "VHGNDframei", "VHGNDframey", "VHGNDframecol", "VHGNDframeoff", "VHGNDframecount",
+    "VHGmode", "VHGbeta", "VHGNDhudy", "VHGNDcompassrem", "VHGNDcompasspos",
+    "VHGNDcompassx", "VHGNDcompassi", "VHGNDcompassdir", "VHGNDcompassrow",
+    "VHGNDcompassmask", "VHGNDlampx", "VHGNDlampy", "VHGNDlampsize", "VHGNDlamprow",
+    "VHGNDhudsource", "VHGNDhudi", "VHGNDhudchar", "VHGNDhudrow", "VHGNDhudx",
+    "VHGNDhudpacked", "VHGNDhudshift",
     "FT0", "GRcwc", "GRcwn",
     "VHGNDseed", "SUfseed", "SUfeax", "SUfmask", "SUfval",
   ];
@@ -4539,6 +4819,777 @@ function landedTerrainAddresses(linked) {
   cached.surface = noctisBuffer(linked, "RPSM");
   landedTerrainAddressCaches.set(linked, cached);
   return cached;
+}
+
+function terrainTraverseFaithful(machine, linked) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  machine.X = LINO_DONE;
+  const camtx = memory[p.VHGNDcamtx] | 0;
+  const camtz = memory[p.VHGNDcamtz] | 0;
+  const backspan = (memory[p.VHGlanded] | 0) !== 0 ? 1 : 4;
+  const xlo65 = Math.max(camtx - 65, 0);
+  const xhi65 = Math.min(camtx + 65, 198);
+  const zlo65 = Math.max(camtz - 65, 0);
+  const zhi65 = Math.min(camtz + 65, 198);
+  memory[p.VHGNDlodstep] = 1;
+  memory[p.VHGNDlodradius] = 65;
+  memory[p.VHGNDbackspan] = backspan;
+  memory[p.VHGNDmindepth] = -1;
+  memory[p.VHGNDmaxdepth] = 64;
+  let beta = memory[p.VHGNDbeta] | 0;
+  if (beta < 0) beta += 360;
+  beta %= 360;
+  memory[p.VHGNDtmp] = beta;
+
+  const tile = (x, z) => {
+    memory[p.VHGNDx] = x;
+    memory[p.VHGNDz] = z;
+    memory[p.VHGNDnativecomplete] = 0;
+    landedTileAdmissionAt(machine, linked, p, x, z, camtx, camtz);
+  };
+
+  if (beta < 45 || beta >= 315) {
+    const zlo = Math.max(camtz - backspan, 0);
+    const zhi = Math.min(camtz + 65, 198);
+    memory[p.VHGNDxlo] = xlo65; memory[p.VHGNDxhi] = xhi65;
+    memory[p.VHGNDzlo] = zlo; memory[p.VHGNDzhi] = zhi;
+    for (let z = zhi; z >= zlo; z -= 1) {
+      for (let x = xlo65; x < camtx; x += 1) tile(x, z);
+      for (let x = xhi65; x >= camtx; x -= 1) tile(x, z);
+    }
+    memory[p.VHGNDz] = zlo - 1;
+    return;
+  }
+  if (beta < 135) {
+    const xlo = Math.max(camtx - 65, 0);
+    const xhi = Math.min(camtx + backspan, 198);
+    memory[p.VHGNDxlo] = xlo; memory[p.VHGNDxhi] = xhi;
+    memory[p.VHGNDzlo] = zlo65; memory[p.VHGNDzhi] = zhi65;
+    for (let x = xlo; x <= xhi; x += 1) {
+      for (let z = zhi65; z > camtz; z -= 1) tile(x, z);
+      for (let z = zlo65; z <= camtz; z += 1) tile(x, z);
+    }
+    memory[p.VHGNDx] = xhi + 1;
+    return;
+  }
+  if (beta < 225) {
+    const zlo = Math.max(camtz - 65, 0);
+    const zhi = Math.min(camtz + backspan, 198);
+    memory[p.VHGNDxlo] = xlo65; memory[p.VHGNDxhi] = xhi65;
+    memory[p.VHGNDzlo] = zlo; memory[p.VHGNDzhi] = zhi;
+    for (let z = zlo; z <= zhi; z += 1) {
+      for (let x = xlo65; x < camtx; x += 1) tile(x, z);
+      for (let x = xhi65; x >= camtx; x -= 1) tile(x, z);
+    }
+    memory[p.VHGNDz] = zhi + 1;
+    return;
+  }
+  const xlo = Math.max(camtx - backspan, 0);
+  const xhi = Math.min(camtx + 65, 198);
+  memory[p.VHGNDxlo] = xlo; memory[p.VHGNDxhi] = xhi;
+  memory[p.VHGNDzlo] = zlo65; memory[p.VHGNDzhi] = zhi65;
+  for (let x = xhi; x >= xlo; x -= 1) {
+    for (let z = zhi65; z > camtz; z -= 1) tile(x, z);
+    for (let z = zlo65; z <= camtz; z += 1) tile(x, z);
+  }
+  memory[p.VHGNDx] = xlo - 1;
+}
+
+function terrainRenderRandom(machine, linked) {
+  landedFastRandom(machine, linked, value(machine.memory, linked, "SUfmask"));
+}
+
+function surroundingBorder(machine, linked) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  const page = noctisBuffer(linked, "RADPT");
+  const light = memory[p.VHGNDsurlight] | 0;
+  if ((memory[p.VHGdrawhud] | 0) !== 0) {
+    for (let row = 0; row < 4; row += 1) {
+      const y = (memory[p.VHGhudcount] + 9 - row) | 0;
+      memory.fill((54 + light + row * 3) | 0, page + y * 320 + 10, page + y * 320 + 310);
+    }
+  }
+  for (let inset = 0; inset < 10; inset += 1) {
+    const color = (64 + light - inset) | 0;
+    memory.fill(color, page + (9 - inset) * 320, page + (10 - inset) * 320);
+    memory.fill(color, page + (190 + inset) * 320, page + (191 + inset) * 320);
+  }
+  if ((memory[p.VHGseamless] | 0) === 0) {
+    for (let y = 10; y < 190; y += 1) {
+      const row = page + y * 320;
+      for (let inset = 0; inset < 10; inset += 1) {
+        const color = (64 + light - inset) | 0;
+        memory[row + 9 - inset] = color;
+        memory[row + 310 + inset] = color;
+      }
+    }
+    memory[p.VHGNDframey] = 190;
+  } else {
+    for (let inset = 0; inset < 10; inset += 1) {
+      const color = (64 + light - inset) | 0;
+      const firstY = 9 - inset;
+      const count = 200 - firstY * 2;
+      for (let offset = 0; offset < count; offset += 1) {
+        const row = page + (firstY + offset) * 320;
+        memory[row + 9 - inset] = color;
+        memory[row + 310 + inset] = color;
+      }
+      memory[p.VHGNDframey] = firstY + count;
+      memory[p.VHGNDframecount] = 0;
+    }
+  }
+  memory[p.VHGNDframei] = 10;
+  memory[p.VHGNDframecol] = (55 + light) | 0;
+  machine.X = LINO_DONE;
+}
+
+function invertTerrainHudPixel(memory, p, page, x, y) {
+  const destination = page + y * 320 + x;
+  memory[destination] = (191 - memory[destination]) & 0xff;
+  memory[p.VHGNDframeoff] = x;
+}
+
+function surroundingHudString(machine, linked) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  const page = noctisBuffer(linked, "RADPT");
+  const source = memory[p.VHGNDhudsource] >>> 0;
+  let x = memory[p.VHGNDhudx] | 0;
+  const y = memory[p.VHGNDhudy] | 0;
+  let index = 0;
+  for (; index < 80; index += 1) {
+    const character = memory[source + index] | 0;
+    memory[p.VHGNDhudi] = index;
+    memory[p.VHGNDhudchar] = character;
+    if (character === 0) break;
+    const packed = TERRAIN_HUD_GLYPHS[character] ?? 0;
+    memory[p.VHGNDhudpacked] = packed;
+    for (let row = 0; row < 5; row += 1) {
+      const mask = (packed >>> (row * 3)) & 7;
+      memory[p.VHGNDhudrow] = row;
+      memory[p.VHGNDcompassrow] = row;
+      memory[p.VHGNDhudshift] = 0;
+      memory[p.VHGNDcompassmask] = mask;
+      if ((mask & 1) !== 0) invertTerrainHudPixel(memory, p, page, x, y + row);
+      if ((mask & 2) !== 0) invertTerrainHudPixel(memory, p, page, x + 1, y + row);
+      if ((mask & 4) !== 0) invertTerrainHudPixel(memory, p, page, x + 2, y + row);
+    }
+    memory[p.VHGNDhudrow] = 5;
+    x += 4;
+    memory[p.VHGNDhudx] = x;
+  }
+  memory[p.VHGNDhudi] = index;
+  machine.X = LINO_DONE;
+}
+
+function surroundingCompass(machine, linked) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  if ((memory[p.VHGdrawhud] | 0) === 0 || (memory[p.VHGmode] | 0) === 0) {
+    machine.X = LINO_DONE;
+    return;
+  }
+  const page = noctisBuffer(linked, "RADPT");
+  memory[p.VHGNDhudy] = 2;
+  let beta = (memory[p.VHGbeta] | 0) % 360;
+  if (beta < 0) beta += 360;
+  let heading = 360 - beta;
+  if (heading > 359) heading -= 360;
+  const position = Math.trunc(heading / 9);
+  memory[p.VHGNDcompasspos] = position;
+  let remainder = Math.trunc((heading * 4) / 9);
+  memory[p.VHGNDcompassrem] = remainder;
+  let x = 200 - (remainder % 4);
+  memory[p.VHGNDcompassx] = x;
+
+  memory[p.VHGNDlampx] = 254;
+  memory[p.VHGNDlampy] = 1;
+  memory[p.VHGNDlampsize] = 5;
+  memory[p.VHGNDframecol] = 64;
+  for (let row = 0; row < 7; row += 1) memory.fill(64, page + (row + 1) * 320 + 254, page + (row + 1) * 320 + 259);
+  memory[p.VHGNDlamprow] = 7;
+  memory[page + 8 * 320 + 256] = 127;
+
+  for (let character = 0; character < 28; character += 1) {
+    const compassValue = position + character;
+    let direction = 4;
+    if (compassValue % 10 === 0) direction = Math.trunc(compassValue / 10) % 4;
+    memory[p.VHGNDcompassi] = character;
+    memory[p.VHGNDcompassdir] = direction;
+    for (let row = 0; row < 5; row += 1) {
+      let mask = 0;
+      if (direction === 0) mask = row === 1 || row === 2 ? 7 : 5;
+      else if (direction === 1) mask = row === 1 || row === 3 ? 1 : row === 2 ? 3 : 7;
+      else if (direction === 2) mask = row === 1 ? 1 : row === 3 ? 4 : 7;
+      else if (direction === 3) mask = row === 2 || row === 3 ? 7 : 5;
+      else if (row === 4) mask = 2;
+      memory[p.VHGNDcompassrow] = row;
+      memory[p.VHGNDcompassmask] = mask;
+      if ((mask & 1) !== 0) invertTerrainHudPixel(memory, p, page, x, 2 + row);
+      if ((mask & 2) !== 0) invertTerrainHudPixel(memory, p, page, x + 1, 2 + row);
+      if ((mask & 4) !== 0) invertTerrainHudPixel(memory, p, page, x + 2, 2 + row);
+    }
+    memory[p.VHGNDcompassrow] = 5;
+    x += 4;
+    memory[p.VHGNDcompassx] = x;
+  }
+  memory[p.VHGNDcompassi] = 28;
+  machine.X = LINO_DONE;
+}
+
+function ekeyAddresses(linked) {
+  let cached = ekeyAddressCaches.get(linked);
+  if (cached) return cached;
+  cached = {
+    sessions: address(linked, "ekey session memory"),
+    keyServers: address(linked, "key f1 server"),
+    slots: address(linked, "ekey session slots"),
+  };
+  ekeyAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function searchEkeySession(machine, linked) {
+  const memory = machine.memory;
+  const p = ekeyAddresses(linked);
+  const wanted = machine.D | 0;
+  let offset = 0;
+  let free = -1;
+  let remaining = p.slots | 0;
+  while (remaining > 0) {
+    const id = memory[p.sessions + offset + 82] | 0;
+    if (id === wanted) {
+      machine.A = offset;
+      machine.B = free;
+      machine.C = remaining;
+      machine.X = LINO_DONE;
+      return;
+    }
+    if (id === 0) free = offset;
+    offset += 83;
+    remaining -= 1;
+  }
+  machine.B = free;
+  machine.C = 0;
+  if (free === -1) {
+    machine.A = offset;
+    machine.X = LINO_FAIL;
+    return;
+  }
+  memory[p.sessions + free + 82] = wanted;
+  machine.A = free;
+  machine.X = LINO_DONE;
+}
+
+function backupEkeySession(machine, linked) {
+  const memory = machine.memory;
+  const p = ekeyAddresses(linked);
+  const session = p.sessions + (machine.A | 0);
+  let destination = session;
+  let source = p.keyServers;
+  if ((machine.D | 0) !== 0) {
+    machine.D = session;
+    destination = p.keyServers;
+    source = session;
+  }
+  memory.copyWithin(destination, source, source + 82);
+  machine.A = destination + 82;
+  machine.B = source + 82;
+  machine.C = 0;
+  machine.X = LINO_DONE;
+}
+
+function rectangleAddresses(linked) {
+  let cached = rectangleAddressCaches.get(linked);
+  if (cached) return cached;
+  const names = [
+    "Rectangle Target Layer", "Rectangle Display Alignment", "Rectangle Bounds",
+    "Rectangle Gradients", "Rectangle Effect", "RECT H Start Red", "RECT H Start Green",
+    "RECT H Start Blue", "RECT H Delta Red", "RECT H Delta Green", "RECT H Delta Blue",
+    "RECT V Start Red", "RECT V Start Green", "RECT V Start Blue", "RECT V Delta Red",
+    "RECT V Delta Green", "RECT V Delta Blue", "RECT Pixels", "RECT Scanlines",
+    "RECT Display Pointer", "FX Transparent Color", "FX Filter Color", "Display Width",
+  ];
+  cached = Object.fromEntries(names.map((name) => [canonicalName(name), address(linked, name)]));
+  rectangleAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function pixelEffects(linked) {
+  let cached = pixelEffectCaches.get(linked);
+  if (cached) return cached;
+  cached = new Map();
+  const add = (kind, names, transparent = false) => {
+    for (const name of names) {
+      const handle = codeHandle(linked, name);
+      if (handle >= 0) cached.set(handle, { kind, transparent });
+    }
+  };
+  add("null", ["service FX Null"]);
+  add("raw", ["service FX Raw"]);
+  add("raw", ["service FX Superimpose"], true);
+  add("negate", ["service FX Negate"]);
+  add("negate", ["service FX Negate Superimpose"], true);
+  add("semi", ["service FX Semi Transparent"]);
+  add("semi", ["service FX Semi Transparent Superimpose"], true);
+  add("light", ["service FX Alpha Light", "service FX Alpha Lit"]);
+  add("light", ["service FX Alpha Light Superimpose", "service FX Alpha Lit Superimpose"], true);
+  add("dim", ["service FX Alpha Dim"]);
+  add("dim", ["service FX Alpha Dim Superimpose"], true);
+  add("filter", ["service FX Filter"]);
+  add("filter", ["service FX Filter Superimpose"], true);
+  add("filterLight", ["service FX Filter Alpha Light", "service FX Filter Alpha Lit"]);
+  add("filterLight", ["service FX Filter Alpha Light Superimpose", "service FX Filter Alpha Lit Superimpose"], true);
+  add("filterDim", ["service FX Filter Alpha Dim"]);
+  add("filterDim", ["service FX Filter Alpha Dim Superimpose"], true);
+  add("glow", ["service FX Glow"]);
+  add("glow", ["service FX Glow Superimpose"], true);
+  add("smooth", ["service FX Smooth"]);
+  add("smooth", ["service FX Smooth Superimpose"], true);
+  add("doubleSmooth", ["service FX DoubleStrike Smooth"]);
+  add("doubleSmooth", ["service FX DoubleStrike Smooth Superimpose"], true);
+  add("aaLight", ["service FX Antialiasing Lit"]);
+  add("aaLight", ["service FX Antialiasing Lit Superimpose"], true);
+  add("aaDim", ["service FX Antialiasing Dim"]);
+  add("aaDim", ["service FX Antialiasing Dim Superimpose"], true);
+  add("doubleAaLight", ["service FX Doublestrike Antialiasing Lit"]);
+  add("doubleAaLight", ["service FX Doublestrike Antialiasing Lit Superimpose"], true);
+  add("doubleAaDim", ["service FX Doublestrike Antialiasing Dim"]);
+  add("doubleAaDim", ["service FX Doublestrike Antialiasing Dim Superimpose"], true);
+  pixelEffectCaches.set(linked, cached);
+  return cached;
+}
+
+function pixelAlphaLight(background, foreground) {
+  const blue = Math.min((background & 0xff) + (foreground & 0xff), 0xff);
+  const green = Math.min((background & 0xff00) + (foreground & 0xff00), 0xff00);
+  const red = Math.min((background & 0xff0000) + (foreground & 0xff0000), 0xff0000);
+  return blue | green | red;
+}
+
+function pixelAlphaDim(background, foreground) {
+  const blue = Math.max((background & 0xff) - (foreground & 0xff), 0);
+  const green = Math.max((background & 0xff00) - (foreground & 0xff00), 0);
+  const red = Math.max((background & 0xff0000) - (foreground & 0xff0000), 0);
+  return blue | green | red;
+}
+
+function applyPixelEffect(memory, linked, p, handle, pointer, color) {
+  const effect = pixelEffects(linked).get(handle);
+  if (!effect) throw new RangeError(`Unsupported Rectangle pixel effect handle ${handle}`);
+  if (effect.transparent && color === (memory[p.fxtransparentcolor] | 0)) return;
+  const width = memory[p.displaywidth] | 0;
+  const alpha = (at, amount, light) => {
+    memory[at] = light
+      ? pixelAlphaLight(memory[at] | 0, amount)
+      : pixelAlphaDim(memory[at] | 0, amount);
+  };
+  const smooth = (at, amount) => {
+    amount = ((amount & 0xfcfcfc) >>> 2) | 0;
+    const above = (memory[at - width] & 0xfcfcfc) >>> 2;
+    const upperLeft = (memory[at - width - 1] & 0xfcfcfc) >>> 2;
+    const upperRight = (memory[at - width + 1] & 0xfcfcfc) >>> 2;
+    memory[at] = (amount + above + upperLeft + upperRight) | 0;
+  };
+  const antialias = (at, amount, light) => {
+    alpha(at, amount, light);
+    amount = (amount & 0xf0f0f0) >>> 4;
+    alpha(at - 1, amount, light); alpha(at + 1, amount, light);
+    alpha(at - width, amount, light); alpha(at + width, amount, light);
+  };
+  switch (effect.kind) {
+    case "null": break;
+    case "raw": memory[pointer] = color; break;
+    case "negate": memory[pointer] = ~memory[pointer]; break;
+    case "semi": memory[pointer] = (((color & 0xfefefe) >>> 1)
+      + ((memory[pointer] & 0xfefefe) >>> 1)) | 0; break;
+    case "light": alpha(pointer, color, true); break;
+    case "dim": alpha(pointer, color, false); break;
+    case "filter": memory[pointer] = (((color & 0xfefefe) >>> 1)
+      + ((memory[p.fxfiltercolor] & 0xfefefe) >>> 1)) | 0; break;
+    case "filterLight": memory[pointer] = pixelAlphaLight(color, memory[p.fxfiltercolor] | 0); break;
+    case "filterDim": memory[pointer] = pixelAlphaDim(color, memory[p.fxfiltercolor] | 0); break;
+    case "glow": {
+      memory[pointer] = color;
+      const half = (color & 0xfefefe) >>> 1;
+      for (const at of [pointer - 1, pointer + 1, pointer - width, pointer + width]) {
+        memory[at] = (((memory[at] & 0xfefefe) >>> 1) + half) | 0;
+      }
+      break;
+    }
+    case "smooth": smooth(pointer, color); break;
+    case "doubleSmooth":
+      for (const at of [pointer + 1, pointer - 1, pointer + width, pointer - width, pointer]) smooth(at, color);
+      break;
+    case "aaLight": antialias(pointer, color, true); break;
+    case "aaDim": antialias(pointer, color, false); break;
+    case "doubleAaLight": {
+      const quarter = (color & 0xfcfcfc) >>> 2;
+      antialias(pointer, quarter, true);
+      const half = (color & 0xfefefe) >>> 1;
+      for (const at of [pointer - 1, pointer + 1, pointer - width, pointer + width]) antialias(at, half, true);
+      break;
+    }
+    case "doubleAaDim": {
+      const quarter = (color & 0xfcfcfc) >>> 2;
+      antialias(pointer, quarter, false);
+      const half = (color & 0xfefefe) >>> 1;
+      for (const at of [pointer - 1, pointer + 1, pointer - width, pointer + width]) antialias(at, half, false);
+      break;
+    }
+    default: throw new RangeError(`Unsupported Rectangle pixel effect ${effect.kind}`);
+  }
+}
+
+function rectangle(machine, linked) {
+  const memory = machine.memory;
+  const p = rectangleAddresses(linked);
+  const target = memory[p.rectangletargetlayer] >>> 0;
+  const bounds = memory[p.rectanglebounds] >>> 0;
+  if (target === 0 || bounds === 0) { machine.X = LINO_FAIL; return; }
+  const gradients = memory[p.rectanglegradients] >>> 0;
+  const alignment = memory[p.rectangledisplayalignment] | 0;
+  const left = memory[bounds] | 0;
+  const top = memory[bounds + 1] | 0;
+  const pixels = ((memory[bounds + 2] | 0) - left + 1) | 0;
+  const scanlines = ((memory[bounds + 3] | 0) - top + 1) | 0;
+  const f32 = (at) => float32FromBits(memory[at]);
+  const bits = (number) => float32Bits(Math.fround(number));
+  const horizontal = [0, 1, 2].map((axis) => bits(
+    Math.fround(f32(gradients + 3 + axis) - f32(gradients + axis)) / Math.fround(pixels),
+  ));
+  const vertical = [0, 1, 2].map((axis) => bits(
+    Math.fround(f32(gradients + 6 + axis) - f32(gradients + axis)) / Math.fround(scanlines),
+  ));
+  const start = [memory[gradients], memory[gradients + 1], memory[gradients + 2]];
+  const names = ["red", "green", "blue"];
+  for (let axis = 0; axis < 3; axis += 1) {
+    memory[p[`recthdelta${names[axis]}`]] = horizontal[axis];
+    memory[p[`rectvdelta${names[axis]}`]] = vertical[axis];
+    memory[p[`rectvstart${names[axis]}`]] = start[axis];
+  }
+  memory[p.rectpixels] = pixels;
+  memory[p.rectscanlines] = scanlines;
+  let pointer = (target + top * alignment + left) >>> 0;
+  let verticalStart = start;
+  const effect = memory[p.rectangleeffect] | 0;
+  for (let y = 0; y < scanlines; y += 1) {
+    let horizontalStart = verticalStart.slice();
+    memory[p.rectdisplaypointer] = pointer;
+    for (let axis = 0; axis < 3; axis += 1) memory[p[`recthstart${names[axis]}`]] = horizontalStart[axis];
+    for (let x = 0; x < pixels; x += 1) {
+      const channels = horizontalStart.map((channel) => Math.max(0, Math.min(255,
+        nearestEven(Math.fround(float32FromBits(channel) * 255)),
+      )));
+      const color = (channels[0] << 16) | (channels[1] << 8) | channels[2];
+      applyPixelEffect(memory, linked, p, effect, pointer, color);
+      pointer += 1;
+      for (let axis = 0; axis < 3; axis += 1) {
+        horizontalStart[axis] = bits(float32FromBits(horizontalStart[axis]) + float32FromBits(horizontal[axis]));
+      }
+    }
+    pointer += alignment - pixels;
+    for (let axis = 0; axis < 3; axis += 1) {
+      verticalStart[axis] = bits(float32FromBits(verticalStart[axis]) + float32FromBits(vertical[axis]));
+    }
+  }
+  memory[p.rectdisplaypointer] = pointer;
+  memory[p.rectpixels] = 0;
+  memory[p.rectscanlines] = 0;
+  machine.X = LINO_DONE;
+}
+
+function tgaAddresses(linked) {
+  let cached = tgaAddressCaches.get(linked);
+  if (cached) return cached;
+  const names = [
+    "TGA Target Layer", "TGA Picture Data", "TGA Display Alignment", "TGA Display Width",
+    "TGA Display Height", "TGA Picture Left", "TGA Picture Top", "TGA Effect",
+    "Bit Stream Pointer", "Starting Bit Number", "Bit Field Size", "Bit Field Content",
+    "LTP Pixels", "LTP Scanlines", "LTP Current Pixel", "LTP Current Scanline",
+    "LTP Current Pixel Pointer", "LTP Reverse Horiz", "LTP Forward Vert",
+    "LTP Bit Field Delta X", "LTP Bit Field Delta Y", "LTP ID Block Size",
+    "LTP Header Data", "LTP Colormap Size", "LTP Colormap Data",
+  ];
+  cached = Object.fromEntries(names.map((name) => [canonicalName(name), address(linked, name)]));
+  tgaAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function getPackedBits(memory, stream, bit, size) {
+  const offset = bit & 31;
+  const unit = bit >>> 5;
+  let output = memory[stream + unit] >>> offset;
+  if (offset + size > 32) output |= memory[stream + unit + 1] << (32 - offset);
+  const trim = (32 - size) & 31;
+  return (output << trim) >>> trim;
+}
+
+function loadTgaPicture(machine, linked) {
+  const memory = machine.memory;
+  const p = tgaAddresses(linked);
+  const effects = rectangleAddresses(linked);
+  const target = memory[p.tgatargetlayer] >>> 0;
+  const data = memory[p.tgapicturedata] >>> 0;
+  machine.X = LINO_FAIL;
+  if (target === 0 || data === 0) return;
+  const h0 = memory[data] >>> 0;
+  const h1 = memory[data + 1] >>> 0;
+  const h3 = memory[data + 3] >>> 0;
+  const h4 = memory[data + 4] >>> 0;
+  memory[p.ltpheaderdata] = h0;
+  memory[p.ltpheaderdata + 1] = h1;
+  memory[p.ltpheaderdata + 3] = h3;
+  memory[p.ltpheaderdata + 4] = h4;
+  const idBytes = h0 & 0xff;
+  const type = (h0 >>> 16) & 0xff;
+  if (type !== 1 && type !== 2) return;
+  let paletteSize = 0;
+  let bit = (idBytes + 18) * 8;
+  const palette = p.ltpcolormapdata;
+  if (type === 1) {
+    if ((h0 & 0x100) === 0) return;
+    paletteSize = (h1 >>> 8) & 0xffff;
+    const first = h0 >>> 24;
+    if (paletteSize > 256 || first + paletteSize > 256 || (h1 >>> 24) !== 24) return;
+    for (let index = 0; index < paletteSize; index += 1) {
+      memory[palette + first + index] = getPackedBits(memory, data, bit, 24);
+      bit += 24;
+    }
+  } else if ((h0 & 0x100) !== 0) return;
+  const pixels = h3 & 0xffff;
+  const scanlines = h3 >>> 16;
+  const depth = h4 & 0xff;
+  if (depth !== 8 && depth !== 24 && depth !== 32) return;
+  const reverse = (h4 >>> 12) & 1;
+  const forward = (h4 >>> 13) & 1;
+  let deltaX = depth;
+  if (reverse) {
+    bit += (pixels - 1) * depth;
+    deltaX = -depth;
+  }
+  let deltaY = pixels * depth;
+  if (!forward) {
+    bit += (scanlines - 1) * pixels * depth;
+    deltaY = -deltaY;
+  }
+  const left = memory[p.tgapictureleft] | 0;
+  const top = memory[p.tgapicturetop] | 0;
+  const alignment = memory[p.tgadisplayalignment] | 0;
+  const displayWidth = memory[p.tgadisplaywidth] | 0;
+  const displayHeight = memory[p.tgadisplayheight] | 0;
+  const effect = memory[p.tgaeffect] | 0;
+  let rowPointer = (target + top * alignment + left) >>> 0;
+  let rowBit = bit;
+  for (let row = 0; row < scanlines; row += 1) {
+    const y = top + row;
+    if (y >= 0 && y < displayHeight) {
+      let pixelBit = rowBit;
+      let pointer = rowPointer;
+      for (let column = 0; column < pixels; column += 1) {
+        const x = left + column;
+        if (x >= displayWidth || x >= alignment) break;
+        if (x >= 0) {
+          let color = getPackedBits(memory, data, pixelBit, depth);
+          if (depth <= 8) color = memory[palette + color] | 0;
+          applyPixelEffect(memory, linked, effects, effect, pointer, color);
+        }
+        pixelBit += deltaX;
+        pointer += 1;
+      }
+    }
+    rowBit += deltaY;
+    rowPointer += alignment;
+  }
+  memory[p.bitstreampointer] = data;
+  memory[p.startingbitnumber] = rowBit;
+  memory[p.bitfieldsize] = depth;
+  memory[p.ltppixels] = 0;
+  memory[p.ltpscanlines] = 0;
+  memory[p.ltpreversehoriz] = reverse;
+  memory[p.ltpforwardvert] = forward;
+  memory[p.ltpbitfielddeltax] = deltaX;
+  memory[p.ltpbitfielddeltay] = deltaY;
+  memory[p.ltpidblocksize] = idBytes;
+  memory[p.ltpcolormapsize] = paletteSize;
+  machine.X = LINO_DONE;
+}
+
+function textAddresses(linked) {
+  let cached = textAddressCaches.get(linked);
+  if (cached) return cached;
+  const names = [
+    "String", "Ink", "Text X", "Text Y", "Text Effect", "Text Display Width",
+    "Text Display Height", "Text Display Origin", "Text Region", "Text Window",
+    "Text Word Wrap", "Text Ghost Mode", "Text TAB Size", "Text Intercharspacing",
+    "Text Interlinespacing", "Text Highlight Start", "Text Highlight Stop",
+    "STD Font Alignment", "STD Font Body", "STD Font Width", "STD Font Shape",
+    "Width Of Latest Form", "Height Of Latest Form", "STD HL", "STD Current character X",
+    "STD Current character Y", "STD Offset to current character in string", "STD Dot X",
+    "STD Dot Y", "STD Stop X", "STD Stop Y", "STD Current shape unit", "STD Dot Mask",
+    "STD Window Left", "STD Window Top", "STD Window Right", "STD Window Bottom",
+    "STD Prescent X", "STD Prescent offset", "STD Width Correction", "STD Height Correction",
+  ];
+  cached = Object.fromEntries(names.map((name) => [canonicalName(name), address(linked, name)]));
+  textAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function rotateLeft32(value, count) {
+  count &= 31;
+  return count === 0 ? value | 0 : ((value << count) | (value >>> (32 - count))) | 0;
+}
+
+function rotateRight32(value, count) {
+  count &= 31;
+  return count === 0 ? value | 0 : ((value >>> count) | (value << (32 - count))) | 0;
+}
+
+function standardText(machine, linked) {
+  const memory = machine.memory;
+  const p = textAddresses(linked);
+  const effects = rectangleAddresses(linked);
+  const string = memory[p.string] >>> 0;
+  const origin = memory[p.textdisplayorigin] >>> 0;
+  const displayWidth = memory[p.textdisplaywidth] | 0;
+  const displayHeight = memory[p.textdisplayheight] | 0;
+  memory[p.widthoflatestform] = 0;
+  memory[p.heightoflatestform] = 0;
+  if (string === 0 || origin === 0 || displayWidth <= 0 || displayHeight <= 0) {
+    machine.X = LINO_FAIL;
+    return;
+  }
+  const fontWidth = memory[p.stdfontwidth] | 0;
+  const fontBody = memory[p.stdfontbody] | 0;
+  const fontAlignment = memory[p.stdfontalignment] | 0;
+  const fontShape = memory[p.stdfontshape] >>> 0;
+  const interCharacter = memory[p.textintercharspacing] | 0;
+  const interLine = memory[p.textinterlinespacing] | 0;
+  const widthCorrection = Math.max(memory[p.textx] | 0, 0);
+  const heightCorrection = Math.max(memory[p.texty] | 0, 0);
+  let x = memory[p.textx] | 0;
+  let y = memory[p.texty] | 0;
+  let left = 0;
+  let top = 0;
+  let right = 0x7fffffff;
+  let bottom = 0x7fffffff;
+  const window = memory[p.textwindow] >>> 0;
+  if (window !== 0) {
+    left = memory[window] | 0; top = memory[window + 1] | 0;
+    right = memory[window + 2] | 0; bottom = memory[window + 3] | 0;
+    x += left; y += top;
+  }
+  const region = memory[p.textregion] >>> 0;
+  const wrap = (memory[p.textwordwrap] | 0) !== 0;
+  const ghost = (memory[p.textghostmode] | 0) !== 0;
+  const highlightStart = memory[p.texthighlightstart] >>> 0;
+  const highlightStop = memory[p.texthighlightstop] >>> 0;
+  let effect = memory[p.texteffect] | 0;
+  if (!pixelEffects(linked).has(effect) && effect === -2147483648) {
+    effect = codeHandle(linked, "service FX Raw");
+  }
+  const ink = memory[p.ink] | 0;
+  let offset = 0;
+  let width = 0;
+  let stop = false;
+
+  const within = (px, py) => {
+    if ((px >>> 0) >= (displayWidth >>> 0) || (py >>> 0) >= (displayHeight >>> 0)) return false;
+    return region === 0 || (px >= (memory[region] | 0) && py >= (memory[region + 1] | 0)
+      && px <= (memory[region + 2] | 0) && py <= (memory[region + 3] | 0));
+  };
+  const checkWordWrap = () => {
+    if (!wrap) return;
+    let futureX = x;
+    let future = offset;
+    for (;;) {
+      future += 1;
+      const character = memory[string + future] & 0xff;
+      if (character === 0 || character === 9 || character === 13 || character === 32) break;
+      futureX += fontWidth + interCharacter;
+      if (futureX > right) {
+        x = left;
+        y += fontBody + interLine;
+        if (y >= bottom) stop = true;
+        break;
+      }
+    }
+  };
+
+  while (!stop) {
+    let character = memory[string + offset] & 0xff;
+    const highlighted = string + offset >= highlightStart && string + offset < highlightStop;
+    if (character === 0) break;
+    if (character === 9) {
+      const tab = memory[p.texttabsize] | 0;
+      if (tab > 0) {
+        x = x - (x % tab) + tab;
+        checkWordWrap();
+      }
+      offset += 1;
+      continue;
+    }
+    if (character === 10) {
+      x = left;
+      y += fontBody + interLine;
+      if (y >= bottom) break;
+      offset += 1;
+      continue;
+    }
+    if (character === 13) { offset += 1; continue; }
+    if (character === 32) {
+      x += fontWidth + interCharacter;
+      checkWordWrap();
+      width = Math.max(width, x - left - widthCorrection);
+      offset += 1;
+      continue;
+    }
+    if (character < 32) character = 32;
+    else if ((character & 0x80) !== 0) character = 127;
+    if (x > right - fontWidth - interCharacter) {
+      if (!wrap) { offset += 1; continue; }
+      x = left;
+      y += fontBody + interLine;
+      if (y >= bottom) break;
+    }
+    if (y >= top - fontBody - interLine) {
+      width = Math.max(width, x + fontWidth + interCharacter - left - widthCorrection);
+      if (!ghost) {
+        const glyph = character - 32;
+        let shape = fontShape + Math.trunc(glyph / fontAlignment) * fontAlignment * fontBody
+          + (glyph % fontAlignment);
+        let dotY = y;
+        for (let row = 0; row < fontBody; row += 1, dotY += 1, shape += fontAlignment) {
+          let mask = rotateLeft32(0x80000000, fontWidth);
+          mask = rotateLeft32(mask, fontWidth);
+          for (let column = 0; column < fontWidth; column += 1) {
+            const dotX = x + column;
+            const inside = within(dotX, dotY);
+            if (inside && ((memory[shape] & mask) !== 0)) {
+              applyPixelEffect(memory, linked, effects, effect, origin + dotY * displayWidth + dotX, ink);
+            }
+            if (inside && highlighted) memory[origin + dotY * displayWidth + dotX] = ~memory[origin + dotY * displayWidth + dotX];
+            mask = rotateRight32(mask, 2);
+          }
+        }
+      }
+    }
+    x += fontWidth + interCharacter;
+    offset += 1;
+  }
+  memory[p.widthoflatestform] = width;
+  memory[p.heightoflatestform] = y + fontBody - top - heightCorrection;
+  memory[p.stdhl] = 0;
+  memory[p.stdcurrentcharacterx] = x;
+  memory[p.stdcurrentcharactery] = y;
+  memory[p.stdoffsettocurrentcharacterinstring] = offset;
+  memory[p.stdwidthcorrection] = widthCorrection;
+  memory[p.stdheightcorrection] = heightCorrection;
+  memory[p.stdwindowleft] = left; memory[p.stdwindowtop] = top;
+  memory[p.stdwindowright] = right; memory[p.stdwindowbottom] = bottom;
+  machine.X = LINO_DONE;
 }
 
 function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
@@ -4561,17 +5612,15 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
 
   const h1 = memory[p.VHGNDh1] | 0;
   const surface = p.surface;
-  const heights = [
-    memory[surface + h1] & 0xff,
-    memory[surface + h1 + 1] & 0xff,
-    memory[surface + h1 + 201] & 0xff,
-    memory[surface + h1 + 200] & 0xff,
-  ];
-  memory[p.VHGNDs1] = heights[0]; memory[p.VHGNDs2] = heights[1];
-  memory[p.VHGNDs3] = heights[2]; memory[p.VHGNDs4] = heights[3];
+  const height0 = memory[surface + h1] & 0xff;
+  const height1 = memory[surface + h1 + 1] & 0xff;
+  const height2 = memory[surface + h1 + 201] & 0xff;
+  const height3 = memory[surface + h1 + 200] & 0xff;
+  memory[p.VHGNDs1] = height0; memory[p.VHGNDs2] = height1;
+  memory[p.VHGNDs3] = height2; memory[p.VHGNDs4] = height3;
   if ((memory[p.GRiptype] | 0) === 3
       && (memory[p.VHGNDsctype] | 0) === 1
-      && heights[0] + heights[1] + heights[2] + heights[3] === 0) {
+      && height0 + height1 + height2 + height3 === 0) {
     memory[done] = 2;
     return;
   }
@@ -4603,6 +5652,7 @@ function landedTerrainTriangle(machine, linked) {
   const memory = machine.memory;
   const p = landedTerrainAddresses(linked);
   const floats = memory[p.PJfwbase] >>> 0;
+  const view = dataView(memory);
   const x0 = memory[p.VHGNDx] << 14;
   const z0 = memory[p.VHGNDz] << 14;
   const step = memory[p.VHGNDlodstep] << 14;
@@ -4618,11 +5668,11 @@ function landedTerrainTriangle(machine, linked) {
   const cx = x0;
   const cy = memory[p.VHGNDs4];
   const cz = z1;
-  writeFloat64(memory, floats + 504, ax); writeFloat64(memory, floats + 506, bx); writeFloat64(memory, floats + 508, cx);
-  writeFloat64(memory, floats + 512, -(ay << 11)); writeFloat64(memory, floats + 514, -(by << 11)); writeFloat64(memory, floats + 516, -(cy << 11));
-  writeFloat64(memory, floats + 520, az); writeFloat64(memory, floats + 522, bz); writeFloat64(memory, floats + 524, cz);
-  const finalY = readFloat64(memory, floats + 516);
-  writeFloat64(memory, p.FA0, finalY);
+  writeFloat64View(view, floats + 504, ax); writeFloat64View(view, floats + 506, bx); writeFloat64View(view, floats + 508, cx);
+  writeFloat64View(view, floats + 512, -(ay << 11)); writeFloat64View(view, floats + 514, -(by << 11)); writeFloat64View(view, floats + 516, -(cy << 11));
+  writeFloat64View(view, floats + 520, az); writeFloat64View(view, floats + 522, bz); writeFloat64View(view, floats + 524, cz);
+  const finalY = readFloat64View(view, floats + 516);
+  writeFloat64View(view, p.FA0, finalY);
   memory[p.VHGNDvv] = memory[p.FA0];
   memory[p.VHGNDvi] = 2;
   memory[p.VHGNDvslot] = 256;
@@ -4640,47 +5690,40 @@ function landedVertexLoad(machine, linked) {
   writeFloat64(memory, floats + slot * 2, input);
 }
 
+function genericTerrainMapped(machine, linked, p) {
+  const memory = machine.memory;
+  memory[p.PJpreproject] = 0;
+  memory[p.PJnrv] = 3;
+  polymap(machine, linked);
+  memory[p.SPterrain] = 0;
+}
+
 function terrainMapped(machine, linked) {
   const memory = machine.memory;
   const p = polymapAddresses(linked);
-  const at = (name) => address(linked, name);
-  const spterrain = at("SPterrain");
+  const ground = landedTerrainAddresses(linked);
+  const spterrain = p.SPterrain;
   memory[spterrain] = 1;
 
-  const generic = () => {
-    memory[p.PJpreproject] = 0;
-    memory[p.PJnrv] = 3;
-    polymap(machine, linked);
-    memory[spterrain] = 0;
-  };
-  if ((memory[at("VHGNDmirror")] | 0) !== 0) {
-    generic();
+  if ((memory[ground.VHGNDmirror] | 0) !== 0) {
+    genericTerrainMapped(machine, linked, p);
     return;
   }
 
-  const h1 = memory[at("VHGNDh1")] | 0;
-  const triangle = memory[at("VHGNDvctri")] | 0;
-  const indices = triangle === 0 ? [h1, h1 + 1, h1 + 200] : [h1 + 1, h1 + 201, h1 + 200];
-  const generation = memory[at("VHGNDvcgen")] | 0;
-  const stamp = at("VHGNDvcstamp");
-  const visible = at("VHGNDvcvisible");
-  const cacheX0 = at("VHGNDvcrx0");
-  const cacheX1 = at("VHGNDvcrx1");
-  const cacheY0 = at("VHGNDvcry0");
-  const cacheY1 = at("VHGNDvcry1");
-  const cacheZ0 = at("VHGNDvcrz0");
-  const cacheZ1 = at("VHGNDvcrz1");
-  const cachePX = at("VHGNDvcpx");
-  const cachePY = at("VHGNDvcpy");
-  const viAddress = at("VHGNDvi");
-  const indexAddress = at("VHGNDvcindex");
+  const h1 = memory[ground.VHGNDh1] | 0;
+  const triangle = memory[ground.VHGNDvctri] | 0;
+  const index0 = triangle === 0 ? h1 : h1 + 1;
+  const index1 = triangle === 0 ? h1 + 1 : h1 + 201;
+  const index2 = h1 + 200;
+  const generation = memory[ground.VHGNDvcgen] | 0;
+  const viAddress = ground.VHGNDvi;
+  const indexAddress = ground.VHGNDvcindex;
 
   for (let vertex = 0; vertex < 3; vertex += 1) {
-    const index = indices[vertex];
+    const index = vertex === 0 ? index0 : vertex === 1 ? index1 : index2;
     memory[viAddress] = vertex;
     memory[indexAddress] = index;
-    if ((memory[stamp + index] | 0) === generation) continue;
-
+    if ((memory[ground.VHGNDvcstamp + index] | 0) === generation) continue;
     memory[p.PJmode] = 1;
     memory[p.PJvr] = vertex;
     memory[p.PJnrv] = vertex + 1;
@@ -4688,59 +5731,88 @@ function terrainMapped(machine, linked) {
     const x = p.fw + (p.FSRXF + vertex) * 2;
     const y = p.fw + (p.FSRYF + vertex) * 2;
     const z = p.fw + (p.FSRZF + vertex) * 2;
-    memory[cacheX0 + index] = memory[x]; memory[cacheX1 + index] = memory[x + 1];
-    memory[cacheY0 + index] = memory[y]; memory[cacheY1 + index] = memory[y + 1];
-    memory[cacheZ0 + index] = memory[z]; memory[cacheZ1 + index] = memory[z + 1];
-    const vertexVisible = memory[p.rwf + vertex] | 0;
-    memory[visible + index] = vertexVisible;
-    if (vertexVisible !== 0) {
+    memory[ground.VHGNDvcrx0 + index] = memory[x]; memory[ground.VHGNDvcrx1 + index] = memory[x + 1];
+    memory[ground.VHGNDvcry0 + index] = memory[y]; memory[ground.VHGNDvcry1 + index] = memory[y + 1];
+    memory[ground.VHGNDvcrz0 + index] = memory[z]; memory[ground.VHGNDvcrz1 + index] = memory[z + 1];
+    const visible = memory[p.rwf + vertex] | 0;
+    memory[ground.VHGNDvcvisible + index] = visible;
+    if (visible !== 0) {
       memory[p.fw + p.FSUX * 2] = memory[x]; memory[p.fw + p.FSUX * 2 + 1] = memory[x + 1];
       memory[p.fw + p.FSUY * 2] = memory[y]; memory[p.fw + p.FSUY * 2 + 1] = memory[y + 1];
       memory[p.fw + p.FSUZ * 2] = memory[z]; memory[p.fw + p.FSUZ * 2 + 1] = memory[z + 1];
       memory[p.PJvr2] = 1;
       projectMapGeneric(machine, linked);
-      memory[cachePX + index] = memory[p.mp];
-      memory[cachePY + index] = memory[p.mp + 1];
+      memory[ground.VHGNDvcpx + index] = memory[p.mp];
+      memory[ground.VHGNDvcpy + index] = memory[p.mp + 1];
     }
-    memory[stamp + index] = generation;
+    memory[ground.VHGNDvcstamp + index] = generation;
   }
 
   for (let vertex = 0; vertex < 3; vertex += 1) {
-    const index = indices[vertex];
+    const index = vertex === 0 ? index0 : vertex === 1 ? index1 : index2;
     memory[viAddress] = vertex;
     memory[indexAddress] = index;
-    if ((memory[visible + index] | 0) === 0) {
-      generic();
+    if ((memory[ground.VHGNDvcvisible + index] | 0) === 0) {
+      genericTerrainMapped(machine, linked, p);
       return;
     }
     const x = p.fw + (p.FSRXF + vertex) * 2;
     const y = p.fw + (p.FSRYF + vertex) * 2;
     const z = p.fw + (p.FSRZF + vertex) * 2;
-    memory[x] = memory[cacheX0 + index]; memory[x + 1] = memory[cacheX1 + index];
-    memory[y] = memory[cacheY0 + index]; memory[y + 1] = memory[cacheY1 + index];
-    memory[z] = memory[cacheZ0 + index]; memory[z + 1] = memory[cacheZ1 + index];
-    memory[p.mp + vertex * 2] = memory[cachePX + index];
-    memory[p.mp + vertex * 2 + 1] = memory[cachePY + index];
+    memory[x] = memory[ground.VHGNDvcrx0 + index]; memory[x + 1] = memory[ground.VHGNDvcrx1 + index];
+    memory[y] = memory[ground.VHGNDvcry0 + index]; memory[y + 1] = memory[ground.VHGNDvcry1 + index];
+    memory[z] = memory[ground.VHGNDvcrz0 + index]; memory[z + 1] = memory[ground.VHGNDvcrz1 + index];
+    memory[p.mp + vertex * 2] = memory[ground.VHGNDvcpx + index];
+    memory[p.mp + vertex * 2 + 1] = memory[ground.VHGNDvcpy + index];
     memory[p.rwf + vertex] = 1;
   }
   memory[viAddress] = 3;
-  const finalIndex = indices[2];
+  const finalIndex = index2;
   memory[indexAddress] = finalIndex;
-  for (const slot of [p.FSRXF, p.FSRYF, p.FSRZF]) {
-    const source = p.fw + (slot + 2) * 2;
-    memory[source + 2] = memory[source];
-    memory[source + 3] = memory[source + 1];
-  }
+  let source = p.fw + (p.FSRXF + 2) * 2;
+  memory[source + 2] = memory[source]; memory[source + 3] = memory[source + 1];
+  source = p.fw + (p.FSRYF + 2) * 2;
+  memory[source + 2] = memory[source]; memory[source + 3] = memory[source + 1];
+  source = p.fw + (p.FSRZF + 2) * 2;
+  memory[source + 2] = memory[source]; memory[source + 3] = memory[source + 1];
   memory[p.mp + 6] = memory[p.mp + 4];
   memory[p.mp + 7] = memory[p.mp + 5];
   memory[p.rwf + 3] = 1;
   memory[p.PJdoflag] = 4;
-  memory[at("VHGNDmpbase")] = p.mp;
-  groundCachedBounds(machine, linked);
+  memory[ground.VHGNDmpbase] = p.mp;
+  let minX = memory[p.mp] | 0;
+  let maxX = minX;
+  let minY = memory[p.mp + 1] | 0;
+  let maxY = minY;
+  for (let vertex = 1; vertex < 4; vertex += 1) {
+    const x = memory[p.mp + vertex * 2] | 0;
+    const y = memory[p.mp + vertex * 2 + 1] | 0;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  memory[p.PJminx] = minX;
+  memory[p.PJmaxx] = maxX;
+  memory[p.BXminy] = minY;
+  memory[p.BXmaxy] = maxY;
+  for (let vertex = 0; vertex < 4; vertex += 1) {
+    let from = p.fw + (p.FSRXF + vertex) * 2;
+    let to = p.fw + (p.FSUX + vertex) * 2;
+    memory[to] = memory[from]; memory[to + 1] = memory[from + 1];
+    from = p.fw + (p.FSRYF + vertex) * 2;
+    to = p.fw + (p.FSUY + vertex) * 2;
+    memory[to] = memory[from]; memory[to + 1] = memory[from + 1];
+    from = p.fw + (p.FSRZF + vertex) * 2;
+    to = p.fw + (p.FSUZ + vertex) * 2;
+    memory[to] = memory[from]; memory[to + 1] = memory[from + 1];
+  }
   memory[p.PJvr] = 4;
-  memory[p.PJpreproject] = 1;
-  memory[p.PJnrv] = 3;
-  polymap(machine, linked);
+  memory[p.PJvr2] = 4;
+  memory[p.PJvr22] = 8;
+  memory[p.PJpreproject] = 0;
+  rasterProjectedTerrain(machine, linked, p);
+  memory[p.PJgate] = 0;
   memory[spterrain] = 0;
 }
 
@@ -4752,24 +5824,25 @@ function terrainFacing(machine, linked) {
     return;
   }
   const floats = memory[p.PJfwbase] >>> 0;
+  const view = dataView(memory);
   const index = Math.imul(memory[p.VHGNDh1] | 0, 2) + (memory[p.VHGNDvctri] | 0);
   memory[p.VHGNDnormindex] = index;
   const generation = memory[p.VHGNDnormgen] | 0;
   const stamp = p.VHGNDnormstamp;
-  const caches = [p.VHGNDnormx, p.VHGNDnormy, p.VHGNDnormz];
   if ((memory[stamp + index] | 0) !== generation) {
     mappedFacing(machine, linked);
-    for (let axis = 0; axis < 3; axis += 1) {
-      memory[caches[axis] + index] = float32Bits(readFloat64(memory, floats + 470 + axis * 2));
-    }
+    memory[p.VHGNDnormx + index] = float32Bits(readFloat64View(view, floats + 470));
+    memory[p.VHGNDnormy + index] = float32Bits(readFloat64View(view, floats + 472));
+    memory[p.VHGNDnormz + index] = float32Bits(readFloat64View(view, floats + 474));
     memory[stamp + index] = generation;
     return;
   }
-  for (let axis = 0; axis < 3; axis += 1) {
-    writeFloat64(memory, floats + 470 + axis * 2, float32FromBits(memory[caches[axis] + index]));
-  }
-  terrainFacingDot(machine, linked);
-  const dot = readFloat64(memory, address(linked, "FA0"));
+  const normalX = float32FromBits(memory[p.VHGNDnormx + index]);
+  const normalY = float32FromBits(memory[p.VHGNDnormy + index]);
+  const normalZ = float32FromBits(memory[p.VHGNDnormz + index]);
+  let dot = (readFloat64View(view, floats + 448) - readFloat64View(view, floats + 508)) * normalX;
+  dot = (readFloat64View(view, floats + 450) - readFloat64View(view, floats + 516)) * normalY + dot;
+  dot = (readFloat64View(view, floats + 452) - readFloat64View(view, floats + 524)) * normalZ + dot;
   memory[p.FCret] = !Number.isNaN(dot) && dot >= 0 ? 1 : 0;
 }
 
@@ -5661,6 +6734,17 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.polymap]: polymap,
     [SERVICE_IDS.terrainMapped]: terrainMapped,
     [SERVICE_IDS.terrainFacing]: terrainFacing,
+    [SERVICE_IDS.terrainTraverse]: terrainTraverseFaithful,
+    [SERVICE_IDS.terrainRenderRandom]: terrainRenderRandom,
+    [SERVICE_IDS.terrainVertexLoad]: landedVertexLoad,
+    [SERVICE_IDS.rectangle]: rectangle,
+    [SERVICE_IDS.surroundingBorder]: surroundingBorder,
+    [SERVICE_IDS.surroundingCompass]: surroundingCompass,
+    [SERVICE_IDS.surroundingHudString]: surroundingHudString,
+    [SERVICE_IDS.loadTgaPicture]: loadTgaPicture,
+    [SERVICE_IDS.standardText]: standardText,
+    [SERVICE_IDS.searchEkeySession]: searchEkeySession,
+    [SERVICE_IDS.backupEkeySession]: backupEkeySession,
     [IDS.copyRegion]: copyRegion,
     [IDS.expandIndexed]: expandIndexed,
     [IDS.scale2x]: scale2x,

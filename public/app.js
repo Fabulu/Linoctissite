@@ -219,6 +219,19 @@ async function requestGameFullscreen() {
 
 const budgetChannel = new MessageChannel();
 let budgetContinuationQueued = false;
+let animationFrameRequest = 0;
+function queueAnimationFrame() {
+  if (animationFrameRequest !== 0) return;
+  animationFrameRequest = requestAnimationFrame(() => {
+    animationFrameRequest = 0;
+    runFrame();
+  });
+}
+function cancelQueuedAnimationFrame() {
+  if (animationFrameRequest === 0) return;
+  cancelAnimationFrame(animationFrameRequest);
+  animationFrameRequest = 0;
+}
 budgetChannel.port1.addEventListener("message", () => {
   budgetContinuationQueued = false;
   runFrame();
@@ -233,6 +246,10 @@ function continueBudget() {
 
 function runFrame() {
   try {
+    // Reserve the next refresh before doing the frame's work. Requesting it
+    // near the end of a busy callback can make Chromium defer an otherwise
+    // sub-16 ms frame to the following refresh interval.
+    queueAnimationFrame();
     const previousFrameCount = frameCount;
     const runnerStartedAt = performance.now();
     const result = program.run(250_000);
@@ -267,11 +284,16 @@ function runFrame() {
       statusStartedAt = now;
     }
     if (!program.machine.halted) {
-      if (result.sleepMilliseconds > 0) setTimeout(runFrame, result.sleepMilliseconds);
-      else if (result.status === "budget" && frameCount === previousFrameCount) continueBudget();
-      else requestAnimationFrame(runFrame);
-    }
+      if (result.sleepMilliseconds > 0) {
+        cancelQueuedAnimationFrame();
+        setTimeout(runFrame, result.sleepMilliseconds);
+      } else if (result.status === "budget" && frameCount === previousFrameCount) {
+        cancelQueuedAnimationFrame();
+        continueBudget();
+      }
+    } else cancelQueuedAnimationFrame();
   } catch (error) {
+    cancelQueuedAnimationFrame();
     status.textContent = `Lino stopped: ${error.message}`;
     throw error;
   }
