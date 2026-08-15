@@ -5,9 +5,9 @@ import test from "node:test";
 test("ships the real linked Noctis project and visible fullscreen exits", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
-  assert.match(html, /id="fullscreen"/);
   assert.match(html, /id="exit-fullscreen"/);
   assert.match(html, /id="fullscreen-game"/);
+  assert.doesNotMatch(html, /id="fullscreen"/);
   assert.match(html, /rel="icon" href="\.\/favicon\.svg"/);
   assert.match(html, /width="400" height="300"/);
   assert.match(html, /Lino-rendered Noctis/);
@@ -16,6 +16,7 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(app, /createNoctisIntrinsics/);
   assert.match(app, /putImageData/);
   assert.match(app, /gameStage\.requestFullscreen\(\)/);
+  assert.match(app, /insideLinoBounds\("fullbuttonhotspot"/);
   assert.match(app, /exitFullscreen\(\)/);
   assert.match(app, /symbols\.get\("vhguileft"\)/);
   assert.match(app, /symbols\.get\("vhguitop"\)/);

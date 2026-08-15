@@ -49,7 +49,6 @@ body {
 #game {
   width: 100%;
   height: auto;
-  aspect-ratio: 4 / 3;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   background: #000;
@@ -79,7 +78,6 @@ body {
   opacity: 1;
 }
 
-.fullscreen,
 .exit-fullscreen {
   position: absolute;
   z-index: 2;
@@ -90,15 +88,6 @@ body {
   background: #07131ddd;
   color: #edf7ff;
   cursor: pointer;
-}
-
-.fullscreen {
-  width: 30px;
-  height: 26px;
-  font-size: 18px;
-  top: auto;
-  right: 10px;
-  bottom: 6px;
 }
 
 .exit-fullscreen {
@@ -113,5 +102,4 @@ body {
   text-overflow: ellipsis;
   font-size: 11px;
   color: #91a8bb;
-  padding-right: 38px;
 }

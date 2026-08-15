@@ -5,7 +5,6 @@ const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d", { alpha: false });
 const fullscreenCanvas = document.querySelector("#fullscreen-game");
 const fullscreenContext = fullscreenCanvas.getContext("2d", { alpha: false });
-const fullscreenButton = document.querySelector("#fullscreen");
 const exitFullscreenButton = document.querySelector("#exit-fullscreen");
 const status = document.querySelector("#status");
 const sourceRoot = new URL("./lino-src/", location.href);
@@ -21,6 +20,7 @@ let gameHeight = 200;
 const heldKeys = Object.create(null);
 const consoleInput = [];
 let frameCount = 0;
+let linoFullscreenPress = false;
 let image = context.createImageData(canvas.width, canvas.height);
 let pixels = new Uint32Array(image.data.buffer);
 
@@ -112,6 +112,19 @@ const program = await compileProject(entry, resolvers, {
 });
 status.textContent = "Starting Noctis from its real Lino entry point...";
 
+function insideLinoBounds(name, x, y) {
+  const symbol = program.linked.symbols.get(name);
+  if (!symbol) return false;
+  const address = symbol.value | 0;
+  const memory = program.machine.memory;
+  return x >= memory[address] && y >= memory[address + 1]
+    && x <= memory[address + 2] && y <= memory[address + 3];
+}
+
+async function requestGameFullscreen() {
+  if (!document.fullscreenElement) await gameStage.requestFullscreen();
+}
+
 function runFrame() {
   try {
     const result = program.run(250_000);
@@ -139,6 +152,8 @@ for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("pointermove", pointerPosition);
   target.addEventListener("pointerdown", (event) => {
     pointerPosition(event);
+    linoFullscreenPress = event.button === 0 && target === canvas
+      && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY);
     pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
     target.focus();
     target.setPointerCapture(event.pointerId);
@@ -146,6 +161,13 @@ for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("pointerup", (event) => {
     pointerPosition(event);
     pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
+    if (linoFullscreenPress && event.button === 0 && target === canvas
+        && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY)) {
+      requestGameFullscreen().catch((error) => {
+        status.textContent = `Full screen unavailable: ${error.message}`;
+      });
+    }
+    linoFullscreenPress = false;
   });
   target.addEventListener("contextmenu", (event) => event.preventDefault());
 }
@@ -194,10 +216,6 @@ window.addEventListener("blur", () => {
   for (const key of Object.keys(heldKeys)) delete heldKeys[key];
 });
 
-fullscreenButton.addEventListener("click", async () => {
-  if (document.fullscreenElement) await document.exitFullscreen();
-  else await gameStage.requestFullscreen();
-});
 exitFullscreenButton.addEventListener("click", () => document.exitFullscreen());
 fullscreenCanvas.addEventListener("dblclick", () => document.exitFullscreen());
 document.addEventListener("keydown", async (event) => {
@@ -210,7 +228,6 @@ document.addEventListener("fullscreenchange", () => {
   const active = document.fullscreenElement === gameStage;
   exitFullscreenButton.hidden = !active;
   fullscreenCanvas.hidden = !active;
-  fullscreenButton.setAttribute("aria-label", active ? "Exit full screen" : "Enter full screen");
   (active ? fullscreenCanvas : canvas).focus();
 });
 
