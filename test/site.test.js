@@ -7,6 +7,9 @@ test("ships visible and keyboard fullscreen exits", async () => {
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
   assert.match(html, /id="fullscreen"/);
   assert.match(html, /id="exit-fullscreen"/);
+  assert.match(html, /rel="icon" href="\.\/favicon\.svg"/);
+  assert.match(html, /type="text\/lino" src="\.\/noctis_probe\.lino"/);
+  assert.match(app, /createProgramFromElement/);
   assert.match(app, /requestFullscreen\(\)/);
   assert.match(app, /exitFullscreen\(\)/);
   assert.match(app, /event\.key !== "Escape"/);

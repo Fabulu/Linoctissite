@@ -6,11 +6,13 @@ and Cloudflare Pages deployment. The reusable language compiler/runtime lives
 in [Fabulu/linojava](https://github.com/Fabulu/linojava).
 
 The current site is the first interactive runtime slice, not yet the complete
-Noctis game. It compiles `src/noctis_probe.lino` with LinoJava, runs the result
-inside the browser GUI, and lets the player move the probe with WASD or the
-arrow keys. This gives the real compiler, execution, rendering, input, resize,
-and fullscreen path a small end-to-end workload while the full Noctis language
-surface is brought across.
+Noctis game. The page includes `noctis_probe.lino` as a `text/lino` script.
+LinoJava fetches and compiles that source to optimized JavaScript in the
+browser, caches the generated module in IndexedDB, runs it inside the browser
+GUI, and lets the player move the probe with WASD or the arrow keys. This gives
+the real compiler, execution, rendering, input, resize, and fullscreen path a
+small end-to-end workload while the full Noctis language surface is brought
+across.
 
 The HTML and CSS window around that slice is temporary bring-up scaffolding.
 The product target is the real iGUI drawn and operated by the Lino program,

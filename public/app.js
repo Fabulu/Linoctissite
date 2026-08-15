@@ -1,4 +1,4 @@
-import { createProgram, metadata } from "./noctis_probe.js";
+import { createProgramFromElement } from "./linojava/browser.js";
 
 const root = document.querySelector("#lino-window");
 const canvas = document.querySelector("#game");
@@ -14,8 +14,12 @@ const keys = new Set();
 const image = context.createImageData(canvas.width, canvas.height);
 const pixels = new Uint32Array(image.data.buffer);
 const snapshotKey = "linoctis.machine.v1";
+const linoSource = document.querySelector('#noctis-program[type="text/lino"]');
 
-const program = createProgram({ isocall: () => true });
+status.textContent = "Compiling Lino source in this browser...";
+const instance = await createProgramFromElement(linoSource, { isocall: () => true });
+const { program } = instance;
+const { metadata } = instance.module;
 let restored = false;
 try {
   const saved = localStorage.getItem(snapshotKey);
@@ -80,7 +84,8 @@ function tick() {
   render();
   const frame = program.get("frame");
   if ((frame % 300) === 0) localStorage.setItem(snapshotKey, JSON.stringify(program.snapshot()));
-  status.textContent = `${restored ? "State restored / " : ""}Running ${metadata.backend} / ${metadata.blocks} blocks / ${result.status}`;
+  const compileState = instance.cached ? "cached" : "compiled here";
+  status.textContent = `${restored ? "State restored / " : ""}Running ${metadata.backend} / ${compileState} / ${metadata.blocks} blocks / ${result.status}`;
   restored = false;
   requestAnimationFrame(tick);
 }
