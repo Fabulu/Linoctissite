@@ -5,6 +5,8 @@ import test from "node:test";
 test("ships the real linked Noctis project and visible fullscreen exits", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  const workerHost = await readFile(new URL("../public/worker-host.js", import.meta.url), "utf8");
+  const gameWorker = await readFile(new URL("../public/game-worker.js", import.meta.url), "utf8");
   assert.match(html, /id="exit-fullscreen"/);
   assert.match(html, /id="fullscreen-game"/);
   assert.doesNotMatch(html, /id="fullscreen"/);
@@ -25,7 +27,12 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(app, /pointerdown/);
   assert.match(app, /pointer\(\{ mode \}\)/);
   assert.match(app, /keys: heldKeys/);
-  assert.match(app, /globalK: new Map\(\)/);
+  assert.match(app, /new URLSearchParams\(location\.search\).*mainThread/s);
+  assert.match(workerHost, /new Worker\(new URL\("\.\/game-worker\.js"/);
+  assert.match(gameWorker, /globalK,/);
+  assert.match(gameWorker, /compileProject/);
+  assert.match(gameWorker, /createNoctisIntrinsics/);
+  assert.match(gameWorker, /memory\.slice\(origin, origin \+ width \* height\)/);
   assert.match(app, /syncDisplay\(\{ width, height, x, y \}\)/);
   assert.match(app, /pointerTransitions/);
   assert.match(app, /physicalWidth: Math\.max\(1, window\.innerWidth\)/);

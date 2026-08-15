@@ -1,5 +1,12 @@
 import { compileProject, createNoctisIntrinsics } from "./linojava/compiler.js";
 
+const useWorkerRuntime = typeof Worker === "function"
+  && !new URLSearchParams(location.search).has("mainThread");
+
+if (useWorkerRuntime) {
+  await import("./worker-host.js");
+} else {
+
 const linoWindow = document.querySelector("#lino-window");
 const gameStage = document.querySelector("#game-stage");
 const canvas = document.querySelector("#game");
@@ -633,3 +640,4 @@ document.addEventListener("fullscreenchange", () => {
 });
 
 runFrame();
+}

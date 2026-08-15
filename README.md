@@ -10,19 +10,27 @@ runs the real IsoKernel startup sequence, and presents the 400 by 300 Noctis
 framebuffer drawn by Lino itself. HTML provides only the page shell, loading
 status, input bridge, and an easy reversible fullscreen control.
 
-The current build reaches real cupola game frames and accepts pointer state,
-queued ASCII input, and the complete held-key table through the Lino
-communication area. WASD, arrows, modifiers, function keys, and keypad controls
-therefore reach the running game directly. The machine honors Lino's
-millisecond sleep requests and continues across browser animation frames.
-Fullscreen presents Lino's live `VHGUI` game rectangle rather than enlarging
-the surrounding desktop title bar. A visible corner control, double-click, or
-Ctrl+Shift+F returns to windowed mode without consuming Noctis's Escape key.
+The default runtime is pure JavaScript. It compiles and executes the linked
+Lino machine in a module worker, while the browser thread presents completed
+frames and handles the DOM. This keeps controls and the 60 Hz display loop
+responsive during expensive game frames. Add `?mainThread` to the URL to use
+the original single-threaded fallback for debugging.
+
+Current browser integration includes:
+
+- Pointer state, queued ASCII input, and the complete held-key table.
+- WASD, arrows, modifiers, function keys, and keypad controls.
+- Browser persistence for Lino files and GlobalK records.
+- Stereo PCM playback bridged from the worker to Web Audio.
+- Separate, honest rendered-FPS and display-refresh measurements.
+- Fullscreen presentation of the live `VHGUI` game rectangle.
+
+A visible corner control, double-click, or Ctrl+Shift+F returns to windowed
+mode without consuming Noctis's Escape key.
 
 This is an early compatibility build. Unsupported native paths still stop with
 an explicit error, and the renderer has not yet passed the native visual oracle.
-Audio, persistence, remaining host services, speed, renderer fidelity, and
-complete game-mode coverage remain active work.
+Renderer fidelity and complete game-mode coverage remain active work.
 
 ## Local build
 
