@@ -400,3 +400,6 @@ export function inspect(source) {
     symbols: [...symbols.keys()],
   };
 }
+
+export { compileLinkedProject, compileProject, emitRunner } from "./compiler/project-compiler.js";
+export { linkProject } from "./compiler/linker.js";

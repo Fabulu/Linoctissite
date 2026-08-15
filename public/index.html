@@ -9,40 +9,13 @@
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <main id="lino-window" class="lino-window" aria-label="Linoctis game window">
-      <header class="titlebar">
-        <div class="app-mark" aria-hidden="true">L</div>
-        <div class="caption">
-          <strong>Linoctis</strong>
-          <span>Browser flight deck</span>
-        </div>
-        <div class="window-buttons">
-          <button id="fullscreen" class="chrome-button" type="button" title="Full screen, Escape exits" aria-label="Enter full screen">&#x26F6;</button>
-        </div>
-      </header>
-      <nav class="menubar" aria-label="Game menu">
-        <button id="game-menu" type="button" aria-expanded="false">GAME</button>
-        <div id="menu-panel" class="menu-panel" hidden>
-          <strong>Controls</strong>
-          <span>Move: WASD or arrows</span>
-          <span>Full screen: title-bar button</span>
-          <span>Exit full screen: Escape or the visible Exit button</span>
-          <button id="reset-state" type="button">Reset saved flight</button>
-        </div>
-        <span class="runtime-badge">LinoJava AOT</span>
-      </nav>
-      <section class="viewport-shell">
-        <canvas id="game" width="320" height="200" aria-label="Playable LinoJava runtime scene"></canvas>
-        <button id="exit-fullscreen" class="exit-fullscreen" type="button" hidden>Exit full screen</button>
-        <div class="scanline" aria-hidden="true"></div>
-      </section>
-      <footer class="statusbar">
-        <span id="status">Compiling the flight deck...</span>
-        <span id="coordinates">X 158 / Y 95</span>
-      </footer>
+    <main id="lino-window" class="lino-window" aria-label="Linoctis Lino machine">
+      <canvas id="game" width="400" height="300" aria-label="Lino-rendered integrated GUI"></canvas>
+      <button id="fullscreen" class="fullscreen" type="button" title="Full screen, Escape exits" aria-label="Enter full screen">&#x26F6;</button>
+      <button id="exit-fullscreen" class="exit-fullscreen" type="button" hidden>Exit full screen</button>
+      <p id="status" class="status">Loading the real Lino iGUI sources...</p>
     </main>
-    <noscript>Linoctis needs JavaScript to run the compiled L.in.oleum programme.</noscript>
-    <script id="noctis-program" type="text/lino" src="./noctis_probe.lino"></script>
+    <noscript>Linoctis needs JavaScript to compile and run L.in.oleum source.</noscript>
     <script type="module" src="./app.js"></script>
   </body>
 </html>

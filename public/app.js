@@ -1,133 +1,140 @@
-import { createProgramFromElement } from "./linojava/browser.js";
+import { compileProject } from "./linojava/compiler.js";
+import { dispatchIsoKernel, OFFSETS } from "./linojava/compiler/isokernel-abi.js";
 
 const root = document.querySelector("#lino-window");
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d", { alpha: false });
 const fullscreenButton = document.querySelector("#fullscreen");
 const exitFullscreenButton = document.querySelector("#exit-fullscreen");
-const menuButton = document.querySelector("#game-menu");
-const menuPanel = document.querySelector("#menu-panel");
-const resetStateButton = document.querySelector("#reset-state");
 const status = document.querySelector("#status");
-const coordinates = document.querySelector("#coordinates");
-const keys = new Set();
-const image = context.createImageData(canvas.width, canvas.height);
-const pixels = new Uint32Array(image.data.buffer);
-const snapshotKey = "linoctis.machine.v1";
-const linoSource = document.querySelector('#noctis-program[type="text/lino"]');
+const sourceRoot = new URL("./lino-src/", location.href);
+const entry = new URL("examples/iGUIcli.txt", sourceRoot).href;
+const manifest = await fetch(new URL("manifest.json", sourceRoot)).then((response) => response.json());
+let pointerX = 0;
+let pointerY = 0;
+let pointerButtons = 0;
+let frameCount = 0;
+let image = context.createImageData(canvas.width, canvas.height);
+let pixels = new Uint32Array(image.data.buffer);
 
-status.textContent = "Compiling Lino source in this browser...";
-const instance = await createProgramFromElement(linoSource, { isocall: () => true });
-const { program } = instance;
-const { metadata } = instance.module;
-let restored = false;
-try {
-  const saved = localStorage.getItem(snapshotKey);
-  if (saved) {
-    program.restore(JSON.parse(saved));
-    restored = true;
+async function fetchFirst(urls, kind) {
+  for (const url of urls) {
+    const response = await fetch(url);
+    if (!response.ok) continue;
+    return kind === "source"
+      ? { id: response.url, source: await response.text() }
+      : { id: response.url, data: new Uint8Array(await response.arrayBuffer()) };
   }
-} catch {
-  localStorage.removeItem(snapshotKey);
+  throw new Error(`Unable to load ${urls[0]}`);
 }
 
-function pressed(...names) {
-  return names.some((name) => keys.has(name));
+function projectCandidates(specifier, importer, suffixes) {
+  const clean = specifier.replaceAll("\\", "/");
+  const bases = clean.startsWith("/")
+    ? [new URL(`main/lib/${clean.slice(1)}`, sourceRoot)]
+    : [new URL(clean, importer), new URL(`main/lib/${clean}`, sourceRoot)];
+  return bases.flatMap((base) => suffixes.map((suffix) => new URL(`${base.href}${suffix}`)));
 }
 
-function drawPixel(x, y, red, green, blue) {
-  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return;
-  pixels[y * canvas.width + x] = (255 << 24) | (blue << 16) | (green << 8) | red;
-}
+const resolvers = {
+  resolveSource(specifier, importer) {
+    if (/^https?:/i.test(specifier)) return fetchFirst([new URL(specifier)], "source");
+    const mapped = manifest.sources[specifier.replace(/[\x00-\x20]+/g, "").replaceAll("\\", "/").toLowerCase()];
+    if (mapped) return fetchFirst([new URL(mapped, sourceRoot)], "source");
+    return fetchFirst(projectCandidates(specifier, importer ?? entry, ["", ".txt"]), "source");
+  },
+  resolveStockfile(specifier, importer) {
+    const mapped = manifest.stockfiles[specifier.replace(/[\x00-\x20]+/g, "").replaceAll("\\", "/").toLowerCase()];
+    if (mapped) return fetchFirst([new URL(mapped, sourceRoot)], "stockfile");
+    return fetchFirst(projectCandidates(specifier, importer, ["", ".tga"]), "stockfile");
+  },
+};
 
-function render() {
-  const frame = program.get("frame");
-  const playerX = program.get("player_x");
-  const playerY = program.get("player_y");
-
-  for (let y = 0; y < canvas.height; y += 1) {
-    const sky = Math.max(2, 15 - Math.floor(y / 15));
-    const colour = (255 << 24) | ((sky + 9) << 16) | ((sky + 4) << 8) | sky;
-    pixels.fill(colour, y * canvas.width, (y + 1) * canvas.width);
+function present(origin, width, height, memory) {
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+    image = context.createImageData(width, height);
+    pixels = new Uint32Array(image.data.buffer);
   }
-
-  for (let star = 0; star < 150; star += 1) {
-    const x = (star * 137 + 29) % 320;
-    const y = (star * 61 + 17) % 135;
-    const pulse = ((frame >> 3) + star) & 3;
-    const light = 95 + pulse * 45;
-    drawPixel(x, y, light, light + 4, Math.min(255, light + 16));
+  const frame = new Uint32Array(memory.buffer, memory.byteOffset + origin * 4, width * height);
+  for (let index = 0; index < frame.length; index += 1) {
+    const colour = frame[index];
+    pixels[index] = 0xff000000 | ((colour & 0xff) << 16) | (colour & 0xff00) | ((colour >>> 16) & 0xff);
   }
-
-  for (let x = 0; x < 320; x += 1) {
-    const ridge = 151 + Math.floor(8 * Math.sin((x + frame * 0.08) / 27));
-    for (let y = ridge; y < 200; y += 1) {
-      const shade = Math.min(46, 15 + Math.floor((y - ridge) * 0.7));
-      drawPixel(x, y, shade - 4, shade, shade + 3);
-    }
-  }
-
-  for (let offset = -5; offset <= 5; offset += 1) {
-    drawPixel(playerX + offset, playerY, 223, 239, 248);
-    drawPixel(playerX, playerY + offset, 223, 239, 248);
-  }
-  drawPixel(playerX, playerY, 255, 191, 69);
   context.putImageData(image, 0, 0);
-  coordinates.textContent = `X ${playerX} / Y ${playerY}`;
+  frameCount += 1;
 }
 
-function tick() {
-  const speed = pressed("ShiftLeft", "ShiftRight") ? 3 : 2;
-  program.set("input_x", (pressed("KeyD", "ArrowRight") ? speed : 0) - (pressed("KeyA", "ArrowLeft") ? speed : 0));
-  program.set("input_y", (pressed("KeyS", "ArrowDown") ? speed : 0) - (pressed("KeyW", "ArrowUp") ? speed : 0));
-  const result = program.step();
-  render();
-  const frame = program.get("frame");
-  if ((frame % 300) === 0) localStorage.setItem(snapshotKey, JSON.stringify(program.snapshot()));
-  const compileState = instance.cached ? "cached" : "compiled here";
-  status.textContent = `${restored ? "State restored / " : ""}Running ${metadata.backend} / ${compileState} / ${metadata.blocks} blocks / ${result.status}`;
-  restored = false;
-  requestAnimationFrame(tick);
-}
+status.textContent = "Compiling 14 Lino modules in this browser...";
+const host = {
+  directory: ".",
+  retrace(origin, width, height, memory) {
+    present(origin, width, height, memory);
+    return true;
+  },
+  isocall(machine, linked) {
+    const memory = machine.memory;
+    const base = linked.memoryLayout.kernelBase;
+    const pointerCommand = memory[base + OFFSETS.PointerCommand];
+    const timerCommand = memory[base + OFFSETS.SYStimeCommand];
+    const processCommand = memory[base + OFFSETS.ProcessCommand];
+    if (pointerCommand === 12) {
+      memory[base + OFFSETS.PointerXCoordinate] = pointerX;
+      memory[base + OFFSETS.PointerYCoordinate] = pointerY;
+      memory[base + OFFSETS.PointerStatus] = 3 | pointerButtons;
+    }
+    if (timerCommand === 29) {
+      memory[base + OFFSETS.SYStimeCounts] = Math.floor(performance.now() * 1000) | 0;
+      memory[base + OFFSETS.CountsPerMillisecond] = 1000;
+    }
+    const result = dispatchIsoKernel(memory, { ...host, stockfile: linked.stockfile }, { kernelBase: base });
+    if (processCommand === 35) result.yielded = true;
+    return result;
+  },
+};
 
-window.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape" && ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(event.key)) {
-    event.preventDefault();
+const program = await compileProject(entry, resolvers, { host });
+status.textContent = "Starting the Lino-rendered iGUI...";
+
+function runFrame() {
+  try {
+    const result = program.run(2_000_000);
+    status.textContent = `Real iGUI / ${frameCount} frame${frameCount === 1 ? "" : "s"} / ${result.status}`;
+    if (!program.machine.halted) requestAnimationFrame(runFrame);
+  } catch (error) {
+    status.textContent = `Lino stopped: ${error.message}`;
+    throw error;
   }
-  keys.add(event.code);
-});
+}
 
-window.addEventListener("keyup", (event) => keys.delete(event.code));
-window.addEventListener("blur", () => keys.clear());
-window.addEventListener("beforeunload", () => {
-  localStorage.setItem(snapshotKey, JSON.stringify(program.snapshot()));
+function pointerPosition(event) {
+  const bounds = canvas.getBoundingClientRect();
+  pointerX = Math.max(0, Math.min(canvas.width - 1, Math.floor((event.clientX - bounds.left) * canvas.width / bounds.width)));
+  pointerY = Math.max(0, Math.min(canvas.height - 1, Math.floor((event.clientY - bounds.top) * canvas.height / bounds.height)));
+}
+
+canvas.addEventListener("pointermove", pointerPosition);
+canvas.addEventListener("pointerdown", (event) => {
+  pointerPosition(event);
+  pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
+  canvas.setPointerCapture(event.pointerId);
 });
+canvas.addEventListener("pointerup", (event) => {
+  pointerPosition(event);
+  pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
+});
+canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 
 fullscreenButton.addEventListener("click", async () => {
-  if (document.fullscreenElement) {
-    await document.exitFullscreen();
-  } else {
-    await root.requestFullscreen();
-  }
+  if (document.fullscreenElement) await document.exitFullscreen();
+  else await root.requestFullscreen();
 });
-
 exitFullscreenButton.addEventListener("click", () => document.exitFullscreen());
 document.addEventListener("fullscreenchange", () => {
   const active = document.fullscreenElement === root;
   exitFullscreenButton.hidden = !active;
   fullscreenButton.setAttribute("aria-label", active ? "Exit full screen" : "Enter full screen");
-  fullscreenButton.title = active ? "Exit full screen" : "Full screen, Escape exits";
 });
 
-menuButton.addEventListener("click", () => {
-  const open = menuPanel.hidden;
-  menuPanel.hidden = !open;
-  menuButton.setAttribute("aria-expanded", String(open));
-});
-
-resetStateButton.addEventListener("click", () => {
-  localStorage.removeItem(snapshotKey);
-  location.reload();
-});
-
-tick();
+runFrame();

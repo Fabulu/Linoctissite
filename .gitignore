@@ -1,3 +1,5 @@
 node_modules/
 *.log
 .wrangler/
+public/lino-src/
+public/linojava/compiler/

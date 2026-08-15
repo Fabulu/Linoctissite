@@ -24,8 +24,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Fabulu/linojava
-          ref: a3284ca34748475a6f2b6e9970be062f768ab924
+          ref: 438b9811cce959b2b575996b7230a85d805d8552
           path: vendor/linojava
+
+      - name: Checkout pinned Noctis Lino sources
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/noctis-lino
+          ref: b3bcf14cce2f664eb022a73e3b9dee5929bcdf5b
+          path: vendor/linoleum
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -35,6 +42,7 @@ jobs:
       - name: Build and test
         env:
           LINOJAVA_DIR: vendor/linojava
+          LINO_SOURCE_DIR: vendor/linoleum
         run: npm run build && npm test
 
       - name: Deploy to Cloudflare Pages
