@@ -25,6 +25,7 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(app, /pointerdown/);
   assert.match(app, /pointer\(\)/);
   assert.match(app, /keys: heldKeys/);
+  assert.match(app, /globalK: new Map\(\)/);
   assert.match(app, /consoleInput/);
   assert.match(app, /keydown/);
   assert.match(app, /sleepMilliseconds/);

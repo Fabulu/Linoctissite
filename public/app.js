@@ -91,6 +91,7 @@ function present(origin, width, height, memory) {
 status.textContent = "Compiling the real 73-module Noctis project in this browser...";
 const host = {
   directory: ".",
+  globalK: new Map(),
   keys: heldKeys,
   consoleInput,
   pointer() {
