@@ -270,6 +270,7 @@ const SERVICE_IDS = Object.freeze({
   spaceFade: "service:vhsfade",
   flareSourceStick: "service:vhfsourcestick",
   glowRaster: "service:spglowraster",
+  globeRaster: "service:spgloberaster",
   drawMode2Cache: "service:vhdrawmode2cache",
   renderCupolaCache: "service:vhcrendercachecommon",
   drawCupolaPanel: "service:vhcdrawpanel",
@@ -300,6 +301,7 @@ const surfaceBulkAddressCaches = new WeakMap();
 const spaceFadeAddressCaches = new WeakMap();
 const flareSourceStickAddressCaches = new WeakMap();
 const glowRasterAddressCaches = new WeakMap();
+const globeRasterAddressCaches = new WeakMap();
 const mode2CacheAddressCaches = new WeakMap();
 const renderCupolaCacheAddressCaches = new WeakMap();
 const drawCupolaPanelAddressCaches = new WeakMap();
@@ -1620,6 +1622,7 @@ function fillBytes(machine, linked) {
   memory[census] = (memory[census] + count) | 0;
   for (let index = 0; index < count; index += 1) {
     memory[page + offset] = byte;
+    if (machine.noctisSolidTouched) machine.noctisSolidTouched[offset] = 1;
     offset = (offset + 1) & 0xffff;
   }
   memory[address(linked, "SCdi")] = offset;
@@ -1822,6 +1825,7 @@ function drawPolygonSegment(machine, linked, p) {
     memory[p.SGpf] = limit;
     do {
       memory[p.page + offset] = 0xff;
+      if (machine.noctisSolidTouched) machine.noctisSolidTouched[offset] = 1;
       offset = (offset + 320) & 0xffff;
     } while ((offset >>> 0) < (limit >>> 0));
     memory[p.SGpi] = offset;
@@ -1870,6 +1874,7 @@ function drawPolygonSegment(machine, linked, p) {
   do {
     offset = ((Math.imul(globalY >> 16, 320) & 0xffff) + ((globalX >> 16) & 0xffff) + 4) & 0xffff;
     memory[p.page + offset] = 0xff;
+    if (machine.noctisSolidTouched) machine.noctisSolidTouched[offset] = 1;
     globalX = (globalX + xDelta) | 0;
     globalY = (globalY + yDelta) | 0;
   } while ((globalX >>> 0) < (limit >>> 0));
@@ -1897,6 +1902,7 @@ function drawPolygon(machine, linked) {
       memory[p.PGdi] = rawOffset;
       memory[p.PGval] = colour;
       memory[p.page + (rawOffset & 0xffff)] = colour & 0xff;
+      if (machine.noctisSolidTouched) machine.noctisSolidTouched[rawOffset & 0xffff] = 1;
       memory[p.CSbyte] = (memory[p.CSbyte] + 1) | 0;
       return;
     }
@@ -1907,6 +1913,7 @@ function drawPolygon(machine, linked) {
       memory[p.PGdi] = destination;
       memory[p.PGval] = colour;
       memory[p.page + destination] = colour & 0xff;
+      if (machine.noctisSolidTouched) machine.noctisSolidTouched[destination] = 1;
       memory[p.CSbyte] = (memory[p.CSbyte] + 1) | 0;
       maximumX = (maximumX - 1) & 0xffff;
       memory[p.BXmaxx] = maximumX;
@@ -5563,6 +5570,153 @@ function glowRaster(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function globeRaster(machine, linked) {
+  const memory = machine.memory;
+  let p = globeRasterAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "nw", "rgt", "sprg", "spgscale", "GBmag", "GBcx", "GBcy",
+      "GBgman", "GBstart", "GBcmask", "GBsat", "GBtabreg", "GBtapreg",
+      "GBdstreg", "GBbytes", "GBry0", "GBry1", "GBrx0", "GBrx1",
+      "GBpaint", "GBcur", "GBg1", "GBg2", "GBg3", "GBg4", "GBsi",
+      "GBbx", "GBcxr", "GBdi", "GBax", "GBdl", "GBy", "GBx", "GBt",
+      "GBi", "GBj", "CSdraw", "CSskip", "CScur", "SPMk", "SPreg",
+      "SPoff", "SPval", "SCdy", "SCmag", "SCout",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    globeRasterAddressCaches.set(linked, p);
+  }
+
+  const magnitude = memory[p.GBmag] | 0;
+  const scale = new Int32Array(256);
+  for (let byte = 0; byte < 256; byte += 1) {
+    const scaled = scaleSignedByteExact(byte, magnitude);
+    scale[byte] = scaled;
+    memory[p.spgscale + byte] = scaled;
+  }
+
+  const nw = p.nw;
+  const tableRegister = memory[p.GBtabreg] | 0;
+  const tapestryRegister = memory[p.GBtapreg] | 0;
+  const destinationRegister = memory[p.GBdstreg] | 0;
+  const table = nw + (memory[p.rgt + Math.imul(tableRegister, 4) + 1] >>> 0);
+  const tapestry = nw + (memory[p.rgt + Math.imul(tapestryRegister, 4) + 1] >>> 0);
+  const destination = nw + (memory[p.rgt + Math.imul(destinationRegister, 4) + 1] >>> 0);
+  const cx = memory[p.GBcx] | 0;
+  const cy = memory[p.GBcy] | 0;
+  const colourMask = memory[p.GBcmask] & 255;
+  const saturation = memory[p.GBsat] & 255;
+  const gman = memory[p.GBgman] | 0;
+  const side = gman >= 1 && gman <= 4 ? gman : 4;
+
+  let si = 0;
+  let bx = ((memory[p.GBstart] | 0) + 4) & 0xffff;
+  let remaining = memory[p.GBbytes] >>> 1;
+  let draw = 0;
+  let skip = 0;
+  let yLow = 0;
+  let yHigh = 0;
+  let xLow = 0;
+  let xHigh = 0;
+  let paint = 0;
+  let yByte = memory[p.GBy] | 0;
+  let xByte = memory[p.GBx] | 0;
+  let di = memory[p.GBdi] | 0;
+  let ax = memory[p.GBax] | 0;
+  let output = memory[p.GBdl] | 0;
+  let scratch = memory[p.GBt] | 0;
+  let lastOffset = memory[p.SPoff] | 0;
+  let lastCount = memory[p.SPMk] | 0;
+  let lastManagerOffset = 256;
+  let lastSpRegister = memory[p.SPreg] | 0;
+  let lastSpOffset = lastOffset;
+  let lastSpValue = memory[p.SPval] | 0;
+
+  while (remaining > 0) {
+    yByte = memory[table + ((si + 4) & 0xffff)] & 255;
+    xByte = memory[table + ((si + 5) & 0xffff)] & 255;
+    lastSpRegister = tableRegister;
+    lastSpOffset = (si + 5) & 0xffff;
+    lastSpValue = xByte;
+
+    if (yByte === 100) {
+      skip += 1;
+      bx = (bx + xByte) & 0xffff;
+    } else {
+      draw += 1;
+      di = (scale[yByte] + cy) & 0xffff;
+      if ((di >>> 0) < 6) yLow += 1;
+      else if ((di >>> 0) >= 191) yHigh += 1;
+      else {
+        scratch = (di + di) & 0xffff;
+        di = memory[p.sprg + di] | 0;
+        ax = (scale[xByte] + cx) & 0xffff;
+        if ((ax >>> 0) < 6) xLow += 1;
+        else if ((ax >>> 0) >= 311) xHigh += 1;
+        else {
+          di = (di + ax) & 0xffff;
+          output = memory[tapestry + (bx & 0xffff)] & 255;
+          scratch = saturation;
+          if ((output >>> 0) < (saturation >>> 0)) output = saturation;
+          output = (output | colourMask) & 255;
+
+          lastManagerOffset = side === 1 ? 0 : side === 2 ? 1 : side === 3 ? 5 : 14;
+          lastCount = side * side;
+          let count = 0;
+          for (let row = 0; row < side; row += 1) {
+            const rowOffset = Math.imul(row, 320);
+            for (let column = 0; column < side; column += 1) {
+              lastOffset = di + 4 + rowOffset + column;
+              memory[destination + (lastOffset & 0xffff)] = output;
+              count += 1;
+            }
+          }
+          lastCount = count;
+          lastSpRegister = destinationRegister;
+          lastSpOffset = lastOffset;
+          lastSpValue = output;
+          paint += 1;
+          memory[side === 1 ? p.GBg1 : side === 2 ? p.GBg2 : side === 3 ? p.GBg3 : p.GBg4] += 1;
+        }
+      }
+      bx = (bx + 1) & 0xffff;
+    }
+    si += 2;
+    remaining -= 1;
+  }
+
+  memory[p.GBry0] = yLow;
+  memory[p.GBry1] = yHigh;
+  memory[p.GBrx0] = xLow;
+  memory[p.GBrx1] = xHigh;
+  memory[p.GBpaint] = paint;
+  memory[p.GBcur] = bx;
+  memory[p.GBsi] = si;
+  memory[p.GBbx] = bx;
+  memory[p.GBcxr] = remaining;
+  memory[p.GBdi] = di;
+  memory[p.GBax] = ax;
+  memory[p.GBdl] = output;
+  memory[p.GBy] = yByte;
+  memory[p.GBx] = xByte;
+  memory[p.GBt] = scratch;
+  memory[p.GBi] = lastManagerOffset;
+  memory[p.GBj] = lastCount;
+  memory[p.CSdraw] = draw;
+  memory[p.CSskip] = skip;
+  memory[p.CScur] = bx;
+  memory[p.SPMk] = lastCount;
+  memory[p.SPreg] = lastSpRegister;
+  memory[p.SPoff] = lastSpOffset;
+  memory[p.SPval] = lastSpValue;
+  memory[p.SCdy] = -1;
+  memory[p.SCmag] = magnitude;
+  memory[p.SCout] = scale[255];
+  machine.A = bx;
+  machine.C = lastSpValue;
+  machine.X = LINO_DONE;
+}
+
 function drawMode2Cache(machine, linked) {
   const memory = machine.memory;
   let p = mode2CacheAddressCaches.get(linked);
@@ -5589,6 +5743,20 @@ function drawMode2Cache(machine, linked) {
     return;
   }
   const count = memory[p.VHRcachecount] >>> 0;
+  const projectionKey = [
+    p.FSCAMX, p.FSCAMY, p.FSCAMZ, p.FSPSB, p.FSPCB, p.FSTCB, p.FSTSB,
+    p.FSPCA, p.FSPSA, p.FSTCA, p.FSTSA, p.FSUNEG, p.FSUNO, p.FSXC, p.FSYC,
+  ].flatMap((slot) => [memory[p.fw + slot * 2] | 0, memory[p.fw + slot * 2 + 1] | 0]);
+  const frameKey = `${count}:${projectionKey.join(",")}`;
+  if (!machine.noctisDisableHullFrameCache && p.frameCache?.key === frameKey) {
+    const page = p.page;
+    const { offsets, pixels } = p.frameCache;
+    for (let index = 0; index < offsets.length; index += 1) memory[page + offsets[index]] = pixels[index];
+    memory[p.VHRcachep] = count;
+    memory[p.VHRdrawn] = count;
+    machine.X = LINO_DONE;
+    return;
+  }
   const view = dataView(memory);
   if (!p.topology || p.topology.count !== count) {
     const keys = new Map();
@@ -5660,6 +5828,8 @@ function drawMode2Cache(machine, linked) {
       p.topology.iy[id] = convertToInt32(screenYWide, control);
     }
   }
+  const touched = machine.noctisDisableHullFrameCache ? null : new Uint8Array(65536);
+  machine.noctisSolidTouched = touched;
   for (let leaf = 0; leaf < count; leaf += 1) {
     const record = p.vhrcache + leaf * 10;
     memory[p.VHRcachep] = leaf;
@@ -5709,6 +5879,20 @@ function drawMode2Cache(machine, linked) {
       polyProjectedTail(machine, linked, p);
     } else if (visibleCount !== 0) poly3d(machine, linked);
     memory[p.VHRdrawn] = (memory[p.VHRdrawn] + 1) | 0;
+  }
+  machine.noctisSolidTouched = null;
+  if (touched) {
+    let size = 0;
+    for (let offset = 0; offset < touched.length; offset += 1) size += touched[offset];
+    const offsets = new Uint16Array(size);
+    const pixels = new Uint8Array(size);
+    for (let offset = 0, index = 0; offset < touched.length; offset += 1) {
+      if (touched[offset] === 0) continue;
+      offsets[index] = offset;
+      pixels[index] = memory[p.page + offset] & 255;
+      index += 1;
+    }
+    p.frameCache = { key: frameKey, offsets, pixels };
   }
   memory[p.VHRcachep] = count;
   machine.X = LINO_DONE;
@@ -8112,6 +8296,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.spaceFade]: spaceFade,
     [SERVICE_IDS.flareSourceStick]: flareSourceStick,
     [SERVICE_IDS.glowRaster]: glowRaster,
+    [SERVICE_IDS.globeRaster]: globeRaster,
     [SERVICE_IDS.drawMode2Cache]: drawMode2Cache,
     [SERVICE_IDS.renderCupolaCache]: renderCupolaCache,
     [SERVICE_IDS.drawCupolaPanel]: drawCupolaPanel,
