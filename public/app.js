@@ -33,6 +33,8 @@ let frameCount = 0;
 let frameRate = 0;
 let rateStartedAt = performance.now();
 let rateStartedFrame = 0;
+let statusStartedAt = 0;
+let statusStartedFrame = -1;
 let linoFullscreenPress = false;
 let linoWindowDrag = null;
 let linoWindowResize = null;
@@ -211,13 +213,34 @@ async function requestGameFullscreen() {
   if (!document.fullscreenElement) await gameStage.requestFullscreen();
 }
 
+const budgetChannel = new MessageChannel();
+let budgetContinuationQueued = false;
+budgetChannel.port1.addEventListener("message", () => {
+  budgetContinuationQueued = false;
+  runFrame();
+});
+budgetChannel.port1.start();
+
+function continueBudget() {
+  if (budgetContinuationQueued) return;
+  budgetContinuationQueued = true;
+  budgetChannel.port2.postMessage(0);
+}
+
 function runFrame() {
   try {
+    const previousFrameCount = frameCount;
     const result = program.run(250_000);
-    const rate = frameRate > 0 ? ` / ${frameRate.toFixed(1)} FPS` : "";
-    status.textContent = `Noctis / ${frameCount} presentations${rate} / ${result.status}`;
+    const now = performance.now();
+    if (frameCount !== statusStartedFrame || now - statusStartedAt >= 500) {
+      const rate = frameRate > 0 ? ` / ${frameRate.toFixed(1)} FPS` : "";
+      status.textContent = `Noctis / ${frameCount} presentations${rate} / ${result.status}`;
+      statusStartedFrame = frameCount;
+      statusStartedAt = now;
+    }
     if (!program.machine.halted) {
       if (result.sleepMilliseconds > 0) setTimeout(runFrame, result.sleepMilliseconds);
+      else if (result.status === "budget" && frameCount === previousFrameCount) continueBudget();
       else requestAnimationFrame(runFrame);
     }
   } catch (error) {
