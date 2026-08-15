@@ -1,0 +1,43 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Linoctis
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned LinoJava
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/linojava
+          ref: 375c767c0917003cfc09b19e245ae025ccbb8b3f
+          path: vendor/linojava
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build and test
+        env:
+          LINOJAVA_DIR: vendor/linojava
+        run: npm run build && npm test
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy public --project-name=linoctis --branch=main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

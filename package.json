@@ -1,0 +1,14 @@
+{
+  "name": "linoctissite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ./build.mjs",
+    "test": "node --test",
+    "deploy": "npm run build && npx wrangler pages deploy public --project-name=linoctis --branch=main"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

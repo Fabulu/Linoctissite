@@ -1,0 +1,34 @@
+"directors"
+	unit = 32;
+
+"variables"
+	player_x = 158;
+	player_y = 95;
+	input_x = 0;
+	input_y = 0;
+	frame = 0;
+
+"programme"
+
+"start"
+	A = [player_x]; A + [input_x]; [player_x] = A;
+	? A >= 316 -> clamp_x_high;
+	? A >= 3 -> move_y;
+	A = 3; [player_x] = A; -> move_y;
+
+"clamp_x_high"
+	A = 315; [player_x] = A;
+
+"move_y"
+	A = [player_y]; A + [input_y]; [player_y] = A;
+	? A >= 194 -> clamp_y_high;
+	? A >= 8 -> tick;
+	A = 8; [player_y] = A; -> tick;
+
+"clamp_y_high"
+	A = 193; [player_y] = A;
+
+"tick"
+	[frame]+;
+	isocall;
+	-> start;
