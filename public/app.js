@@ -173,6 +173,7 @@ const host = {
 const program = await compileProject(entry, resolvers, {
   host,
   intrinsics: createNoctisIntrinsics(),
+  regionSize: 1024,
   physicalWidth: Math.max(1, window.innerWidth),
   physicalHeight: Math.max(1, window.innerHeight),
 });
