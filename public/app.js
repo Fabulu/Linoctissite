@@ -50,6 +50,92 @@ let activePointerTarget = null;
 let image = context.createImageData(canvas.width, canvas.height);
 let pixels = new Uint32Array(image.data.buffer);
 
+function createPcmHost() {
+  const AudioContextClass = window.AudioContext ?? window.webkitAudioContext;
+  let audioContext = null;
+  let source = null;
+  let buffer = null;
+  let sampleRate = 44100;
+  let frameCount = 0;
+  let offsetAtStart = 0;
+  let startedAt = 0;
+  let continuous = false;
+  let paused = false;
+
+  const stopSource = () => {
+    if (!source) return;
+    source.onended = null;
+    try { source.stop(); } catch { /* already stopped */ }
+    source.disconnect();
+    source = null;
+  };
+  const currentOffset = () => {
+    if (!source || !audioContext || paused) return offsetAtStart | 0;
+    const elapsed = Math.max(0, Math.floor((audioContext.currentTime - startedAt) * sampleRate));
+    if (continuous && frameCount > 0) return (offsetAtStart + elapsed) % frameCount;
+    return Math.min(offsetAtStart + elapsed, frameCount) | 0;
+  };
+  const startSource = () => {
+    if (!audioContext || !buffer || frameCount <= 0) return false;
+    stopSource();
+    source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.loop = continuous;
+    source.connect(audioContext.destination);
+    const startOffset = continuous ? offsetAtStart % frameCount : Math.min(offsetAtStart, frameCount - 1);
+    startedAt = audioContext.currentTime;
+    source.start(0, startOffset / sampleRate);
+    source.onended = () => { if (!continuous) source = null; };
+    paused = false;
+    return true;
+  };
+  const play = (request, loop) => {
+    if (!AudioContextClass || request.channels !== 2 || request.bitsPerSample !== 16
+        || request.samplesPerSecond <= 0 || request.size <= 0
+        || request.origin < 0 || request.origin + request.size > request.memory.length) return false;
+    sampleRate = request.samplesPerSecond;
+    frameCount = request.size;
+    continuous = loop;
+    offsetAtStart = Math.max(0, Math.min(request.offset | 0, frameCount - 1));
+    audioContext ??= new AudioContextClass({ sampleRate });
+    buffer = audioContext.createBuffer(2, frameCount, sampleRate);
+    const left = buffer.getChannelData(0);
+    const right = buffer.getChannelData(1);
+    const end = request.origin + frameCount;
+    for (let at = request.origin, frame = 0; at < end; at += 1, frame += 1) {
+      const packed = request.memory[at] | 0;
+      left[frame] = ((packed << 16) >> 16) / 32768;
+      right[frame] = (packed >> 16) / 32768;
+    }
+    return startSource();
+  };
+  return {
+    supported: Boolean(AudioContextClass),
+    unlock() { return audioContext?.resume(); },
+    command(request) {
+      switch (request.command) {
+        case 4: return { success: true, offset: currentOffset(), status: paused ? 2 : 1 };
+        case 5: return { success: play(request, false), offset: 0, status: 1 };
+        case 6: return { success: play(request, true), offset: 0, status: 1 };
+        case 7:
+          if (!source) return { success: false, offset: offsetAtStart, status: 1 };
+          offsetAtStart = currentOffset(); paused = true; stopSource();
+          return { success: true, offset: offsetAtStart, status: 2 };
+        case 8:
+          return { success: paused && startSource(), offset: offsetAtStart, status: 1 };
+        case 9:
+          stopSource(); buffer = null; frameCount = 0; offsetAtStart = 0; paused = false;
+          return { success: true, offset: 0, status: 1 };
+        default: return { success: false };
+      }
+    },
+  };
+}
+
+const pcmHost = createPcmHost();
+document.addEventListener("pointerdown", () => { void pcmHost.unlock(); }, { passive: true });
+document.addEventListener("keydown", () => { void pcmHost.unlock(); });
+
 function configureDisplay(width, height) {
   const visible = width > 0 && height > 0;
   gameStage.hidden = !visible;
@@ -168,6 +254,9 @@ const host = {
     present(origin, width, height, memory);
     return true;
   },
+  pcm(request) {
+    return pcmHost.command(request);
+  },
 };
 
 const program = await compileProject(entry, resolvers, {
@@ -176,6 +265,7 @@ const program = await compileProject(entry, resolvers, {
   regionSize: 1024,
   physicalWidth: Math.max(1, window.innerWidth),
   physicalHeight: Math.max(1, window.innerHeight),
+  audioPlayback: pcmHost.supported,
 });
 status.textContent = "Starting Noctis from its real Lino entry point...";
 

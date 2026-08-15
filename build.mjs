@@ -13,6 +13,7 @@ const namedFilePaths = new Map([
   ["vehicle.ncc", resolve(linoRoot, "work/vehicle.ncc")],
   ["mammal.ncc", resolve(linoRoot, "work/mammal.ncc")],
   ["birdy.ncc", resolve(linoRoot, "work/birdy.ncc")],
+  ["noctis_music.pcm", resolve(linoRoot, "work/noctis_music.pcm")],
 ]);
 await access(compilerPath);
 await access(entryPath);
