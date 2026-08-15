@@ -14,6 +14,7 @@ const manifest = await fetch(new URL("manifest.json", sourceRoot)).then((respons
 let pointerX = 0;
 let pointerY = 0;
 let pointerButtons = 0;
+let pointerMode = 0;
 let pointerDeltaX = 0;
 let pointerDeltaY = 0;
 const pointerTransitions = [];
@@ -25,13 +26,21 @@ const heldKeys = Object.create(null);
 const consoleInput = [];
 let frameCount = 0;
 let linoFullscreenPress = false;
+let linoWindowDrag = null;
+let linoWindowResize = null;
+let activePointerTarget = null;
 let image = context.createImageData(canvas.width, canvas.height);
 let pixels = new Uint32Array(image.data.buffer);
 
 function configureDisplay(width, height) {
   const visible = width > 0 && height > 0;
   gameStage.hidden = !visible;
-  if (!visible) return;
+  if (!visible) return false;
+  // Changing a canvas's backing dimensions can discard pointer capture.
+  // Keep the old surface during the stock delta-mode resize loop and apply
+  // the final Lino geometry as soon as the button is released.
+  if (pointerButtons !== 0 && pointerMode === 1
+      && (canvas.width !== width || canvas.height !== height)) return false;
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -40,7 +49,9 @@ function configureDisplay(width, height) {
   }
   const dormant = width === 126 && height === 25;
   linoWindow.classList.toggle("is-dormant", dormant);
-  linoWindow.style.width = dormant ? "146px" : "";
+  const availableWidth = Math.max(1, Math.floor(window.innerWidth * 0.96));
+  linoWindow.style.width = dormant ? "146px" : `${Math.min(availableWidth, width + 20)}px`;
+  return true;
 }
 
 async function fetchFirst(urls, kind) {
@@ -77,7 +88,7 @@ const resolvers = {
 };
 
 function present(origin, width, height, memory) {
-  configureDisplay(width, height);
+  if (!configureDisplay(width, height)) return;
   const frame = new Uint32Array(memory.buffer, memory.byteOffset + origin * 4, width * height);
   for (let index = 0; index < frame.length; index += 1) {
     const colour = frame[index];
@@ -108,12 +119,15 @@ const host = {
   globalK: new Map(),
   keys: heldKeys,
   consoleInput,
-  pointer() {
+  pointer({ mode }) {
+    pointerMode = mode | 0;
     const transition = pointerTransitions.shift();
-    const deltaX = pointerDeltaX;
-    const deltaY = pointerDeltaY;
-    pointerDeltaX = 0;
-    pointerDeltaY = 0;
+    const deltaX = transition?.deltaX ?? pointerDeltaX;
+    const deltaY = transition?.deltaY ?? pointerDeltaY;
+    if (!transition) {
+      pointerDeltaX = 0;
+      pointerDeltaY = 0;
+    }
     return {
       status: 3 | (transition?.buttons ?? pointerButtons),
       x: transition?.x ?? pointerX,
@@ -122,8 +136,9 @@ const host = {
       deltaY,
     };
   },
-  syncDisplay({ width, height }) {
+  syncDisplay({ width, height, x, y }) {
     configureDisplay(width, height);
+    positionBrowserWindow(x, y);
   },
   monotonicMilliseconds() {
     return performance.now();
@@ -138,8 +153,35 @@ const program = await compileProject(entry, resolvers, {
   host,
   intrinsics: createNoctisIntrinsics(),
   allowMissingIntrinsics: true,
+  physicalWidth: Math.max(1, window.innerWidth),
+  physicalHeight: Math.max(1, window.innerHeight),
 });
 status.textContent = "Starting Noctis from its real Lino entry point...";
+
+function positionBrowserWindow(x, y) {
+  if (x === 1048577 || y === 1048577) return;
+  linoWindow.style.position = "fixed";
+  linoWindow.style.left = `${x | 0}px`;
+  linoWindow.style.top = `${y | 0}px`;
+}
+
+{
+  const bounds = linoWindow.getBoundingClientRect();
+  const symbols = program.linked.symbols;
+  const memory = program.machine.memory;
+  memory[symbols.get("displayxposition").value] = Math.round(bounds.left) | 0;
+  memory[symbols.get("displayyposition").value] = Math.round(bounds.top) | 0;
+}
+
+function publishPhysicalDisplay() {
+  const symbols = program.linked.symbols;
+  const memory = program.machine.memory;
+  memory[symbols.get("displayphysicalwidth").value] = Math.max(1, window.innerWidth) | 0;
+  memory[symbols.get("displayphysicalheight").value] = Math.max(1, window.innerHeight) | 0;
+  configureDisplay(canvas.width, canvas.height);
+}
+
+window.addEventListener("resize", publishPhysicalDisplay);
 
 function insideLinoBounds(name, x, y) {
   const symbol = program.linked.symbols.get(name);
@@ -168,44 +210,137 @@ function runFrame() {
   }
 }
 
-function pointerPosition(event) {
-  const target = event.currentTarget;
+function pointerPosition(event, target = event.currentTarget) {
   const bounds = target.getBoundingClientRect();
   const localX = Math.max(0, Math.min(target.width - 1, Math.floor((event.clientX - bounds.left) * target.width / bounds.width)));
   const localY = Math.max(0, Math.min(target.height - 1, Math.floor((event.clientY - bounds.top) * target.height / bounds.height)));
   const nextX = target === fullscreenCanvas ? localX + gameLeft : localX;
   const nextY = target === fullscreenCanvas ? localY + gameTop : localY;
-  pointerDeltaX += nextX - pointerX;
-  pointerDeltaY += nextY - pointerY;
+  const deltaX = pointerMode === 1
+    ? Math.round(event.movementX * target.width / bounds.width)
+    : nextX - pointerX;
+  const deltaY = pointerMode === 1
+    ? Math.round(event.movementY * target.height / bounds.height)
+    : nextY - pointerY;
+  if (pointerButtons === 0) {
+    pointerDeltaX += deltaX;
+    pointerDeltaY += deltaY;
+  }
   pointerX = nextX;
   pointerY = nextY;
+  return { deltaX, deltaY };
+}
+
+function movePointer(event, target) {
+  const movement = pointerPosition(event, target);
+  if (pointerButtons !== 0) {
+    pointerTransitions.push({
+      buttons: pointerButtons,
+      x: pointerX,
+      y: pointerY,
+      deltaX: movement.deltaX,
+      deltaY: movement.deltaY,
+    });
+    if (linoWindowResize) {
+      linoWindowResize.queuedX += movement.deltaX;
+      linoWindowResize.queuedY += movement.deltaY;
+    }
+  }
+  if (linoWindowDrag && target === canvas) {
+    const left = linoWindowDrag.left + event.clientX - linoWindowDrag.clientX;
+    const top = linoWindowDrag.top + event.clientY - linoWindowDrag.clientY;
+    positionBrowserWindow(left, top);
+    const symbols = program.linked.symbols;
+    const memory = program.machine.memory;
+    memory[symbols.get("displayxposition").value] = Math.round(left) | 0;
+    memory[symbols.get("displayyposition").value] = Math.round(top) | 0;
+  }
+}
+
+function releasePointer(event, target) {
+  pointerPosition(event, target);
+  if (linoWindowResize) {
+    const desiredX = Math.round(
+      (event.clientX - linoWindowResize.clientX)
+      * linoWindowResize.width / linoWindowResize.cssWidth,
+    );
+    const desiredY = Math.round(
+      (event.clientY - linoWindowResize.clientY)
+      * linoWindowResize.height / linoWindowResize.cssHeight,
+    );
+    const deltaX = desiredX - linoWindowResize.queuedX;
+    const deltaY = desiredY - linoWindowResize.queuedY;
+    if (deltaX !== 0 || deltaY !== 0) {
+      pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY, deltaX, deltaY });
+    }
+  }
+  pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
+  pointerDeltaX = 0;
+  pointerDeltaY = 0;
+  pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY, deltaX: 0, deltaY: 0 });
+  if (linoFullscreenPress && event.button === 0 && target === canvas
+      && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY)) {
+    requestGameFullscreen().catch((error) => {
+      status.textContent = `Full screen unavailable: ${error.message}`;
+    });
+  }
+  linoFullscreenPress = false;
+  linoWindowDrag = null;
+  linoWindowResize = null;
+  activePointerTarget = null;
 }
 
 for (const target of [canvas, fullscreenCanvas]) {
-  target.addEventListener("pointermove", pointerPosition);
+  target.addEventListener("pointermove", (event) => movePointer(event, target));
   target.addEventListener("pointerdown", (event) => {
     pointerPosition(event);
     linoFullscreenPress = event.button === 0 && target === canvas
       && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY);
     pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
-    pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY });
+    pointerDeltaX = 0;
+    pointerDeltaY = 0;
+    pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY, deltaX: 0, deltaY: 0 });
+    activePointerTarget = target;
+    if (event.button === 0 && target === canvas
+        && insideLinoBounds("titlebarbounds", pointerX, pointerY)) {
+      const bounds = linoWindow.getBoundingClientRect();
+      linoWindowDrag = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        left: bounds.left,
+        top: bounds.top,
+      };
+    }
+    if (event.button === 0 && target === canvas
+        && insideLinoBounds("sizebuttonhotspot", pointerX, pointerY)) {
+      const bounds = canvas.getBoundingClientRect();
+      linoWindowResize = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        width: canvas.width,
+        height: canvas.height,
+        cssWidth: bounds.width,
+        cssHeight: bounds.height,
+        queuedX: 0,
+        queuedY: 0,
+      };
+    }
     target.focus();
     target.setPointerCapture(event.pointerId);
   });
-  target.addEventListener("pointerup", (event) => {
-    pointerPosition(event);
-    pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
-    pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY });
-    if (linoFullscreenPress && event.button === 0 && target === canvas
-        && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY)) {
-      requestGameFullscreen().catch((error) => {
-        status.textContent = `Full screen unavailable: ${error.message}`;
-      });
-    }
-    linoFullscreenPress = false;
-  });
+  target.addEventListener("pointerup", (event) => releasePointer(event, target));
   target.addEventListener("contextmenu", (event) => event.preventDefault());
 }
+
+window.addEventListener("pointermove", (event) => {
+  if (pointerButtons === 0 || !activePointerTarget
+      || event.target === canvas || event.target === fullscreenCanvas) return;
+  movePointer(event, activePointerTarget);
+});
+window.addEventListener("pointerup", (event) => {
+  if (!activePointerTarget || event.target === canvas || event.target === fullscreenCanvas) return;
+  releasePointer(event, activePointerTarget);
+});
 
 function linoKey(code) {
   if (/^Key[A-Z]$/.test(code)) return `key${code.slice(3).toLowerCase()}`;

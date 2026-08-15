@@ -23,11 +23,14 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(app, /canvas, gameLeft, gameTop, gameWidth, gameHeight/);
   assert.match(app, /event\.ctrlKey && event\.shiftKey && event\.code === "KeyF"/);
   assert.match(app, /pointerdown/);
-  assert.match(app, /pointer\(\)/);
+  assert.match(app, /pointer\(\{ mode \}\)/);
   assert.match(app, /keys: heldKeys/);
   assert.match(app, /globalK: new Map\(\)/);
-  assert.match(app, /syncDisplay\(\{ width, height \}\)/);
+  assert.match(app, /syncDisplay\(\{ width, height, x, y \}\)/);
   assert.match(app, /pointerTransitions/);
+  assert.match(app, /physicalWidth: Math\.max\(1, window\.innerWidth\)/);
+  assert.match(app, /displayphysicalwidth/);
+  assert.match(app, /insideLinoBounds\("titlebarbounds"/);
   assert.match(app, /consoleInput/);
   assert.match(app, /keydown/);
   assert.match(app, /sleepMilliseconds/);
