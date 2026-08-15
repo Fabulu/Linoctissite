@@ -271,6 +271,7 @@ const SERVICE_IDS = Object.freeze({
   flareSourceStick: "service:vhfsourcestick",
   glowRaster: "service:spglowraster",
   drawMode2Cache: "service:vhdrawmode2cache",
+  renderCupolaCache: "service:vhcrendercachecommon",
   drawCupolaPanel: "service:vhcdrawpanel",
   stick3d: "service:vhstick3d",
   flareSourceLine: "service:vhfsourcefline",
@@ -300,6 +301,7 @@ const spaceFadeAddressCaches = new WeakMap();
 const flareSourceStickAddressCaches = new WeakMap();
 const glowRasterAddressCaches = new WeakMap();
 const mode2CacheAddressCaches = new WeakMap();
+const renderCupolaCacheAddressCaches = new WeakMap();
 const drawCupolaPanelAddressCaches = new WeakMap();
 const stick3dAddressCaches = new WeakMap();
 const flareDrawAddressCaches = new WeakMap();
@@ -5712,6 +5714,79 @@ function drawMode2Cache(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function renderCupolaCache(machine, linked) {
+  const memory = machine.memory;
+  let p = renderCupolaCacheAddressCaches.get(linked);
+  if (!p) {
+    p = {
+      ...poly3dAddresses(linked),
+      VHCyor: address(linked, "VHCyor"),
+      VHCgrid: address(linked, "VHCgrid"),
+      VHCcamybase: address(linked, "VHCcamybase"),
+      VHCvisible: address(linked, "VHCvisible"),
+      VHCcachebase: address(linked, "VHCcachebase"),
+      VHCpanels: address(linked, "VHCpanels"),
+      VHCcachep: address(linked, "VHCcachep"),
+      VHCcopy: address(linked, "VHCcopy"),
+      VHVcamyi: address(linked, "VHVcamyi"),
+      vhccache: address(linked, "vhccache"),
+      vhcpoly: address(linked, "vhcpoly"),
+      VHSflare: address(linked, "VHSflare"),
+      VHSx0: address(linked, "VHSx0"),
+      VHSy0: address(linked, "VHSy0"),
+      VHSz0: address(linked, "VHSz0"),
+      VHSx1: address(linked, "VHSx1"),
+      VHSy1: address(linked, "VHSy1"),
+      VHSz1: address(linked, "VHSz1"),
+    };
+    renderCupolaCacheAddressCaches.set(linked, p);
+  }
+
+  const cameraY = memory[p.VHVcamyi] | 0;
+  const grid = (memory[p.VHCgrid] | 0) !== 0;
+  const cacheBase = p.vhccache + ((memory[p.VHCyor] | 0) === 0 ? 0 : 1680);
+  memory[p.VHCcamybase] = cameraY;
+  memory[p.VHCvisible] = 1;
+  memory[p.VHCcachebase] = cacheBase;
+  memory[p.VHCpanels] = 0;
+
+  for (let panel = 0; panel < 140; panel += 1) {
+    const source = cacheBase + panel * 12;
+    memory[p.VHCcachep] = source;
+    memory[p.VHCcopy] = 0;
+    memory.set(memory.subarray(source, source + 12), p.vhcpoly);
+    memory[p.VHCcopy] = 12;
+
+    if (!grid) drawCupolaPanel(machine, linked);
+    else {
+      memory[p.VHSflare] = 0;
+      memory[p.VHSx0] = memory[p.vhcpoly];
+      memory[p.VHSy0] = memory[p.vhcpoly + 1];
+      memory[p.VHSz0] = memory[p.vhcpoly + 2];
+      memory[p.VHSx1] = memory[p.vhcpoly + 9];
+      memory[p.VHSy1] = memory[p.vhcpoly + 10];
+      memory[p.VHSz1] = memory[p.vhcpoly + 11];
+      stick3d(machine, linked);
+      memory[p.VHSx0] = memory[p.vhcpoly];
+      memory[p.VHSy0] = memory[p.vhcpoly + 1];
+      memory[p.VHSz0] = memory[p.vhcpoly + 2];
+      memory[p.VHSx1] = memory[p.vhcpoly + 3];
+      memory[p.VHSy1] = memory[p.vhcpoly + 4];
+      memory[p.VHSz1] = memory[p.vhcpoly + 5];
+      stick3d(machine, linked);
+    }
+    memory[p.VHCpanels] = panel + 1;
+  }
+
+  memory[p.FI] = cameraY;
+  const narrowedCameraY = Math.fround(cameraY);
+  memory[p.FS0] = float32Bits(narrowedCameraY);
+  writeFloat64(memory, p.FA0, narrowedCameraY);
+  memory[p.PGFi] = p.FSCAMY;
+  writeFloat64(memory, p.fw + p.FSCAMY * 2, narrowedCameraY);
+  machine.X = LINO_DONE;
+}
+
 function drawCupolaPanel(machine, linked) {
   const memory = machine.memory;
   let p = drawCupolaPanelAddressCaches.get(linked);
@@ -8038,6 +8113,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.flareSourceStick]: flareSourceStick,
     [SERVICE_IDS.glowRaster]: glowRaster,
     [SERVICE_IDS.drawMode2Cache]: drawMode2Cache,
+    [SERVICE_IDS.renderCupolaCache]: renderCupolaCache,
     [SERVICE_IDS.drawCupolaPanel]: drawCupolaPanel,
     [SERVICE_IDS.stick3d]: stick3d,
     [SERVICE_IDS.flareSourceLine]: flareSourceLine,
