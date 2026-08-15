@@ -11,6 +11,11 @@ const status = document.querySelector("#status");
 const sourceRoot = new URL("./lino-src/", location.href);
 const entry = new URL("work/vhgame.txt", sourceRoot).href;
 const manifest = await fetch(new URL("manifest.json", sourceRoot)).then((response) => response.json());
+const namedFiles = new Map(await Promise.all(Object.entries(manifest.files ?? {}).map(async ([name, filename]) => {
+  const response = await fetch(new URL(filename, sourceRoot));
+  if (!response.ok) throw new Error(`Unable to load ${filename}`);
+  return [name, new Uint8Array(await response.arrayBuffer())];
+})));
 let pointerX = 0;
 let pointerY = 0;
 let pointerButtons = 0;
@@ -116,6 +121,7 @@ function present(origin, width, height, memory) {
 status.textContent = "Compiling the real 73-module Noctis project in this browser...";
 const host = {
   directory: ".",
+  files: namedFiles,
   globalK: new Map(),
   keys: heldKeys,
   consoleInput,

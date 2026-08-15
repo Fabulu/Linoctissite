@@ -6,6 +6,9 @@ const compilerRoot = resolve(process.env.LINOJAVA_DIR ?? "../linojava");
 const linoRoot = resolve(process.env.LINO_SOURCE_DIR ?? "../linoleum");
 const compilerPath = resolve(compilerRoot, "src/compiler.js");
 const entryPath = resolve(linoRoot, "work/vhgame.txt");
+const namedFilePaths = new Map([
+  ["digimap2.bin", resolve(linoRoot, "work/digimap2.bin")],
+]);
 await access(compilerPath);
 await access(entryPath);
 
@@ -60,7 +63,15 @@ for (const record of [...project.modules, ...project.stockfiles]) {
 
 const sourceManifest = {};
 const stockfileManifest = {};
+const namedFileManifest = {};
 const canonical = (value) => value.replace(/[\x00-\x20]+/g, "").replaceAll("\\", "/").toLowerCase();
+for (const [name, filename] of namedFilePaths) {
+  await access(filename);
+  const output = resolve(sourcePath, "files", name);
+  await mkdir(dirname(output), { recursive: true });
+  await copyFile(filename, output);
+  namedFileManifest[canonical(name)] = relative(sourcePath, output).replaceAll("\\", "/");
+}
 for (const module of project.modules) {
   const librarySpecs = module.periods
     .filter((period) => period.name === "libraries")
@@ -77,7 +88,7 @@ for (const module of project.modules) {
 }
 await writeFile(
   resolve(sourcePath, "manifest.json"),
-  JSON.stringify({ sources: sourceManifest, stockfiles: stockfileManifest }),
+  JSON.stringify({ sources: sourceManifest, stockfiles: stockfileManifest, files: namedFileManifest }),
 );
 
 console.log(`Prepared real Noctis project: ${project.modules.length} modules, ${project.stockfiles.length} stockfiles`);

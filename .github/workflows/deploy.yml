@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Fabulu/linojava
-          ref: 643f7227d0a86877397b7f02ca08a4c24e58be3e
+          ref: 1b9c642d4e2bf89b15887b2e8b42285179a2e4d7
           path: vendor/linojava
 
       - name: Checkout pinned Noctis Lino sources
