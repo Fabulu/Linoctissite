@@ -1,17 +1,23 @@
-import { compileProject } from "./linojava/compiler.js";
+import { compileProject, createNoctisIntrinsics } from "./linojava/compiler.js";
 
-const root = document.querySelector("#lino-window");
+const gameStage = document.querySelector("#game-stage");
 const canvas = document.querySelector("#game");
 const context = canvas.getContext("2d", { alpha: false });
+const fullscreenCanvas = document.querySelector("#fullscreen-game");
+const fullscreenContext = fullscreenCanvas.getContext("2d", { alpha: false });
 const fullscreenButton = document.querySelector("#fullscreen");
 const exitFullscreenButton = document.querySelector("#exit-fullscreen");
 const status = document.querySelector("#status");
 const sourceRoot = new URL("./lino-src/", location.href);
-const entry = new URL("examples/iGUIcli.txt", sourceRoot).href;
+const entry = new URL("work/vhgame.txt", sourceRoot).href;
 const manifest = await fetch(new URL("manifest.json", sourceRoot)).then((response) => response.json());
 let pointerX = 0;
 let pointerY = 0;
 let pointerButtons = 0;
+let gameLeft = 0;
+let gameTop = 0;
+let gameWidth = 320;
+let gameHeight = 200;
 const heldKeys = Object.create(null);
 const consoleInput = [];
 let frameCount = 0;
@@ -64,10 +70,25 @@ function present(origin, width, height, memory) {
     pixels[index] = 0xff000000 | ((colour & 0xff) << 16) | (colour & 0xff00) | ((colour >>> 16) & 0xff);
   }
   context.putImageData(image, 0, 0);
+  const symbols = program.linked.symbols;
+  gameLeft = memory[symbols.get("vhguileft").value] | 0;
+  gameTop = memory[symbols.get("vhguitop").value] | 0;
+  gameWidth = memory[symbols.get("vhguidw").value] | 0;
+  gameHeight = memory[symbols.get("vhguidh").value] | 0;
+  if (gameWidth > 0 && gameHeight > 0) {
+    if (fullscreenCanvas.width !== gameWidth || fullscreenCanvas.height !== gameHeight) {
+      fullscreenCanvas.width = gameWidth;
+      fullscreenCanvas.height = gameHeight;
+    }
+    fullscreenContext.drawImage(
+      canvas, gameLeft, gameTop, gameWidth, gameHeight,
+      0, 0, gameWidth, gameHeight,
+    );
+  }
   frameCount += 1;
 }
 
-status.textContent = "Compiling 14 Lino modules in this browser...";
+status.textContent = "Compiling the real 73-module Noctis project in this browser...";
 const host = {
   directory: ".",
   keys: heldKeys,
@@ -84,13 +105,17 @@ const host = {
   },
 };
 
-const program = await compileProject(entry, resolvers, { host });
-status.textContent = "Starting the Lino-rendered iGUI...";
+const program = await compileProject(entry, resolvers, {
+  host,
+  intrinsics: createNoctisIntrinsics(),
+  allowMissingIntrinsics: true,
+});
+status.textContent = "Starting Noctis from its real Lino entry point...";
 
 function runFrame() {
   try {
-    const result = program.run(2_000_000);
-    status.textContent = `Real iGUI / ${frameCount} frame${frameCount === 1 ? "" : "s"} / ${result.status}`;
+    const result = program.run(250_000);
+    status.textContent = `Noctis / ${frameCount} frame${frameCount === 1 ? "" : "s"} / ${result.status}`;
     if (!program.machine.halted) {
       if (result.sleepMilliseconds > 0) setTimeout(runFrame, result.sleepMilliseconds);
       else requestAnimationFrame(runFrame);
@@ -102,23 +127,28 @@ function runFrame() {
 }
 
 function pointerPosition(event) {
-  const bounds = canvas.getBoundingClientRect();
-  pointerX = Math.max(0, Math.min(canvas.width - 1, Math.floor((event.clientX - bounds.left) * canvas.width / bounds.width)));
-  pointerY = Math.max(0, Math.min(canvas.height - 1, Math.floor((event.clientY - bounds.top) * canvas.height / bounds.height)));
+  const target = event.currentTarget;
+  const bounds = target.getBoundingClientRect();
+  const localX = Math.max(0, Math.min(target.width - 1, Math.floor((event.clientX - bounds.left) * target.width / bounds.width)));
+  const localY = Math.max(0, Math.min(target.height - 1, Math.floor((event.clientY - bounds.top) * target.height / bounds.height)));
+  pointerX = target === fullscreenCanvas ? localX + gameLeft : localX;
+  pointerY = target === fullscreenCanvas ? localY + gameTop : localY;
 }
 
-canvas.addEventListener("pointermove", pointerPosition);
-canvas.addEventListener("pointerdown", (event) => {
-  pointerPosition(event);
-  pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
-  canvas.focus();
-  canvas.setPointerCapture(event.pointerId);
-});
-canvas.addEventListener("pointerup", (event) => {
-  pointerPosition(event);
-  pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
-});
-canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+for (const target of [canvas, fullscreenCanvas]) {
+  target.addEventListener("pointermove", pointerPosition);
+  target.addEventListener("pointerdown", (event) => {
+    pointerPosition(event);
+    pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
+    target.focus();
+    target.setPointerCapture(event.pointerId);
+  });
+  target.addEventListener("pointerup", (event) => {
+    pointerPosition(event);
+    pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
+  });
+  target.addEventListener("contextmenu", (event) => event.preventDefault());
+}
 
 function linoKey(code) {
   if (/^Key[A-Z]$/.test(code)) return `key${code.slice(3).toLowerCase()}`;
@@ -146,32 +176,42 @@ function asciiInput(event) {
   return ({ Enter: 13, Tab: 9, Backspace: 8, Escape: 27 })[event.key] ?? null;
 }
 
-canvas.addEventListener("keydown", (event) => {
-  const key = linoKey(event.code);
-  if (key) heldKeys[key] = 1;
-  const ascii = asciiInput(event);
-  if (ascii !== null) consoleInput.push(ascii);
-  if (key || ascii !== null) event.preventDefault();
-});
-canvas.addEventListener("keyup", (event) => {
-  const key = linoKey(event.code);
-  if (key) delete heldKeys[key];
-  if (key) event.preventDefault();
-});
+for (const target of [canvas, fullscreenCanvas]) {
+  target.addEventListener("keydown", (event) => {
+    const key = linoKey(event.code);
+    if (key) heldKeys[key] = 1;
+    const ascii = asciiInput(event);
+    if (ascii !== null) consoleInput.push(ascii);
+    if (key || ascii !== null) event.preventDefault();
+  });
+  target.addEventListener("keyup", (event) => {
+    const key = linoKey(event.code);
+    if (key) delete heldKeys[key];
+    if (key) event.preventDefault();
+  });
+}
 window.addEventListener("blur", () => {
   for (const key of Object.keys(heldKeys)) delete heldKeys[key];
 });
 
 fullscreenButton.addEventListener("click", async () => {
   if (document.fullscreenElement) await document.exitFullscreen();
-  else await root.requestFullscreen();
-  canvas.focus();
+  else await gameStage.requestFullscreen();
 });
 exitFullscreenButton.addEventListener("click", () => document.exitFullscreen());
+fullscreenCanvas.addEventListener("dblclick", () => document.exitFullscreen());
+document.addEventListener("keydown", async (event) => {
+  if (!(event.ctrlKey && event.shiftKey && event.code === "KeyF")) return;
+  event.preventDefault();
+  if (document.fullscreenElement) await document.exitFullscreen();
+  else await gameStage.requestFullscreen();
+});
 document.addEventListener("fullscreenchange", () => {
-  const active = document.fullscreenElement === root;
+  const active = document.fullscreenElement === gameStage;
   exitFullscreenButton.hidden = !active;
+  fullscreenCanvas.hidden = !active;
   fullscreenButton.setAttribute("aria-label", active ? "Exit full screen" : "Enter full screen");
+  (active ? fullscreenCanvas : canvas).focus();
 });
 
 runFrame();

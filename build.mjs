@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 const compilerRoot = resolve(process.env.LINOJAVA_DIR ?? "../linojava");
 const linoRoot = resolve(process.env.LINO_SOURCE_DIR ?? "../linoleum");
 const compilerPath = resolve(compilerRoot, "src/compiler.js");
-const entryPath = resolve(linoRoot, "examples/iGUIcli.txt");
+const entryPath = resolve(linoRoot, "work/vhgame.txt");
 await access(compilerPath);
 await access(entryPath);
 
@@ -48,6 +48,7 @@ await rm(runtimePath, { recursive: true, force: true });
 await mkdir(runtimePath, { recursive: true });
 await copyFile(compilerPath, resolve(runtimePath, "compiler.js"));
 await cp(resolve(compilerRoot, "src/compiler"), resolve(runtimePath, "compiler"), { recursive: true });
+await cp(resolve(compilerRoot, "src/intrinsics"), resolve(runtimePath, "intrinsics"), { recursive: true });
 
 const sourcePath = resolve("public/lino-src");
 await rm(sourcePath, { recursive: true, force: true });
@@ -79,4 +80,4 @@ await writeFile(
   JSON.stringify({ sources: sourceManifest, stockfiles: stockfileManifest }),
 );
 
-console.log(`Prepared real iGUI project: ${project.modules.length} modules, ${project.stockfiles.length} stockfiles`);
+console.log(`Prepared real Noctis project: ${project.modules.length} modules, ${project.stockfiles.length} stockfiles`);
