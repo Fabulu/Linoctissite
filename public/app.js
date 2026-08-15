@@ -33,6 +33,14 @@ let frameCount = 0;
 let frameRate = 0;
 let rateStartedAt = performance.now();
 let rateStartedFrame = 0;
+let rateRunnerMilliseconds = 0;
+let ratePresentMilliseconds = 0;
+let rateInstructions = 0;
+let rateRunCalls = 0;
+let runnerMillisecondsPerFrame = 0;
+let presentMillisecondsPerFrame = 0;
+let instructionsPerFrame = 0;
+let runCallsPerFrame = 0;
 let statusStartedAt = 0;
 let statusStartedFrame = -1;
 let linoFullscreenPress = false;
@@ -98,6 +106,7 @@ const resolvers = {
 };
 
 function present(origin, width, height, memory) {
+  const presentStartedAt = performance.now();
   if (!configureDisplay(width, height)) return;
   const frame = new Uint32Array(memory.buffer, memory.byteOffset + origin * 4, width * height);
   for (let index = 0; index < frame.length; index += 1) {
@@ -121,13 +130,7 @@ function present(origin, width, height, memory) {
     );
   }
   frameCount += 1;
-  const now = performance.now();
-  const elapsed = now - rateStartedAt;
-  if (elapsed >= 1000) {
-    frameRate = (frameCount - rateStartedFrame) * 1000 / elapsed;
-    rateStartedFrame = frameCount;
-    rateStartedAt = now;
-  }
+  ratePresentMilliseconds += performance.now() - presentStartedAt;
 }
 
 status.textContent = "Compiling the real 73-module Noctis project in this browser...";
@@ -230,11 +233,35 @@ function continueBudget() {
 function runFrame() {
   try {
     const previousFrameCount = frameCount;
+    const runnerStartedAt = performance.now();
     const result = program.run(250_000);
     const now = performance.now();
+    rateRunnerMilliseconds += now - runnerStartedAt;
+    rateInstructions += result.instructions;
+    rateRunCalls += 1;
+    const rateElapsed = now - rateStartedAt;
+    if (rateElapsed >= 1000) {
+      const presentedFrames = frameCount - rateStartedFrame;
+      if (presentedFrames > 0) {
+        frameRate = presentedFrames * 1000 / rateElapsed;
+        runnerMillisecondsPerFrame = Math.max(0, rateRunnerMilliseconds - ratePresentMilliseconds) / presentedFrames;
+        presentMillisecondsPerFrame = ratePresentMilliseconds / presentedFrames;
+        instructionsPerFrame = rateInstructions / presentedFrames;
+        runCallsPerFrame = rateRunCalls / presentedFrames;
+      }
+      rateStartedFrame = frameCount;
+      rateStartedAt = now;
+      rateRunnerMilliseconds = 0;
+      ratePresentMilliseconds = 0;
+      rateInstructions = 0;
+      rateRunCalls = 0;
+    }
     if (frameCount !== statusStartedFrame || now - statusStartedAt >= 500) {
       const rate = frameRate > 0 ? ` / ${frameRate.toFixed(1)} FPS` : "";
-      status.textContent = `Noctis / ${frameCount} presentations${rate} / ${result.status}`;
+      const diagnostic = frameRate > 0
+        ? ` / JS ${runnerMillisecondsPerFrame.toFixed(1)} ms + display ${presentMillisecondsPerFrame.toFixed(1)} ms / ${(instructionsPerFrame / 1_000_000).toFixed(2)}M ops / ${runCallsPerFrame.toFixed(1)} slices`
+        : "";
+      status.textContent = `Noctis / ${frameCount} presentations${rate}${diagnostic} / ${result.status}`;
       statusStartedFrame = frameCount;
       statusStartedAt = now;
     }
