@@ -278,6 +278,7 @@ const SERVICE_IDS = Object.freeze({
   panelOrbitProject: "service:vhporbitproject",
   panelMoonProject: "service:vhpmoonproject",
   panelIntegerStick: "service:vhpintegerstick",
+  panelSystemOrbits: "service:vhpsystemorbits",
   panelMoonScoreBounds: "service:vhpmoonscorebounds",
   glassBubble: "service:spglassbubble",
   bodyVector: "service:vhgndbodyvector",
@@ -6047,7 +6048,9 @@ function panelRenderAddresses(linked) {
     "VHSx0", "VHSy0", "VHSz0", "VHSx1", "VHSy1", "VHSz1", "VHVangle",
     "VHVanglekey", "VHVsin", "VHVcos", "vhvsintab", "vhvcostab", "vhvtrigvalid",
     "VHPscan", "VHPowner", "VHPscoreindex", "VHPscore", "VHPminscore",
-    "VHPmaxscore", "nsnop", "nsnob", "nspowner", "nsporbray",
+    "VHPmaxscore", "VHPscorespan", "VHPsysn", "VHPorbitn", "VHPorbitseg",
+    "VHPprevy", "VHPprevz", "VHScolor", "nsnop", "nsnob", "nspowner",
+    "nsporbray", "nsporideg",
   ];
   p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
   panelRenderAddressCaches.set(linked, p);
@@ -6104,6 +6107,57 @@ function panelIntegerStick(machine, linked) {
     [p.VHPsx1, p.VHSx1], [p.VHPsy1, p.VHSy1], [p.VHPsz1, p.VHSz1],
   ]) memory[destination] = float32Bits(roundFloat32(memory[source] | 0, control));
   stick3d(machine, linked);
+  machine.X = LINO_DONE;
+}
+
+function panelSystemOrbits(machine, linked) {
+  const memory = machine.memory;
+  const p = panelRenderAddresses(linked);
+  const bodyCount = memory[p.nsnop] | 0;
+  const scoreAt = (index) => {
+    const high = memory[p.nsporbray + index * 2 + 1] | 0;
+    return ((((high >>> 20) & 0x7ff) - 1023) * 256) + ((high >>> 12) & 255);
+  };
+  memory[p.VHScolor] = 66;
+  memory[p.VHPorbitn] = 0;
+  for (let body = 0; body < bodyCount; body += 1) {
+    memory[p.VHPsysn] = body;
+    memory[p.VHPangle] = memory[p.nsporideg + body] | 0;
+    let radius = 155;
+    if (bodyCount !== 1) {
+      const minimum = scoreAt(0);
+      const maximum = scoreAt(bodyCount - 1);
+      const current = scoreAt(body);
+      const span = (maximum - minimum) | 0;
+      memory[p.VHPscoreindex] = body;
+      memory[p.VHPscore] = current;
+      memory[p.VHPminscore] = minimum;
+      memory[p.VHPmaxscore] = maximum;
+      memory[p.VHPscorespan] = span;
+      if (span > 0) radius = (Math.trunc(((current - minimum) * 205) / span) + 55) | 0;
+    }
+    memory[p.VHPradius] = radius;
+    memory[p.VHPangle] = 0;
+    panelOrbitProject(machine, linked);
+    memory[p.VHPprevy] = memory[p.VHPdoty];
+    memory[p.VHPprevz] = memory[p.VHPdotz];
+    memory[p.VHPorbitseg] = 1;
+    for (let segment = 1; segment <= 24; segment += 1) {
+      memory[p.VHPangle] = segment * 15;
+      panelOrbitProject(machine, linked);
+      memory[p.VHPsx0] = 3520;
+      memory[p.VHPsy0] = memory[p.VHPprevy];
+      memory[p.VHPsz0] = memory[p.VHPprevz];
+      memory[p.VHPsx1] = 3520;
+      memory[p.VHPsy1] = memory[p.VHPdoty];
+      memory[p.VHPsz1] = memory[p.VHPdotz];
+      panelIntegerStick(machine, linked);
+      memory[p.VHPprevy] = memory[p.VHPdoty];
+      memory[p.VHPprevz] = memory[p.VHPdotz];
+      memory[p.VHPorbitseg] = segment + 1;
+    }
+    memory[p.VHPorbitn] = body + 1;
+  }
   machine.X = LINO_DONE;
 }
 
@@ -7976,6 +8030,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.panelOrbitProject]: panelOrbitProject,
     [SERVICE_IDS.panelMoonProject]: panelMoonProject,
     [SERVICE_IDS.panelIntegerStick]: panelIntegerStick,
+    [SERVICE_IDS.panelSystemOrbits]: panelSystemOrbits,
     [SERVICE_IDS.panelMoonScoreBounds]: panelMoonScoreBounds,
     [SERVICE_IDS.glassBubble]: glassBubble,
     [SERVICE_IDS.bodyVector]: bodyVector,
