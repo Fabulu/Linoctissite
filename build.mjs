@@ -25,7 +25,11 @@ function candidates(specifier, importer) {
   const name = specifier.replaceAll("\\", "/");
   if (importer === null || importer === undefined) return [resolve(specifier)];
   if (name.startsWith("/")) return [resolve(linoRoot, "main/lib", name.slice(1))];
-  return [resolve(dirname(importer ?? entryPath), name), resolve(linoRoot, "main/lib", name)];
+  const names = name.toLowerCase() === name ? [name] : [name, name.toLowerCase()];
+  return names.flatMap((candidate) => [
+    resolve(dirname(importer ?? entryPath), candidate),
+    resolve(linoRoot, "main/lib", candidate),
+  ]);
 }
 
 const project = await loadProject(entryPath, {
