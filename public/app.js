@@ -1,11 +1,10 @@
-import { compileProject, createNoctisIntrinsics } from "./linojava/compiler.js";
-
 const useWorkerRuntime = typeof Worker === "function"
   && !new URLSearchParams(location.search).has("mainThread");
 
 if (useWorkerRuntime) {
   await import("./worker-host.js");
 } else {
+const { compileProject, createNoctisIntrinsics } = await import("./linojava/compiler.js");
 
 const linoWindow = document.querySelector("#lino-window");
 const gameStage = document.querySelector("#game-stage");

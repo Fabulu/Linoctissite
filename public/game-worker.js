@@ -12,6 +12,8 @@ const pointerTransitions = [];
 const heldKeys = Object.create(null);
 const consoleInput = [];
 let pendingFrame = null;
+let completedFrame = false;
+let frameCredit = true;
 let runQueued = false;
 let delayedRun = 0;
 let renderedFrames = 0;
@@ -131,8 +133,8 @@ function queueRun(delay = 0) {
   } else runChannel.port2.postMessage(0);
 }
 
-function publishFrame(result, runnerMilliseconds) {
-  if (!pendingFrame) return;
+function publishFrame(result, runnerMilliseconds, producedFrame) {
+  if (!producedFrame) return;
   renderedFrames += 1;
   rateRunnerMilliseconds += runnerMilliseconds;
   rateInstructions += result.instructions;
@@ -150,6 +152,7 @@ function publishFrame(result, runnerMilliseconds) {
     rateRunnerMilliseconds = 0;
     rateInstructions = 0;
   }
+  if (!pendingFrame) return;
   const frame = pendingFrame;
   pendingFrame = null;
   frame.ui = symbolValues(
@@ -170,7 +173,9 @@ function runMachine() {
     const started = performance.now();
     const result = program.run(250_000);
     const runnerMilliseconds = performance.now() - started;
-    publishFrame(result, runnerMilliseconds);
+    const producedFrame = completedFrame;
+    completedFrame = false;
+    publishFrame(result, runnerMilliseconds, producedFrame);
     if (program.machine.halted) {
       running = false;
       postMessage({ type: "stopped", status: result.status });
@@ -243,10 +248,14 @@ async function initialize(message) {
     },
     monotonicMilliseconds: () => performance.now(),
     retrace(origin, width, height, memory) {
-      pendingFrame = {
-        type: "frame", width, height,
-        pixels: memory.slice(origin, origin + width * height),
-      };
+      completedFrame = true;
+      if (frameCredit) {
+        frameCredit = false;
+        pendingFrame = {
+          type: "frame", width, height,
+          pixels: memory.slice(origin, origin + width * height),
+        };
+      }
       return true;
     },
     pcm: pcmCommand,
@@ -280,6 +289,8 @@ addEventListener("message", (event) => {
     else delete heldKeys[message.name];
   } else if (message.type === "clearKeys") {
     for (const name of Object.keys(heldKeys)) delete heldKeys[name];
+  } else if (message.type === "frameCredit") {
+    frameCredit = true;
   } else if (message.type === "ascii") consoleInput.push(message.value | 0);
   else if (message.type === "pointer") {
     pointerX = message.x | 0;

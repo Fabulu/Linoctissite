@@ -195,6 +195,7 @@ function animationFrame(now) {
     const frame = pendingFrame;
     pendingFrame = null;
     present(frame);
+    worker.postMessage({ type: "frameCredit" });
   }
   const elapsed = now - displayStartedAt;
   if (elapsed >= 1000) {

@@ -284,6 +284,7 @@ const SERVICE_IDS = Object.freeze({
   panelMoonScoreBounds: "service:vhpmoonscorebounds",
   glassBubble: "service:spglassbubble",
   bodyVector: "service:vhgndbodyvector",
+  starField: "service:vhsrebuilddrawcachecommon",
 });
 
 const symbolCaches = new WeakMap();
@@ -311,6 +312,7 @@ const panelRenderAddressCaches = new WeakMap();
 const glassBubbleAddressCaches = new WeakMap();
 const bodyVectorAddressCaches = new WeakMap();
 const bodyVectorValueCaches = new WeakMap();
+const starFieldAddressCaches = new WeakMap();
 const float32Scratch = new DataView(new ArrayBuffer(4));
 const float64Scratch = new DataView(new ArrayBuffer(8));
 
@@ -2012,6 +2014,145 @@ function drawPolygon(machine, linked) {
     rowOffset = (memory[p.DBdi0] + 320) & 0xffff;
     memory[p.DBdi] = rowOffset;
   } while ((rowOffset >>> 0) <= (lastRow >>> 0));
+}
+
+function drawSolidConvexFast(machine, p, xs, ys, count, colour, leftEdges, rightEdges) {
+  const memory = machine.memory;
+  let minimumX = xs[0];
+  let maximumX = xs[0];
+  let minimumY = ys[0];
+  let maximumY = ys[0];
+  for (let vertex = 1; vertex < count; vertex += 1) {
+    if (xs[vertex] < minimumX) minimumX = xs[vertex];
+    if (xs[vertex] > maximumX) maximumX = xs[vertex];
+    if (ys[vertex] < minimumY) minimumY = ys[vertex];
+    if (ys[vertex] > maximumY) maximumY = ys[vertex];
+  }
+  memory[p.BXminx] = minimumX;
+  memory[p.BXmaxx] = maximumX;
+  memory[p.BXminy] = minimumY;
+  memory[p.BXmaxy] = maximumY;
+  memory[p.DBn] = count;
+  memory[p.DB8n] = Math.imul(count - 1, 8);
+  if (minimumY === maximumY) {
+    for (let x = minimumX; x <= maximumX; x += 1) {
+      const offset = (Math.imul(minimumY, 320) + x + 4) & 0xffff;
+      memory[p.page + offset] = colour & 255;
+      if (machine.noctisSolidTouched) machine.noctisSolidTouched[offset] = 1;
+    }
+    memory[p.CSbyte] = (memory[p.CSbyte] + maximumX - minimumX + 1) | 0;
+    return;
+  }
+  for (let y = minimumY; y <= maximumY; y += 1) {
+    leftEdges[y] = 32767;
+    rightEdges[y] = -32768;
+  }
+  const mark = (x, y) => {
+    if (x < leftEdges[y]) leftEdges[y] = x;
+    if (x > rightEdges[y]) rightEdges[y] = x;
+    const offset = (Math.imul(y, 320) + x + 4) & 0xffff;
+    memory[p.page + offset] = 255;
+    if (machine.noctisSolidTouched) machine.noctisSolidTouched[offset] = 1;
+  };
+  for (let edge = 0; edge < count; edge += 1) {
+    let xp = xs[edge] | 0;
+    let yp = ys[edge] | 0;
+    let xa = xs[(edge + 1) % count] | 0;
+    let ya = ys[(edge + 1) % count] | 0;
+    if (xp === xa) {
+      const low = Math.min(yp, ya);
+      const high = Math.max(yp, ya);
+      for (let y = low; y <= high; y += 1) mark(xp, y);
+      continue;
+    }
+    if (xa < xp) {
+      [xp, xa] = [xa, xp];
+      [yp, ya] = [ya, yp];
+    }
+    const rawXDelta = xa - xp;
+    const rawYDelta = ya - yp;
+    let length = Math.max(rawXDelta, Math.abs(rawYDelta)) + 1;
+    const divisor = length & 0xffff;
+    const xStep = Math.trunc(((rawXDelta << 16) >>> 0) / divisor) & 0xffff;
+    let yStep = Math.trunc(((Math.abs(rawYDelta) << 16) >>> 0) / divisor) & 0xffff;
+    if (rawYDelta < 0) yStep = -yStep;
+    let globalX = xp << 16;
+    let globalY = yp << 16;
+    const limit = xa << 16;
+    do {
+      mark(globalX >> 16, globalY >> 16);
+      globalX = (globalX + xStep) | 0;
+      globalY = (globalY + yStep) | 0;
+      length -= 1;
+    } while ((globalX >>> 0) < (limit >>> 0));
+  }
+  let bytes = 0;
+  for (let y = minimumY; y <= maximumY; y += 1) {
+    const left = leftEdges[y];
+    const right = rightEdges[y];
+    if (left > right) continue;
+    const countToFill = right - left;
+    let offset = (Math.imul(y, 320) + left + 4) & 0xffff;
+    for (let pixel = 0; pixel < countToFill; pixel += 1) {
+      memory[p.page + offset] = colour & 255;
+      if (machine.noctisSolidTouched) machine.noctisSolidTouched[offset] = 1;
+      offset = (offset + 1) & 0xffff;
+    }
+    bytes += countToFill;
+  }
+  memory[p.CSbyte] = (memory[p.CSbyte] + bytes) | 0;
+}
+
+function clipSolidPolygonAndDraw(machine, p, topology, count, colour, control) {
+  let inputX = topology.screenClipX0;
+  let inputY = topology.screenClipY0;
+  let outputX = topology.screenClipX1;
+  let outputY = topology.screenClipY1;
+  for (let stage = 0; stage < 4; stage += 1) {
+    const axis = stage < 2 ? 1 : 0;
+    const upper = (stage & 1) !== 0;
+    const bound = stage === 0 ? p.PGLBY : stage === 1 ? p.PGUBY
+      : stage === 2 ? p.PGLBX : p.PGUBX;
+    let outputCount = 0;
+    for (let vertex = 0; vertex < count; vertex += 1) {
+      const previous = vertex === 0 ? count - 1 : vertex - 1;
+      const currentP = axis === 0 ? inputX[vertex] : inputY[vertex];
+      const previousP = axis === 0 ? inputX[previous] : inputY[previous];
+      const currentInside = upper ? currentP <= bound : currentP >= bound;
+      const previousInside = upper ? previousP <= bound : previousP >= bound;
+      if (currentInside !== previousInside) {
+        const currentQ = axis === 0 ? inputY[vertex] : inputX[vertex];
+        const previousQ = axis === 0 ? inputY[previous] : inputX[previous];
+        const ratio = (bound - previousP) / (currentP - previousP);
+        const q = (currentQ - previousQ) * ratio + previousQ;
+        if (axis === 0) {
+          outputX[outputCount] = bound;
+          outputY[outputCount] = q;
+        } else {
+          outputX[outputCount] = q;
+          outputY[outputCount] = bound;
+        }
+        outputCount += 1;
+      }
+      if (currentInside) {
+        outputX[outputCount] = inputX[vertex];
+        outputY[outputCount] = inputY[vertex];
+        outputCount += 1;
+      }
+    }
+    count = outputCount;
+    if (count < 3) return;
+    [inputX, outputX] = [outputX, inputX];
+    [inputY, outputY] = [outputY, inputY];
+  }
+  for (let vertex = 0; vertex < count; vertex += 1) {
+    topology.xs[vertex] = convertToInt32(inputX[vertex], control);
+    topology.ys[vertex] = convertToInt32(inputY[vertex], control);
+  }
+  drawSolidConvexFast(
+    machine, p, topology.xs, topology.ys, count, colour,
+    topology.leftEdges, topology.rightEdges,
+  );
 }
 
 function poly3dAddresses(linked) {
@@ -5727,13 +5868,11 @@ function drawMode2Cache(machine, linked) {
       VHRcachecount: address(linked, "VHRcachecount"),
       VHRcachep: address(linked, "VHRcachep"),
       VHRptr: address(linked, "VHRptr"),
-      VHRi: address(linked, "VHRi"),
       VHRdrawn: address(linked, "VHRdrawn"),
       vhrcache: address(linked, "vhrcache"),
       DBcol: address(linked, "DBcol"),
       DBflar: address(linked, "DBflar"),
       DBent: address(linked, "DBent"),
-      PGFt: address(linked, "PGFt"),
     };
     mode2CacheAddressCaches.set(linked, p);
   }
@@ -5757,7 +5896,11 @@ function drawMode2Cache(machine, linked) {
     machine.X = LINO_DONE;
     return;
   }
-  const view = dataView(memory);
+  if (p.lastRenderedKey === frameKey) p.stableFrameCount = (p.stableFrameCount ?? 1) + 1;
+  else {
+    p.lastRenderedKey = frameKey;
+    p.stableFrameCount = 1;
+  }
   if (!p.topology || p.topology.count !== count) {
     const keys = new Map();
     const vertexIds = new Int32Array(count * 3);
@@ -5785,6 +5928,11 @@ function drawMode2Cache(machine, linked) {
       rx: new Float64Array(size), ry: new Float64Array(size), rz: new Float64Array(size),
       screenX: new Float64Array(size), screenY: new Float64Array(size),
       ix: new Int32Array(size), iy: new Int32Array(size), visible: new Uint8Array(size),
+      xs: new Int32Array(8), ys: new Int32Array(8),
+      leftEdges: new Int16Array(200), rightEdges: new Int16Array(200),
+      clipX: new Float64Array(8), clipY: new Float64Array(8), clipZ: new Float64Array(8),
+      screenClipX0: new Float64Array(12), screenClipY0: new Float64Array(12),
+      screenClipX1: new Float64Array(12), screenClipY1: new Float64Array(12),
     };
   }
   const control = floatingPoint(machine).control;
@@ -5828,25 +5976,13 @@ function drawMode2Cache(machine, linked) {
       p.topology.iy[id] = convertToInt32(screenYWide, control);
     }
   }
-  const touched = machine.noctisDisableHullFrameCache ? null : new Uint8Array(65536);
+  const captureFrame = !machine.noctisDisableHullFrameCache && p.stableFrameCount === 4;
+  const touched = captureFrame ? new Uint8Array(65536) : null;
   machine.noctisSolidTouched = touched;
   for (let leaf = 0; leaf < count; leaf += 1) {
     const record = p.vhrcache + leaf * 10;
     memory[p.VHRcachep] = leaf;
     memory[p.VHRptr] = record;
-    for (let vertex = 0; vertex < 3; vertex += 1) {
-      const source = record + vertex * 3;
-      const slots = [p.FSINX + vertex, p.FSINY + vertex, p.FSINZ + vertex];
-      for (let axis = 0; axis < 3; axis += 1) {
-        const bits = memory[source + axis] | 0;
-        const slot = slots[axis];
-        memory[p.PGFi] = slot;
-        memory[p.PGFt] = bits;
-        memory[p.FS0] = bits;
-        view.setFloat64((p.fw + slot * 2) * 4, float32FromBits(bits), true);
-      }
-      memory[p.VHRi] = vertex + 1;
-    }
     memory[p.PJnrv] = 3;
     memory[p.DBcol] = memory[record + 9];
     memory[p.DBflar] = 0;
@@ -5857,27 +5993,94 @@ function drawMode2Cache(machine, linked) {
     const visibleCount = p.topology.visible[id0] + p.topology.visible[id1] + p.topology.visible[id2];
     memory[p.PJmode] = 0;
     memory[p.PJdoflag] = visibleCount;
-      memory[p.PJgate] = 1;
+    memory[p.PJgate] = 1;
     if (visibleCount === 3) {
+      let whollyInside = true;
       for (let vertex = 0; vertex < 3; vertex += 1) {
         const id = vertex === 0 ? id0 : vertex === 1 ? id1 : id2;
-        writeFloat64(memory, p.fw + (p.FSRXF + vertex) * 2, p.topology.rx[id]);
-        writeFloat64(memory, p.fw + (p.FSRYF + vertex) * 2, p.topology.ry[id]);
-        writeFloat64(memory, p.fw + (p.FSRZF + vertex) * 2, p.topology.rz[id]);
-        writeFloat64(memory, p.fw + (p.FSUX + vertex) * 2, p.topology.rx[id]);
-        writeFloat64(memory, p.fw + (p.FSUY + vertex) * 2, p.topology.ry[id]);
-        writeFloat64(memory, p.fw + (p.FSUZ + vertex) * 2, p.topology.rz[id]);
-        writeFloat64(memory, p.fw + (p.FSVX0 + vertex) * 2, p.topology.screenX[id]);
-        writeFloat64(memory, p.fw + (p.FSVY0 + vertex) * 2, p.topology.screenY[id]);
-        memory[p.rwf + vertex] = 1;
+        const projectedX = p.topology.ix[id];
+        const projectedY = p.topology.iy[id];
+        p.topology.xs[vertex] = projectedX;
+        p.topology.ys[vertex] = projectedY;
+        if (projectedX < p.PGLBX || projectedX > p.PGUBX
+            || projectedY < p.PGLBY || projectedY > p.PGUBY) whollyInside = false;
         memory[p.mp + vertex * 2] = p.topology.ix[id];
         memory[p.mp + vertex * 2 + 1] = p.topology.iy[id];
       }
       memory[p.PJvr] = 3;
       memory[p.PJvr2] = 3;
       memory[p.PJvr22] = 6;
-      polyProjectedTail(machine, linked, p);
-    } else if (visibleCount !== 0) poly3d(machine, linked);
+      if (whollyInside) {
+        memory[p.DBn] = 3;
+        drawSolidConvexFast(
+          machine, p, p.topology.xs, p.topology.ys, 3, memory[p.DBcol],
+          p.topology.leftEdges, p.topology.rightEdges,
+        );
+      } else {
+        p.topology.screenClipX0[0] = p.topology.screenX[id0];
+        p.topology.screenClipY0[0] = p.topology.screenY[id0];
+        p.topology.screenClipX0[1] = p.topology.screenX[id1];
+        p.topology.screenClipY0[1] = p.topology.screenY[id1];
+        p.topology.screenClipX0[2] = p.topology.screenX[id2];
+        p.topology.screenClipY0[2] = p.topology.screenY[id2];
+        clipSolidPolygonAndDraw(machine, p, p.topology, 3, memory[p.DBcol], control);
+      }
+    } else if (visibleCount !== 0) {
+      const sourceIds = [id0, id1, id2];
+      let clippedCount = 0;
+      for (let vertex = 0; vertex < 3; vertex += 1) {
+        const currentId = sourceIds[vertex];
+        const previousId = sourceIds[(vertex + 2) % 3];
+        const currentVisible = p.topology.visible[currentId] !== 0;
+        const previousVisible = p.topology.visible[previousId] !== 0;
+        const emitIntersection = (outsideId, visibleId) => {
+          const visibleZ = p.topology.rz[visibleId];
+          const ratioWide = (near - visibleZ) / (p.topology.rz[outsideId] - visibleZ);
+          const ratioNarrow = roundFloat32(ratioWide, control);
+          p.topology.clipX[clippedCount] = roundFloat32(
+            (p.topology.rx[outsideId] - p.topology.rx[visibleId]) * ratioWide
+              + p.topology.rx[visibleId],
+            control,
+          );
+          p.topology.clipY[clippedCount] = roundFloat32(
+            (p.topology.ry[outsideId] - p.topology.ry[visibleId]) * ratioNarrow
+              + p.topology.ry[visibleId],
+            control,
+          );
+          p.topology.clipZ[clippedCount] = near;
+          clippedCount += 1;
+        };
+        if (currentVisible) {
+          if (!previousVisible) emitIntersection(previousId, currentId);
+          p.topology.clipX[clippedCount] = p.topology.rx[currentId];
+          p.topology.clipY[clippedCount] = p.topology.ry[currentId];
+          p.topology.clipZ[clippedCount] = p.topology.rz[currentId];
+          clippedCount += 1;
+        } else if (previousVisible) emitIntersection(currentId, previousId);
+      }
+      let whollyInside = clippedCount >= 3;
+      for (let vertex = 0; vertex < clippedCount; vertex += 1) {
+        const factor = numerator / p.topology.clipZ[vertex];
+        const projectedXWide = factor * p.topology.clipX[vertex] + centerX;
+        const projectedYWide = factor * p.topology.clipY[vertex] + centerY;
+        const projectedX = convertToInt32(projectedXWide, control);
+        const projectedY = convertToInt32(projectedYWide, control);
+        p.topology.xs[vertex] = projectedX;
+        p.topology.ys[vertex] = projectedY;
+        p.topology.screenClipX0[vertex] = roundFloat32(projectedXWide, control);
+        p.topology.screenClipY0[vertex] = roundFloat32(projectedYWide, control);
+        if (projectedX < p.PGLBX || projectedX > p.PGUBX
+            || projectedY < p.PGLBY || projectedY > p.PGUBY) whollyInside = false;
+      }
+      if (whollyInside) {
+        drawSolidConvexFast(
+          machine, p, p.topology.xs, p.topology.ys, clippedCount, memory[p.DBcol],
+          p.topology.leftEdges, p.topology.rightEdges,
+        );
+      } else clipSolidPolygonAndDraw(
+        machine, p, p.topology, clippedCount, memory[p.DBcol], control,
+      );
+    }
     memory[p.VHRdrawn] = (memory[p.VHRdrawn] + 1) | 0;
   }
   machine.noctisSolidTouched = null;
@@ -5933,6 +6136,211 @@ function renderCupolaCache(machine, linked) {
   memory[p.VHCvisible] = 1;
   memory[p.VHCcachebase] = cacheBase;
   memory[p.VHCpanels] = 0;
+
+  if (!grid) {
+    if (!p.topologies) p.topologies = new Map();
+    let topology = p.topologies.get(cacheBase);
+    if (!topology) {
+      const keys = new Map();
+      const vertexIds = new Int32Array(140 * 4);
+      const coordinates = [];
+      for (let panel = 0; panel < 140; panel += 1) {
+        const record = cacheBase + panel * 12;
+        for (let vertex = 0; vertex < 4; vertex += 1) {
+          const source = record + vertex * 3;
+          const x = memory[source] | 0;
+          const y = memory[source + 1] | 0;
+          const z = memory[source + 2] | 0;
+          const key = `${x},${y},${z}`;
+          let id = keys.get(key);
+          if (id === undefined) {
+            id = coordinates.length;
+            keys.set(key, id);
+            coordinates.push([x, y, z]);
+          }
+          vertexIds[panel * 4 + vertex] = id;
+        }
+      }
+      const size = coordinates.length;
+      topology = {
+        vertexIds, coordinates,
+        rx: new Float64Array(size), ry: new Float64Array(size), rz: new Float64Array(size),
+        screenX: new Float64Array(size), screenY: new Float64Array(size),
+        ix: new Int32Array(size), iy: new Int32Array(size), visible: new Uint8Array(size),
+      };
+      p.topologies.set(cacheBase, topology);
+    }
+
+    const control = floatingPoint(machine).control;
+    const cameraX = directPolySlot(memory, p, p.FSCAMX);
+    const cameraYFloat = directPolySlot(memory, p, p.FSCAMY);
+    const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
+    const betaSin = directPolySlot(memory, p, p.FSPSB);
+    const betaCos = directPolySlot(memory, p, p.FSPCB);
+    const turnBetaCos = directPolySlot(memory, p, p.FSTCB);
+    const turnBetaSin = directPolySlot(memory, p, p.FSTSB);
+    const alphaCos = directPolySlot(memory, p, p.FSPCA);
+    const alphaSin = directPolySlot(memory, p, p.FSPSA);
+    const turnAlphaCos = directPolySlot(memory, p, p.FSTCA);
+    const turnAlphaSin = directPolySlot(memory, p, p.FSTSA);
+    const near = directPolySlot(memory, p, p.FSUNEG);
+    const numerator = directPolySlot(memory, p, p.FSUNO);
+    const centerX = directPolySlot(memory, p, p.FSXC);
+    const centerY = directPolySlot(memory, p, p.FSYC);
+    for (let id = 0; id < topology.coordinates.length; id += 1) {
+      const [xb, yb, zb] = topology.coordinates[id];
+      const z = roundFloat32(float32FromBits(zb) - cameraZ, control);
+      const x = roundFloat32(float32FromBits(xb) - cameraX, control);
+      const y = roundFloat32(float32FromBits(yb) - cameraYFloat, control);
+      const rx = roundFloat32(x * betaCos + z * betaSin, control);
+      const z2 = roundFloat32(z * turnBetaCos - x * turnBetaSin, control);
+      const rzWide = y * turnAlphaSin + z2 * turnAlphaCos;
+      const rz = roundFloat32(rzWide, control);
+      const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
+      const visible = !Number.isNaN(rzWide) && !Number.isNaN(near) && rzWide >= near;
+      topology.rx[id] = rx;
+      topology.ry[id] = ry;
+      topology.rz[id] = rz;
+      topology.visible[id] = visible ? 1 : 0;
+      if (visible) {
+        const factor = numerator / rz;
+        const screenXWide = factor * rx + centerX;
+        const screenYWide = factor * ry + centerY;
+        topology.screenX[id] = roundFloat32(screenXWide, control);
+        topology.screenY[id] = roundFloat32(screenYWide, control);
+        topology.ix[id] = convertToInt32(screenXWide, control);
+        topology.iy[id] = convertToInt32(screenYWide, control);
+      }
+    }
+
+    for (let panel = 0; panel < 140; panel += 1) {
+      const record = cacheBase + panel * 12;
+      memory[p.VHCcachep] = record;
+      memory[p.VHCcopy] = 12;
+      memory[p.PJnrv] = 4;
+      memory[p.DBcol] = 64;
+      memory[p.DBflar] = 2;
+      memory[p.DBent] = 0;
+      const ids = topology.vertexIds.subarray(panel * 4, panel * 4 + 4);
+      const visibleCount = topology.visible[ids[0]] + topology.visible[ids[1]]
+        + topology.visible[ids[2]] + topology.visible[ids[3]];
+      memory[p.PJmode] = 0;
+      memory[p.PJdoflag] = visibleCount;
+      memory[p.PJgate] = 1;
+      if (visibleCount === 4) {
+        for (let vertex = 0; vertex < 4; vertex += 1) {
+          const id = ids[vertex];
+          writeFloat64(memory, p.fw + (p.FSVX0 + vertex) * 2, topology.screenX[id]);
+          writeFloat64(memory, p.fw + (p.FSVY0 + vertex) * 2, topology.screenY[id]);
+          memory[p.rwf + vertex] = 1;
+          memory[p.mp + vertex * 2] = topology.ix[id];
+          memory[p.mp + vertex * 2 + 1] = topology.iy[id];
+        }
+        memory[p.PJvr] = 4;
+        memory[p.PJvr2] = 4;
+        memory[p.PJvr22] = 8;
+        polyProjectedTail(machine, linked, p);
+      } else if (visibleCount !== 0) {
+        for (let vertex = 0; vertex < 4; vertex += 1) {
+          const source = record + vertex * 3;
+          const slots = [p.FSINX + vertex, p.FSINY + vertex, p.FSINZ + vertex];
+          for (let axis = 0; axis < 3; axis += 1) {
+            const bits = memory[source + axis] | 0;
+            memory[p.FS0] = bits;
+            memory[p.PGFi] = slots[axis];
+            writeFloat64(memory, p.fw + slots[axis] * 2, float32FromBits(bits));
+          }
+        }
+        poly3d(machine, linked);
+      }
+      memory[p.VHCpanels] = panel + 1;
+    }
+
+    memory[p.FI] = cameraY;
+    const narrowedCameraY = Math.fround(cameraY);
+    memory[p.FS0] = float32Bits(narrowedCameraY);
+    writeFloat64(memory, p.FA0, narrowedCameraY);
+    memory[p.PGFi] = p.FSCAMY;
+    writeFloat64(memory, p.fw + p.FSCAMY * 2, narrowedCameraY);
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  const topology = p.topologies?.get(cacheBase);
+  if (topology) {
+    const control = floatingPoint(machine).control;
+    const cameraX = directPolySlot(memory, p, p.FSCAMX);
+    const cameraYFloat = directPolySlot(memory, p, p.FSCAMY);
+    const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
+    const betaSin = directPolySlot(memory, p, p.FSPSB);
+    const betaCos = directPolySlot(memory, p, p.FSPCB);
+    const turnBetaCos = directPolySlot(memory, p, p.FSTCB);
+    const turnBetaSin = directPolySlot(memory, p, p.FSTSB);
+    const alphaCos = directPolySlot(memory, p, p.FSPCA);
+    const alphaSin = directPolySlot(memory, p, p.FSPSA);
+    const turnAlphaCos = directPolySlot(memory, p, p.FSTCA);
+    const turnAlphaSin = directPolySlot(memory, p, p.FSTSA);
+    const numerator = directPolySlot(memory, p, p.FSUNO);
+    const centerX = directPolySlot(memory, p, p.FSXC);
+    const centerY = directPolySlot(memory, p, p.FSYC);
+    for (let id = 0; id < topology.coordinates.length; id += 1) {
+      const [xb, yb, zb] = topology.coordinates[id];
+      const z = roundFloat32(float32FromBits(zb) - cameraZ, control);
+      const x = roundFloat32(float32FromBits(xb) - cameraX, control);
+      const y = roundFloat32(float32FromBits(yb) - cameraYFloat, control);
+      const rx = roundFloat32(x * betaCos + z * betaSin, control);
+      const z2 = roundFloat32(z * turnBetaCos - x * turnBetaSin, control);
+      const rzWide = y * turnAlphaSin + z2 * turnAlphaCos;
+      const rz = roundFloat32(rzWide, control);
+      const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
+      const visible = !Number.isNaN(rzWide) && rzWide >= 200;
+      topology.visible[id] = visible ? 1 : 0;
+      if (visible) {
+        const factor = numerator / rz;
+        topology.ix[id] = convertToInt32(factor * rx + centerX, control);
+        topology.iy[id] = convertToInt32(factor * ry + centerY, control);
+      }
+    }
+    const lineP = stick3dAddresses(linked);
+    memory[p.VHSflare] = 0;
+    for (let panel = 0; panel < 140; panel += 1) {
+      const record = cacheBase + panel * 12;
+      memory[p.VHCcachep] = record;
+      memory[p.VHCcopy] = 12;
+      const ids = topology.vertexIds.subarray(panel * 4, panel * 4 + 4);
+      for (const [first, second] of [[0, 3], [0, 1]]) {
+        const firstId = ids[first];
+        const secondId = ids[second];
+        const visibility = topology.visible[firstId] + topology.visible[secondId];
+        if (visibility === 2) {
+          drawProjectedStick(
+            machine, linked, lineP,
+            topology.ix[firstId], topology.iy[firstId],
+            topology.ix[secondId], topology.iy[secondId],
+          );
+        } else if (visibility === 1) {
+          const firstSource = record + first * 3;
+          const secondSource = record + second * 3;
+          memory[p.VHSx0] = memory[firstSource];
+          memory[p.VHSy0] = memory[firstSource + 1];
+          memory[p.VHSz0] = memory[firstSource + 2];
+          memory[p.VHSx1] = memory[secondSource];
+          memory[p.VHSy1] = memory[secondSource + 1];
+          memory[p.VHSz1] = memory[secondSource + 2];
+          stick3d(machine, linked);
+        }
+      }
+      memory[p.VHCpanels] = panel + 1;
+    }
+    memory[p.FI] = cameraY;
+    const narrowedCameraY = Math.fround(cameraY);
+    memory[p.FS0] = float32Bits(narrowedCameraY);
+    writeFloat64(memory, p.FA0, narrowedCameraY);
+    memory[p.PGFi] = p.FSCAMY;
+    writeFloat64(memory, p.fw + p.FSCAMY * 2, narrowedCameraY);
+    machine.X = LINO_DONE;
+    return;
+  }
 
   for (let panel = 0; panel < 140; panel += 1) {
     const source = cacheBase + panel * 12;
@@ -6021,8 +6429,7 @@ function drawCupolaPanel(machine, linked) {
   machine.X = LINO_DONE;
 }
 
-function stick3d(machine, linked) {
-  const memory = machine.memory;
+function stick3dAddresses(linked) {
   let p = stick3dAddressCaches.get(linked);
   if (!p) {
     p = { ...poly3dAddresses(linked) };
@@ -6034,6 +6441,86 @@ function stick3d(machine, linked) {
     ]) p[name] = address(linked, name);
     stick3dAddressCaches.set(linked, p);
   }
+  return p;
+}
+
+function drawProjectedStick(machine, linked, p, inputX0, inputY0, inputX1, inputY1) {
+  const memory = machine.memory;
+  const control = floatingPoint(machine).control;
+  let x0 = inputX0 | 0;
+  let y0 = inputY0 | 0;
+  let x1 = inputX1 | 0;
+  let y1 = inputY1 | 0;
+  memory[p.VHSpx0] = x0;
+  memory[p.VHSpy0] = y0;
+  memory[p.VHSpx1] = x1;
+  memory[p.VHSpy1] = y1;
+  const left = p.PGLBX;
+  const top = p.PGLBY;
+  const right = p.PGUBX;
+  const bottom = p.PGUBY;
+  const rejected = (x0 < left && x1 < left) || (x0 > right && x1 > right)
+    || (y0 < top && y1 < top) || (y0 > bottom && y1 > bottom);
+  if (rejected) return;
+  const clipX0 = (bound) => {
+    const diff = roundFloat32(x0 - x1, control);
+    const k = roundFloat32((bound - x1) / diff, control);
+    y0 = convertToInt32((y0 - y1) * k + y1, control);
+    x0 = bound;
+  };
+  const clipX1 = (bound) => {
+    const diff = roundFloat32(x1 - x0, control);
+    const k = roundFloat32((bound - x0) / diff, control);
+    y1 = convertToInt32((y1 - y0) * k + y0, control);
+    x1 = bound;
+  };
+  const clipY0 = (bound) => {
+    const diff = roundFloat32(y0 - y1, control);
+    const k = roundFloat32((bound - y1) / diff, control);
+    x0 = convertToInt32((x0 - x1) * k + x1, control);
+    y0 = bound;
+  };
+  const clipY1 = (bound) => {
+    const diff = roundFloat32(y1 - y0, control);
+    const k = roundFloat32((bound - y0) / diff, control);
+    x1 = convertToInt32((x1 - x0) * k + x0, control);
+    y1 = bound;
+  };
+  if (x0 < left) clipX0(left);
+  if (x1 < left) clipX1(left);
+  if (y0 < top) clipY0(top);
+  if (y1 < top) clipY1(top);
+  if (x0 > right) clipX0(right);
+  if (x1 > right) clipX1(right);
+  if (y0 > bottom) clipY0(bottom);
+  if (y1 > bottom) clipY1(bottom);
+  memory[p.VHSpx0] = x0;
+  memory[p.VHSpy0] = y0;
+  memory[p.VHSpx1] = x1;
+  memory[p.VHSpy1] = y1;
+  if (x0 === x1 && y0 === y1) return;
+  if (x1 < x0) {
+    [x0, x1] = [x1, x0];
+    [y0, y1] = [y1, y0];
+    memory[p.VHSpx0] = x0;
+    memory[p.VHSpy0] = y0;
+    memory[p.VHSpx1] = x1;
+    memory[p.VHSpy1] = y1;
+  }
+  const rawDx = x1 - x0;
+  const rawDy = y1 - y0;
+  memory[p.VHSsx] = rawDx >= 0 ? 1 : -1;
+  memory[p.VHSsy] = rawDy >= 0 ? 1 : -1;
+  memory[p.VHSdx] = Math.abs(rawDx);
+  memory[p.VHSdy] = -Math.abs(rawDy);
+  memory[p.VHSerr] = Math.abs(rawDx) - Math.abs(rawDy);
+  memory[p.VHSphase] = 0;
+  drawStickLine(machine, linked);
+}
+
+function stick3d(machine, linked) {
+  const memory = machine.memory;
+  const p = stick3dAddresses(linked);
   const control = floatingPoint(machine).control;
   const savedNear = float32Bits(roundFloat32(directPolySlot(memory, p, p.FSUNEG), control));
   memory[p.VHSnearbase] = savedNear;
@@ -6783,39 +7270,41 @@ function rectangle(machine, linked) {
   const scanlines = ((memory[bounds + 3] | 0) - top + 1) | 0;
   const f32 = (at) => float32FromBits(memory[at]);
   const bits = (number) => float32Bits(Math.fround(number));
-  const horizontal = [0, 1, 2].map((axis) => bits(
+  const horizontalValues = [0, 1, 2].map((axis) => Math.fround(
     Math.fround(f32(gradients + 3 + axis) - f32(gradients + axis)) / Math.fround(pixels),
   ));
-  const vertical = [0, 1, 2].map((axis) => bits(
+  const verticalValues = [0, 1, 2].map((axis) => Math.fround(
     Math.fround(f32(gradients + 6 + axis) - f32(gradients + axis)) / Math.fround(scanlines),
   ));
-  const start = [memory[gradients], memory[gradients + 1], memory[gradients + 2]];
+  const horizontal = horizontalValues.map(bits);
+  const vertical = verticalValues.map(bits);
+  const start = [f32(gradients), f32(gradients + 1), f32(gradients + 2)];
   const names = ["red", "green", "blue"];
   for (let axis = 0; axis < 3; axis += 1) {
     memory[p[`recthdelta${names[axis]}`]] = horizontal[axis];
     memory[p[`rectvdelta${names[axis]}`]] = vertical[axis];
-    memory[p[`rectvstart${names[axis]}`]] = start[axis];
+    memory[p[`rectvstart${names[axis]}`]] = bits(start[axis]);
   }
   memory[p.rectpixels] = pixels;
   memory[p.rectscanlines] = scanlines;
   let pointer = (target + top * alignment + left) >>> 0;
-  let verticalStart = start;
+  const verticalStart = start.slice();
   const effect = memory[p.rectangleeffect] | 0;
   const effectDescriptor = pixelEffects(linked).get(effect);
   if (!effectDescriptor) throw new RangeError(`Unsupported Rectangle pixel effect handle ${effect}`);
   const raw = effectDescriptor.kind === "raw" && !effectDescriptor.transparent;
-  const constantRows = horizontal.every((channel) => float32FromBits(channel) === 0);
+  const constantRows = horizontalValues.every((channel) => channel === 0);
   const channelByte = (channel) => Math.max(0, Math.min(255,
-    nearestEven(Math.fround(float32FromBits(channel) * 255)),
+    nearestEven(Math.fround(channel * 255)),
   ));
   for (let y = 0; y < scanlines; y += 1) {
     let red = verticalStart[0];
     let green = verticalStart[1];
     let blue = verticalStart[2];
     memory[p.rectdisplaypointer] = pointer;
-    memory[p.recthstartred] = red;
-    memory[p.recthstartgreen] = green;
-    memory[p.recthstartblue] = blue;
+    memory[p.recthstartred] = bits(red);
+    memory[p.recthstartgreen] = bits(green);
+    memory[p.recthstartblue] = bits(blue);
     if (raw && constantRows) {
       const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
       memory.fill(color, pointer, pointer + pixels);
@@ -6826,14 +7315,14 @@ function rectangle(machine, linked) {
         if (raw) memory[pointer] = color;
         else applyPixelEffect(memory, linked, p, effect, pointer, color);
         pointer += 1;
-        red = bits(float32FromBits(red) + float32FromBits(horizontal[0]));
-        green = bits(float32FromBits(green) + float32FromBits(horizontal[1]));
-        blue = bits(float32FromBits(blue) + float32FromBits(horizontal[2]));
+        red = Math.fround(red + horizontalValues[0]);
+        green = Math.fround(green + horizontalValues[1]);
+        blue = Math.fround(blue + horizontalValues[2]);
       }
     }
     pointer += alignment - pixels;
     for (let axis = 0; axis < 3; axis += 1) {
-      verticalStart[axis] = bits(float32FromBits(verticalStart[axis]) + float32FromBits(vertical[axis]));
+      verticalStart[axis] = Math.fround(verticalStart[axis] + verticalValues[axis]);
     }
   }
   memory[p.rectdisplaypointer] = pointer;
@@ -8148,12 +8637,14 @@ function spaceRelativeCoordinates(machine, linked) {
   for (const [sourceOffset, cameraName, destinationOffset] of axes) {
     const integer = memory[star + sourceOffset] | 0;
     writeScalarScratch(machine, linked, integer);
-    const difference = scalarBinaryNumber(
-      integer,
-      readFloat64(memory, address(linked, cameraName)),
-      control,
-      "subtract",
-    );
+    const camera = readFloat64(memory, address(linked, cameraName));
+    let difference = integer - camera;
+    const error = Math.abs(difference) * Number.EPSILON + Number.MIN_VALUE;
+    const lowBits = float32Bits(roundFloat32(difference - error, control));
+    const highBits = float32Bits(roundFloat32(difference + error, control));
+    if (!Number.isFinite(difference) || lowBits !== highBits) {
+      difference = scalarBinaryNumber(integer, camera, control, "subtract");
+    }
     writeScalarScratch(machine, linked, difference);
     const narrowed = narrowScalar(machine, linked, difference);
     writeFloat64(memory, floats + destinationOffset, narrowed);
@@ -8171,6 +8662,44 @@ function spaceRotateDepth(machine, linked) {
   const sinBeta = readFloat64(memory, floats + 430);
   const cosAlpha = readFloat64(memory, floats + 436);
   const sinAlpha = readFloat64(memory, floats + 438);
+
+  if ((control & 0x0300) === 0x0300
+      && Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)
+      && Number.isFinite(cosBeta) && Number.isFinite(sinBeta)
+      && Number.isFinite(cosAlpha) && Number.isFinite(sinAlpha)) {
+    let first = z * sinBeta;
+    writeFloat64(memory, floats + 496, first);
+    let second = x * cosBeta;
+    let result = second + first;
+    writeScalarScratch(machine, linked, result);
+    writeFloat64(memory, floats + 64, narrowScalar(machine, linked, result));
+
+    first = z * cosBeta;
+    writeFloat64(memory, floats + 496, first);
+    second = x * sinBeta;
+    result = first - second;
+    writeScalarScratch(machine, linked, result);
+    const z2 = narrowScalar(machine, linked, result);
+    writeFloat64(memory, floats + 482, z2);
+
+    first = z2 * cosAlpha;
+    writeFloat64(memory, floats + 496, first);
+    second = y * sinAlpha;
+    result = second + first;
+    writeScalarScratch(machine, linked, result);
+    writeFloat64(memory, floats + 498, result);
+    const rotatedZ = narrowScalar(machine, linked, result);
+    writeFloat64(memory, floats + 80, rotatedZ);
+
+    first = y * cosAlpha;
+    writeFloat64(memory, floats + 496, first);
+    second = z2 * sinAlpha;
+    result = first - second;
+    writeScalarScratch(machine, linked, result);
+    writeFloat64(memory, floats + 72, narrowScalar(machine, linked, result));
+    memory[address(linked, "VHSdepth")] = convertToInt32(rotatedZ, control);
+    return;
+  }
 
   let first = scalarBinaryNumber(z, sinBeta, control, "multiply");
   writeFloat64(memory, floats + 496, first);
@@ -8225,6 +8754,138 @@ function spaceProject(machine, linked) {
   result = scalarBinaryNumber(result, readFloat64(memory, floats + 40), control, "add");
   writeScalarScratch(machine, linked, result);
   memory[address(linked, "GCy")] = convertToInt32(result, control);
+}
+
+function starField(machine, linked) {
+  const memory = machine.memory;
+  let p = starFieldAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "VHSstar", "VHScount", "VHSstarptr", "VHSdepth", "VHSamp", "VHScolour",
+      "GCx", "GCy", "VHSscreeny", "VHSdrawcount", "VHSdrawptr", "VHSsurface",
+      "SPoff", "SPreg", "SPval", "RGADP", "vhsstarcache", "vhsscreencache", "SADPT",
+      "VHSdrawready", "VHSfwbase", "VHSdx0", "VHSdy0", "VHSdz0",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    p.page = noctisBuffer(linked, "SADPT");
+    starFieldAddressCaches.set(linked, p);
+  }
+
+  const count = memory[p.VHScount] >>> 0;
+  const amplified = (memory[p.VHSamp] | 0) !== 0;
+  const surface = (memory[p.VHSsurface] | 0) !== 0;
+  const control = floatingPoint(machine).control;
+  const fastNumbers = (control & 0x0f00) === 0x0300;
+  const floats = memory[p.VHSfwbase] >>> 0;
+  const cameraX = readFloat64(memory, p.VHSdx0);
+  const cameraY = readFloat64(memory, p.VHSdy0);
+  const cameraZ = readFloat64(memory, p.VHSdz0);
+  const cosBeta = readFloat64(memory, floats + 428);
+  const sinBeta = readFloat64(memory, floats + 430);
+  const cosAlpha = readFloat64(memory, floats + 436);
+  const sinAlpha = readFloat64(memory, floats + 438);
+  const numerator = readFloat64(memory, floats + 50);
+  const centerX = readFloat64(memory, floats + 38);
+  const centerY = readFloat64(memory, floats + 40);
+  const stableFloat32Difference = (integer, camera) => {
+    const difference = integer - camera;
+    const error = Math.abs(difference) * Number.EPSILON + Number.MIN_VALUE;
+    const low = roundFloat32(difference - error, control);
+    const high = roundFloat32(difference + error, control);
+    return float32Bits(low) === float32Bits(high) ? low : null;
+  };
+  const safelyRoundedInteger = (number) => Number.isFinite(number)
+    && Math.abs((number - Math.floor(number)) - 0.5) > 1e-7;
+  let drawCount = 0;
+  let star = 0;
+  for (; star < count; star += 1) {
+    const starPointer = p.vhsstarcache + star * 4;
+    memory[p.VHSstar] = star;
+    memory[p.VHSstarptr] = starPointer;
+    if ((memory[starPointer + 3] | 0) === 0) continue;
+
+    let screenX;
+    let projectedY;
+    let depth;
+    let rotatedX;
+    let rotatedY;
+    let rotatedZ;
+    let usedFastGeometry = false;
+    if (fastNumbers) {
+      const x = stableFloat32Difference(memory[starPointer] | 0, cameraX);
+      const y = stableFloat32Difference(memory[starPointer + 1] | 0, cameraY);
+      const z = stableFloat32Difference(memory[starPointer + 2] | 0, cameraZ);
+      if (x !== null && y !== null && z !== null) {
+        rotatedX = Math.fround(x * cosBeta + z * sinBeta);
+        const z2 = Math.fround(z * cosBeta - x * sinBeta);
+        rotatedZ = Math.fround(y * sinAlpha + z2 * cosAlpha);
+        rotatedY = Math.fround(y * cosAlpha - z2 * sinAlpha);
+        depth = nearestEven(rotatedZ) | 0;
+        usedFastGeometry = true;
+        memory[p.VHSdepth] = depth;
+      }
+    }
+    if (!usedFastGeometry) {
+      spaceRelativeCoordinates(machine, linked);
+      spaceRotateDepth(machine, linked);
+      depth = memory[p.VHSdepth] | 0;
+    }
+    if (depth < 10000) continue;
+    depth = amplified ? depth >>> 14 : depth >>> 13;
+    if ((depth >>> 0) > 63) continue;
+    const colour = 63 - depth;
+    memory[p.VHScolour] = colour;
+
+    if (usedFastGeometry) {
+      const factor = numerator / rotatedZ;
+      const projectedX = factor * rotatedX + centerX;
+      const projectedYFast = factor * rotatedY + centerY;
+      if (safelyRoundedInteger(projectedX) && safelyRoundedInteger(projectedYFast)) {
+        screenX = nearestEven(projectedX) | 0;
+        projectedY = nearestEven(projectedYFast) | 0;
+        memory[p.GCx] = screenX;
+        memory[p.GCy] = projectedY;
+      } else {
+        spaceRelativeCoordinates(machine, linked);
+        spaceRotateDepth(machine, linked);
+        spaceProject(machine, linked);
+        screenX = memory[p.GCx] | 0;
+        projectedY = memory[p.GCy] | 0;
+      }
+    } else {
+      spaceProject(machine, linked);
+      screenX = memory[p.GCx] | 0;
+      projectedY = memory[p.GCy] | 0;
+    }
+    if (screenX <= 10 || screenX >= 310) continue;
+    const screenY = (projectedY - 2) | 0;
+    memory[p.VHSscreeny] = screenY;
+    if (screenY <= 10 || screenY >= 190) continue;
+
+    const offset = (Math.imul(screenY, 320) + screenX + 4) | 0;
+    memory[p.SPoff] = offset;
+    const drawPointer = p.vhsscreencache + drawCount * 2;
+    memory[p.VHSdrawptr] = drawPointer;
+    memory[drawPointer] = offset;
+    memory[drawPointer + 1] = colour;
+    drawCount += 1;
+    memory[p.VHSdrawcount] = drawCount;
+
+    let current = memory[p.page + (offset & 0xffff)] & 255;
+    memory[p.SPreg] = p.RGADP;
+    memory[p.SPval] = current;
+    if (surface ? current > 62 : current === 68 || current < 64 || current > 92) continue;
+    const high = current & 192;
+    current = (current & 63) + colour;
+    if (current > 63) current = 63;
+    current |= high;
+    memory[p.SPval] = current;
+    memory[p.page + (offset & 0xffff)] = current;
+  }
+  memory[p.VHSstar] = star;
+  memory[p.VHSdrawcount] = drawCount;
+  memory[p.VHSdrawready] = 1;
+  machine.X = LINO_DONE;
 }
 
 export const NOCTIS_INTRINSIC_IDS = IDS;
@@ -8310,6 +8971,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.panelMoonScoreBounds]: panelMoonScoreBounds,
     [SERVICE_IDS.glassBubble]: glassBubble,
     [SERVICE_IDS.bodyVector]: bodyVector,
+    [SERVICE_IDS.starField]: starField,
     [IDS.copyRegion]: copyRegion,
     [IDS.expandIndexed]: expandIndexed,
     [IDS.scale2x]: scale2x,
