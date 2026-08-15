@@ -98,6 +98,42 @@ const IDS = Object.freeze({
   spaceRelativeCoordinates: "native:vhspace.txt:0abeba20",
   spaceRotateDepth: "native:vhspace.txt:d05e1b23",
   spaceProject: "native:vhspace.txt:3c924fe2",
+  surfaceChopInt64: "native:suseed.txt:d0beef23",
+  surfaceNearInt64: "native:suseed.txt:57617b17",
+  surfaceSeedAdd4112: "native:suseed.txt:1962fd75",
+  surfaceSeedTimes10: "native:suseed.txt:ded4ff85",
+  surfaceSecondsDivideInt: "native:suseed.txt:d82d6e3a",
+  surfaceSecondsLoad: "native:suseed.txt:7d70b95c",
+  surfaceSecondsTimes10: "native:suseed.txt:6e601cdf",
+  surfaceSecondsTimes60: "native:suseed.txt:48952347",
+  surfaceAngleAdd4: "native:suseed.txt:799db0e5",
+  surfaceAngleAdd6: "native:suseed.txt:4cf00151",
+  surfaceAngleFromInt: "native:suseed.txt:94a1d789",
+  surfaceAngleAddInt: "native:suseed.txt:67bad25c",
+  surfaceIntDivide30: "native:suseed.txt:9d6717e1",
+  surfaceCosineRadius: "native:suseed.txt:4c67d4f7",
+  surfaceSineRadius: "native:suseed.txt:9f07697f",
+  surfaceStackAddInt: "native:suseed.txt:e7e623e4",
+  surfaceAdvanceX: "native:suseed.txt:f1f10ad9",
+  surfaceAdvanceY: "native:suseed.txt:58cb78e9",
+  surfaceCenterFloats: "native:suseed.txt:991ddabf",
+  surfaceLoadY: "native:suseed.txt:57234998",
+  surfaceLoadX: "native:suseed.txt:60190c1a",
+  surfaceKt: "native:suseed.txt:dc5af1ae",
+  surfaceKq: "native:suseed.txt:bc929db2",
+  surfaceThresholdFloat: "native:suseed.txt:2fea0686",
+  surfaceAngleFloat: "native:suseed.txt:0466b5c6",
+  surfaceLoadAngle: "native:suseed.txt:dacea7ee",
+  surfaceWave: "native:supaint.txt:228a9fee",
+  paletteIntToFloat: "native:supal.txt:f0dd0806",
+  paletteQuarter: "native:supal.txt:55fd0c47",
+  paletteThreeQuarters: "native:supal.txt:6c657fc9",
+  paletteFiveQuarters: "native:supal.txt:f50c9c5d",
+  paletteShadeScale: "native:supal.txt:b1efc1f8",
+  paletteShadeDeltas: "native:supal.txt:7f32151a",
+  paletteLoadShade: "native:supal.txt:68be862a",
+  flareSaveControl: "native:vhflare.txt:ac3505ab",
+  flareSpokeDelta: "native:vhflare.txt:d2478660",
 });
 
 const SERVICE_IDS = Object.freeze({
@@ -1204,6 +1240,299 @@ function compareFloat64(machine, linked) {
   floatingPoint(machine).status = status;
 }
 
+function readNamedFloat32(memory, linked, name) {
+  return float32FromBits(value(memory, linked, name));
+}
+
+function writeNamedFloat32(machine, linked, name, number) {
+  machine.memory[address(linked, name)] = float32Bits(roundFloat32(
+    number,
+    floatingPoint(machine).control,
+  ));
+}
+
+function surfaceStack(machine) {
+  return floatingPoint(machine).stack;
+}
+
+function surfacePushNumber(machine, number) {
+  surfaceStack(machine).push(extendedFromNumber(number));
+}
+
+function surfacePushInteger(machine, number) {
+  surfaceStack(machine).push(extendedFromInteger(number));
+}
+
+function surfacePop(machine) {
+  const result = surfaceStack(machine).pop();
+  if (!result) throw new Error("Noctis surface x87 stack underflow");
+  return result;
+}
+
+function surfaceTop(machine) {
+  const stack = surfaceStack(machine);
+  if (!stack.length) throw new Error("Noctis surface x87 stack underflow");
+  return stack[stack.length - 1];
+}
+
+function surfaceSetTop(machine, result) {
+  const stack = surfaceStack(machine);
+  if (!stack.length) throw new Error("Noctis surface x87 stack underflow");
+  stack[stack.length - 1] = result;
+}
+
+function surfaceStoreFloat32(machine, linked, name, result = surfacePop(machine)) {
+  writeNamedFloat32(
+    machine,
+    linked,
+    name,
+    extendedToNumber(result, floatingPoint(machine).control),
+  );
+}
+
+function surfaceStoreInt64(machine, linked, control) {
+  const memory = machine.memory;
+  const result = BigInt.asIntN(64, extendedToBigInt(surfacePop(machine), control));
+  const unsigned = BigInt.asUintN(64, result);
+  const destination = address(linked, "SUq0");
+  memory[destination] = Number(unsigned & 0xffffffffn) | 0;
+  memory[destination + 1] = Number(unsigned >> 32n) | 0;
+}
+
+function surfaceChopInt64(machine, linked) {
+  const fpu = floatingPoint(machine);
+  fpu.control = value(machine.memory, linked, "SUcwc") & 0xffff;
+  surfaceStoreInt64(machine, linked, fpu.control);
+  fpu.control = value(machine.memory, linked, "SUcwn") & 0xffff;
+}
+
+function surfaceNearInt64(machine, linked) {
+  surfaceStoreInt64(machine, linked, floatingPoint(machine).control);
+}
+
+function surfacePushDouble(machine, linked, name) {
+  surfacePushNumber(machine, readFloat64(machine.memory, address(linked, name)));
+}
+
+function surfaceSeedAdd4112(machine, linked) {
+  const control = floatingPoint(machine).control;
+  surfacePushDouble(machine, linked, "SUsv0");
+  surfaceSetTop(machine, extendedAdd(
+    surfaceTop(machine),
+    extendedFromNumber(readFloat64(machine.memory, address(linked, "K4112A"))),
+    control,
+  ));
+}
+
+function surfaceSeedTimes10(machine, linked) {
+  const control = floatingPoint(machine).control;
+  surfacePushDouble(machine, linked, "SUsv0");
+  surfaceSetTop(machine, extendedMultiply(
+    surfaceTop(machine),
+    extendedFromNumber(readFloat64(machine.memory, address(linked, "K10A"))),
+    control,
+  ));
+}
+
+function surfaceSecondsDivideInt(machine, linked) {
+  const control = floatingPoint(machine).control;
+  const numerator = extendedFromNumber(readFloat64(machine.memory, address(linked, "SUsec0")));
+  surfaceStack(machine).push(extendedDivide(
+    numerator,
+    extendedFromInteger(value(machine.memory, linked, "SUia")),
+    control,
+  ));
+}
+
+function surfaceSecondsLoad(machine, linked) {
+  surfacePushDouble(machine, linked, "SUsec0");
+}
+
+function surfaceSecondsMultiply(machine, linked, constantName) {
+  const control = floatingPoint(machine).control;
+  const seconds = extendedFromNumber(readFloat64(machine.memory, address(linked, "SUsec0")));
+  const factor = extendedFromNumber(readFloat64(machine.memory, address(linked, constantName)));
+  surfaceStack(machine).push(extendedMultiply(seconds, factor, control));
+}
+
+function surfaceAngleAdd(machine, linked, constantName) {
+  const control = floatingPoint(machine).control;
+  const angle = extendedFromNumber(readNamedFloat32(machine.memory, linked, "SFa"));
+  const addend = extendedFromNumber(readFloat64(machine.memory, address(linked, constantName)));
+  surfaceStoreFloat32(machine, linked, "SFa", extendedAdd(angle, addend, control));
+}
+
+function surfaceAngleFromInt(machine, linked) {
+  const control = floatingPoint(machine).control;
+  const result = extendedMultiply(
+    extendedFromInteger(value(machine.memory, linked, "SUia")),
+    extendedFromNumber(readFloat64(machine.memory, address(linked, "KDEG0"))),
+    control,
+  );
+  surfaceStoreFloat32(machine, linked, "SFa", result);
+}
+
+function surfaceAngleAddInt(machine, linked) {
+  const control = floatingPoint(machine).control;
+  let result = extendedMultiply(
+    extendedFromInteger(value(machine.memory, linked, "SUia")),
+    extendedFromNumber(readFloat64(machine.memory, address(linked, "KDEG0"))),
+    control,
+  );
+  result = extendedAdd(
+    result,
+    extendedFromNumber(readNamedFloat32(machine.memory, linked, "SFa")),
+    control,
+  );
+  surfaceStoreFloat32(machine, linked, "SFa", result);
+}
+
+function surfaceIntDivide30(machine, linked) {
+  const control = floatingPoint(machine).control;
+  surfaceStoreFloat32(machine, linked, "SFa", extendedDivide(
+    extendedFromInteger(value(machine.memory, linked, "SUia")),
+    extendedFromNumber(readFloat64(machine.memory, address(linked, "K30A"))),
+    control,
+  ));
+}
+
+function surfaceTrigRadius(machine, linked, operation) {
+  const control = floatingPoint(machine).control;
+  const angle = readNamedFloat32(machine.memory, linked, "SFa");
+  const trig = operation === "cos" ? Math.cos(angle) : Math.sin(angle);
+  surfaceStack(machine).push(extendedMultiply(
+    extendedFromNumber(trig),
+    extendedFromInteger(value(machine.memory, linked, "SUmi")),
+    control,
+  ));
+}
+
+function surfaceStackAddInt(machine, linked) {
+  surfaceSetTop(machine, extendedAdd(
+    surfaceTop(machine),
+    extendedFromInteger(value(machine.memory, linked, "SUia")),
+    floatingPoint(machine).control,
+  ));
+}
+
+function surfaceAdvance(machine, linked, operation, destinationName) {
+  const control = floatingPoint(machine).control;
+  const angle = readNamedFloat32(machine.memory, linked, "SFa");
+  const trig = operation === "cos" ? Math.cos(angle) : Math.sin(angle);
+  let result = extendedMultiply(
+    extendedFromNumber(trig),
+    extendedFromNumber(readNamedFloat32(machine.memory, linked, "KFKF")),
+    control,
+  );
+  result = extendedAdd(
+    result,
+    extendedFromNumber(readNamedFloat32(machine.memory, linked, destinationName)),
+    control,
+  );
+  surfaceStoreFloat32(machine, linked, destinationName, result);
+}
+
+function surfaceCenterFloats(machine, linked) {
+  writeNamedFloat32(machine, linked, "SFpx", value(machine.memory, linked, "SUcxi"));
+  writeNamedFloat32(machine, linked, "SFpy", value(machine.memory, linked, "SUcyi"));
+}
+
+function surfaceLoadFloat(machine, linked, name) {
+  surfacePushNumber(machine, readNamedFloat32(machine.memory, linked, name));
+}
+
+function surfaceLinearFloat(machine, linked, divisorName, addendName, destinationName) {
+  const control = floatingPoint(machine).control;
+  let result = extendedDivide(
+    extendedFromInteger(value(machine.memory, linked, "SUia")),
+    extendedFromNumber(readFloat64(machine.memory, address(linked, divisorName))),
+    control,
+  );
+  result = extendedAdd(
+    result,
+    extendedFromNumber(readFloat64(machine.memory, address(linked, addendName))),
+    control,
+  );
+  surfaceStoreFloat32(machine, linked, destinationName, result);
+}
+
+function surfaceIntToNamedFloat(machine, linked, destinationName) {
+  writeNamedFloat32(machine, linked, destinationName, value(machine.memory, linked, "SUia"));
+}
+
+function surfaceWave(machine, linked) {
+  const control = floatingPoint(machine).control;
+  let result = extendedMultiply(
+    extendedFromInteger(value(machine.memory, linked, "SUpx")),
+    extendedFromNumber(readNamedFloat32(machine.memory, linked, "SFa")),
+    control,
+  );
+  result = extendedFromNumber(Math.sin(extendedToNumber(result, control)));
+  result = extendedMultiply(
+    result,
+    extendedFromInteger(value(machine.memory, linked, "SUcr")),
+    control,
+  );
+  surfaceStack(machine).push(result);
+}
+
+function paletteScale(machine, linked, constantName) {
+  const control = floatingPoint(machine).control;
+  surfaceStoreFloat32(machine, linked, "SFtmp", extendedMultiply(
+    extendedFromNumber(readNamedFloat32(machine.memory, linked, "SFtmp")),
+    extendedFromNumber(readFloat64(machine.memory, address(linked, constantName))),
+    control,
+  ));
+}
+
+function paletteShadeScale(machine, linked) {
+  const control = floatingPoint(machine).control;
+  surfaceStoreFloat32(machine, linked, "SFk", extendedDivide(
+    extendedFromNumber(readFloat64(machine.memory, address(linked, "K1A"))),
+    extendedFromInteger(value(machine.memory, linked, "SUSHn")),
+    control,
+  ));
+}
+
+function paletteShadeDeltas(machine, linked) {
+  const control = floatingPoint(machine).control;
+  const scale = extendedFromNumber(readNamedFloat32(machine.memory, linked, "SFk"));
+  for (const [finish, start, destination] of [
+    ["SFfr", "SFsr", "SFdr"],
+    ["SFfg", "SFsg", "SFdg"],
+    ["SFfb", "SFsb", "SFdb"],
+  ]) {
+    const delta = extendedSubtract(
+      extendedFromNumber(readNamedFloat32(machine.memory, linked, finish)),
+      extendedFromNumber(readNamedFloat32(machine.memory, linked, start)),
+      control,
+    );
+    surfaceStoreFloat32(machine, linked, destination, extendedMultiply(delta, scale, control));
+  }
+}
+
+function flareSaveControl(machine, linked) {
+  machine.memory[address(linked, "FCWCSAV")] = (floatingPoint(machine).control | 0x40) & 0xffff;
+}
+
+function flareSpokeDelta(machine, linked) {
+  const memory = machine.memory;
+  const fpu = floatingPoint(machine);
+  fpu.control = value(memory, linked, "FCWCHOP") & 0xffff;
+  const factor = extendedFromNumber(readFloat64(memory, address(linked, "VHFk0")));
+  const length = extendedFromNumber(readFloat64(memory, address(linked, "VHFl0")));
+  for (const [input, output] of [["VHVcos", "VHFdx"], ["VHVsin", "VHFdy"]]) {
+    let result = extendedMultiply(
+      extendedFromNumber(readNamedFloat32(memory, linked, input)),
+      factor,
+      fpu.control,
+    );
+    result = extendedMultiply(result, length, fpu.control);
+    memory[address(linked, output)] = convertToInt32(extendedToNumber(result, fpu.control), fpu.control);
+  }
+  fpu.control = value(memory, linked, "FCWCSAV") & 0xffff;
+}
+
 function nearStarIdentityValue(machine, linked, order, spillOperations = [], spillName = null) {
   const memory = machine.memory;
   const control = floatingPoint(machine).control;
@@ -1724,6 +2053,42 @@ export function createNoctisIntrinsics(overrides = {}) {
     [IDS.spaceRelativeCoordinates]: spaceRelativeCoordinates,
     [IDS.spaceRotateDepth]: spaceRotateDepth,
     [IDS.spaceProject]: spaceProject,
+    [IDS.surfaceChopInt64]: surfaceChopInt64,
+    [IDS.surfaceNearInt64]: surfaceNearInt64,
+    [IDS.surfaceSeedAdd4112]: surfaceSeedAdd4112,
+    [IDS.surfaceSeedTimes10]: surfaceSeedTimes10,
+    [IDS.surfaceSecondsDivideInt]: surfaceSecondsDivideInt,
+    [IDS.surfaceSecondsLoad]: surfaceSecondsLoad,
+    [IDS.surfaceSecondsTimes10]: (machine, linked) => surfaceSecondsMultiply(machine, linked, "K10A"),
+    [IDS.surfaceSecondsTimes60]: (machine, linked) => surfaceSecondsMultiply(machine, linked, "K60A"),
+    [IDS.surfaceAngleAdd4]: (machine, linked) => surfaceAngleAdd(machine, linked, "K4DEG0"),
+    [IDS.surfaceAngleAdd6]: (machine, linked) => surfaceAngleAdd(machine, linked, "K6DEG0"),
+    [IDS.surfaceAngleFromInt]: surfaceAngleFromInt,
+    [IDS.surfaceAngleAddInt]: surfaceAngleAddInt,
+    [IDS.surfaceIntDivide30]: surfaceIntDivide30,
+    [IDS.surfaceCosineRadius]: (machine, linked) => surfaceTrigRadius(machine, linked, "cos"),
+    [IDS.surfaceSineRadius]: (machine, linked) => surfaceTrigRadius(machine, linked, "sin"),
+    [IDS.surfaceStackAddInt]: surfaceStackAddInt,
+    [IDS.surfaceAdvanceX]: (machine, linked) => surfaceAdvance(machine, linked, "cos", "SFpx"),
+    [IDS.surfaceAdvanceY]: (machine, linked) => surfaceAdvance(machine, linked, "sin", "SFpy"),
+    [IDS.surfaceCenterFloats]: surfaceCenterFloats,
+    [IDS.surfaceLoadY]: (machine, linked) => surfaceLoadFloat(machine, linked, "SFpy"),
+    [IDS.surfaceLoadX]: (machine, linked) => surfaceLoadFloat(machine, linked, "SFpx"),
+    [IDS.surfaceKt]: (machine, linked) => surfaceLinearFloat(machine, linked, "K900A", "K06A", "SFkt"),
+    [IDS.surfaceKq]: (machine, linked) => surfaceLinearFloat(machine, linked, "K100A", "K40A", "SFkq"),
+    [IDS.surfaceThresholdFloat]: (machine, linked) => surfaceIntToNamedFloat(machine, linked, "SFth"),
+    [IDS.surfaceAngleFloat]: (machine, linked) => surfaceIntToNamedFloat(machine, linked, "SFa"),
+    [IDS.surfaceLoadAngle]: (machine, linked) => surfaceLoadFloat(machine, linked, "SFa"),
+    [IDS.surfaceWave]: surfaceWave,
+    [IDS.paletteIntToFloat]: (machine, linked) => surfaceIntToNamedFloat(machine, linked, "SFtmp"),
+    [IDS.paletteQuarter]: (machine, linked) => paletteScale(machine, linked, "K025A"),
+    [IDS.paletteThreeQuarters]: (machine, linked) => paletteScale(machine, linked, "K075A"),
+    [IDS.paletteFiveQuarters]: (machine, linked) => paletteScale(machine, linked, "K125A"),
+    [IDS.paletteShadeScale]: paletteShadeScale,
+    [IDS.paletteShadeDeltas]: paletteShadeDeltas,
+    [IDS.paletteLoadShade]: (machine, linked) => surfaceLoadFloat(machine, linked, "SFtmp"),
+    [IDS.flareSaveControl]: flareSaveControl,
+    [IDS.flareSpokeDelta]: flareSpokeDelta,
     ...overrides,
   };
 }
