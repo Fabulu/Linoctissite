@@ -6542,19 +6542,34 @@ function rectangle(machine, linked) {
   let pointer = (target + top * alignment + left) >>> 0;
   let verticalStart = start;
   const effect = memory[p.rectangleeffect] | 0;
+  const effectDescriptor = pixelEffects(linked).get(effect);
+  if (!effectDescriptor) throw new RangeError(`Unsupported Rectangle pixel effect handle ${effect}`);
+  const raw = effectDescriptor.kind === "raw" && !effectDescriptor.transparent;
+  const constantRows = horizontal.every((channel) => float32FromBits(channel) === 0);
+  const channelByte = (channel) => Math.max(0, Math.min(255,
+    nearestEven(Math.fround(float32FromBits(channel) * 255)),
+  ));
   for (let y = 0; y < scanlines; y += 1) {
-    let horizontalStart = verticalStart.slice();
+    let red = verticalStart[0];
+    let green = verticalStart[1];
+    let blue = verticalStart[2];
     memory[p.rectdisplaypointer] = pointer;
-    for (let axis = 0; axis < 3; axis += 1) memory[p[`recthstart${names[axis]}`]] = horizontalStart[axis];
-    for (let x = 0; x < pixels; x += 1) {
-      const channels = horizontalStart.map((channel) => Math.max(0, Math.min(255,
-        nearestEven(Math.fround(float32FromBits(channel) * 255)),
-      )));
-      const color = (channels[0] << 16) | (channels[1] << 8) | channels[2];
-      applyPixelEffect(memory, linked, p, effect, pointer, color);
-      pointer += 1;
-      for (let axis = 0; axis < 3; axis += 1) {
-        horizontalStart[axis] = bits(float32FromBits(horizontalStart[axis]) + float32FromBits(horizontal[axis]));
+    memory[p.recthstartred] = red;
+    memory[p.recthstartgreen] = green;
+    memory[p.recthstartblue] = blue;
+    if (raw && constantRows) {
+      const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
+      memory.fill(color, pointer, pointer + pixels);
+      pointer += pixels;
+    } else {
+      for (let x = 0; x < pixels; x += 1) {
+        const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
+        if (raw) memory[pointer] = color;
+        else applyPixelEffect(memory, linked, p, effect, pointer, color);
+        pointer += 1;
+        red = bits(float32FromBits(red) + float32FromBits(horizontal[0]));
+        green = bits(float32FromBits(green) + float32FromBits(horizontal[1]));
+        blue = bits(float32FromBits(blue) + float32FromBits(horizontal[2]));
       }
     }
     pointer += alignment - pixels;
