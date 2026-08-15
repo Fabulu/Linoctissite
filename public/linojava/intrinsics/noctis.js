@@ -1037,14 +1037,22 @@ function smoothStarPage(machine, linked) {
   let accumulator = 0;
   for (let index = 0; index < 56960; index += 1) {
     const destination = base + 320 + index;
-    for (let column = 0; column < 4; column += 1) {
-      const pointer = destination + column;
-      const sum = (memory[pointer - 320] & 0xff)
-        + (memory[pointer] & 0xff)
-        + (memory[pointer + 320] & 0xff)
-        + (memory[pointer + 640] & 0xff);
-      accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
-    }
+    let pointer = destination;
+    let sum = (memory[pointer - 320] & 0xff) + (memory[pointer] & 0xff)
+      + (memory[pointer + 320] & 0xff) + (memory[pointer + 640] & 0xff);
+    accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
+    pointer += 1;
+    sum = (memory[pointer - 320] & 0xff) + (memory[pointer] & 0xff)
+      + (memory[pointer + 320] & 0xff) + (memory[pointer + 640] & 0xff);
+    accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
+    pointer += 1;
+    sum = (memory[pointer - 320] & 0xff) + (memory[pointer] & 0xff)
+      + (memory[pointer + 320] & 0xff) + (memory[pointer + 640] & 0xff);
+    accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
+    pointer += 1;
+    sum = (memory[pointer - 320] & 0xff) + (memory[pointer] & 0xff)
+      + (memory[pointer + 320] & 0xff) + (memory[pointer + 640] & 0xff);
+    accumulator = (accumulator + ((sum & 0xfc) >>> 2)) & 0xff;
     accumulator >>>= 2;
     memory[destination] = accumulator;
   }
@@ -1652,7 +1660,7 @@ function rasterAddresses(linked) {
     "mp", "SADPT", "DBn", "DB8n", "DBflar", "DBcol", "DBent", "DBseg",
     "DBlimy", "DBlimx", "DBbytes", "DBdi", "DBdi0", "DBsi", "DBbx",
     "DBdx", "DBcx", "DBal", "DBah", "DBdl", "DBtmp", "DBmode", "BXminx",
-    "BXmaxx", "BXminy", "BXmaxy", "PGj", "PGdi", "PGval", "SCdi", "SCcx",
+    "BXmaxx", "BXminy", "BXmaxy", "PGj", "PGdi", "PGval", "SCdi", "SCcx", "SCal", "SCzf",
     "CSbyte", "CSrows", "CSfb1", "CSseg", "SGxp", "SGyp", "SGxa", "SGya",
     "SGpi", "SGpf", "SGa", "SGb", "SGL", "SGch", "SGgx", "SGgy", "SGt",
   ];
@@ -1660,6 +1668,62 @@ function rasterAddresses(linked) {
   cached.page = noctisBuffer(linked, "SADPT");
   rasterAddressCaches.set(linked, cached);
   return cached;
+}
+
+function scanRasterPage(memory, p, repeatEqual) {
+  // The polygon row scanner invokes this byte loop several times per row. Keep
+  // its VM-visible cursor, sample, and flag writes, including the zero-count
+  // no-op, while avoiding repeated symbol lookup and generic service dispatch.
+  let count = memory[p.SCcx] >>> 0;
+  if (count === 0) return;
+  let offset = memory[p.SCdi] & 0xffff;
+  const expected = memory[p.SCal] | 0;
+  let sample = 0;
+  let equal = false;
+  do {
+    sample = memory[p.page + offset] & 0xff;
+    count = (count - 1) >>> 0;
+    offset = (offset + 1) & 0xffff;
+    equal = sample === expected;
+  } while (count !== 0 && equal === repeatEqual);
+  memory[p.PGdi] = (offset - 1) & 0xffff;
+  memory[p.PGval] = sample;
+  memory[p.SCzf] = equal ? 1 : 0;
+  memory[p.SCdi] = offset;
+  memory[p.SCcx] = count | 0;
+}
+
+function scanPolygonRow(machine, p) {
+  const memory = machine.memory;
+  let accumulator = memory[p.DBdi] | 0;
+  memory[p.SCdi] = accumulator;
+  memory[p.SCcx] = memory[p.DBbytes];
+  memory[p.SCal] = 255;
+  memory[p.SCzf] = 0;
+  memory[p.DBmode] = 0;
+  scanRasterPage(memory, p, false);
+  accumulator = memory[p.SCzf] | 0;
+  machine.A = accumulator;
+  if (accumulator === 0) return;
+  accumulator = memory[p.SCdi] | 0;
+  machine.A = accumulator;
+  memory[p.DBsi] = accumulator;
+  scanRasterPage(memory, p, true);
+  accumulator = memory[p.SCdi] | 0;
+  machine.A = accumulator;
+  memory[p.DBbx] = accumulator;
+  scanRasterPage(memory, p, false);
+  accumulator = memory[p.SCzf] | 0;
+  machine.A = accumulator;
+  if (accumulator === 0) {
+    memory[p.DBmode] = 2;
+    return;
+  }
+  scanRasterPage(memory, p, true);
+  accumulator = memory[p.SCdi] | 0;
+  machine.A = accumulator;
+  memory[p.DBdi] = accumulator;
+  memory[p.DBmode] = 1;
 }
 
 function drawPolygonSegment(machine, linked, p) {
@@ -1811,7 +1875,7 @@ function drawPolygon(machine, linked) {
     memory[p.CSrows] = (memory[p.CSrows] + 1) | 0;
     memory[p.DBdi0] = rowOffset;
     memory[p.DBdi] = rowOffset;
-    databaseScan(machine, linked);
+    scanPolygonRow(machine, p);
     const mode = memory[p.DBmode] | 0;
     if (mode !== 0) {
       let start;
@@ -2091,6 +2155,96 @@ function polyRotate(machine, linked, p) {
   machine.C = mode;
 }
 
+function directPolySlot(memory, p, index) {
+  return readFloat64(memory, p.fw + index * 2);
+}
+
+function directPolyStoreWide(memory, p, index, number) {
+  writeFloat64(memory, p.fw + index * 2, number);
+}
+
+function directPolyStoreNarrow(memory, p, index, number, control) {
+  const narrowed = roundFloat32(number, control);
+  memory[p.FS0] = float32Bits(narrowed);
+  writeFloat64(memory, p.fw + index * 2, narrowed);
+  return narrowed;
+}
+
+function polyRotateDirect(machine, linked, p) {
+  // This is the real-time mapper's existing binary64 calculation schedule
+  // expressed directly in JavaScript. Stores still narrow at every original
+  // binary32 spill and reproduce the floating-point workspace side effects.
+  // Planet and surface generation continue to use the exact scalar emulator.
+  const memory = machine.memory;
+  const control = floatingPoint(machine).control;
+  const count = memory[p.PJnrv] | 0;
+  const mode = memory[p.PJmode] | 0;
+  memory[p.PJvr] = 0;
+  memory[p.PJdoflag] = 0;
+  let finalSecond = 0;
+  for (let vertex = 0; vertex < count; vertex += 1) {
+    const z = directPolyStoreNarrow(memory, p, p.FSZZ, directPolySlot(memory, p, p.FSINZ + vertex) - directPolySlot(memory, p, p.FSCAMZ), control);
+    const x = directPolyStoreNarrow(memory, p, p.FSXX, directPolySlot(memory, p, p.FSINX + vertex) - directPolySlot(memory, p, p.FSCAMX), control);
+    const y = directPolyStoreNarrow(memory, p, p.FSYY, directPolySlot(memory, p, p.FSINY + vertex) - directPolySlot(memory, p, p.FSCAMY), control);
+
+    let work = z * directPolySlot(memory, p, mode === 0 ? p.FSPSB : p.FSTSB);
+    directPolyStoreWide(memory, p, p.FSW0, work);
+    directPolyStoreNarrow(
+      memory, p,
+      p.FSRXF + vertex,
+      x * directPolySlot(memory, p, mode === 0 ? p.FSPCB : p.FSTCB) + work,
+      control,
+    );
+
+    work = z * directPolySlot(memory, p, p.FSTCB);
+    directPolyStoreWide(memory, p, p.FSW0, work);
+    const zProduct = x * directPolySlot(memory, p, p.FSTSB);
+    const z2 = directPolyStoreNarrow(memory, p, p.FSZ2, work - zProduct, control);
+
+    work = z2 * directPolySlot(memory, p, p.FSTCA);
+    directPolyStoreWide(memory, p, p.FSW0, work);
+    const rotatedZWide = y * directPolySlot(memory, p, p.FSTSA) + work;
+    directPolyStoreWide(memory, p, p.FSW1, rotatedZWide);
+    directPolyStoreNarrow(memory, p, p.FSRZF + vertex, rotatedZWide, control);
+    const near = directPolySlot(memory, p, p.FSUNEG);
+    const status = Number.isNaN(rotatedZWide) || Number.isNaN(near)
+      ? 17664 : rotatedZWide < near ? 256 : rotatedZWide === near ? 16384 : 0;
+    memory[p.FSW] = status;
+    floatingPoint(machine).status = status;
+    let comparison;
+    if ((status & 1024) !== 0) {
+      memory[p.FFLG] |= 1;
+      memory[p.FI] = 2;
+      comparison = 2;
+    } else if ((status & 16384) !== 0) {
+      memory[p.FI] = 0;
+      comparison = 0;
+    } else if ((status & 256) !== 0) {
+      memory[p.FI] = -1;
+      comparison = -1;
+    } else {
+      memory[p.FI] = 1;
+      comparison = 1;
+    }
+    const visible = comparison !== 2 && comparison >= 0 ? 1 : 0;
+    memory[p.rwf + vertex] = visible;
+    if (visible !== 0) memory[p.PJdoflag] = (memory[p.PJdoflag] + 1) | 0;
+
+    work = y * directPolySlot(memory, p, mode === 0 ? p.FSPCA : p.FSTCA);
+    directPolyStoreWide(memory, p, p.FSW0, work);
+    finalSecond = z2 * directPolySlot(memory, p, mode === 0 ? p.FSPSA : p.FSTSA);
+    directPolyStoreNarrow(memory, p, p.FSRYF + vertex, work - finalSecond, control);
+    memory[p.PJvr] = vertex + 1;
+    machine.A = (p.fw + (p.FSRYF + vertex) * 2) | 0;
+  }
+  memory[p.PGFi] = p.FSRYF + count - 1;
+  writeFloat64(memory, p.FA0, directPolySlot(memory, p, p.FSRYF + count - 1));
+  writeFloat64(memory, p.FB0, finalSecond);
+  writeFloat64(memory, p.FT0, finalSecond);
+  machine.A = (p.fw + (p.FSRYF + count - 1) * 2) | 0;
+  machine.C = mode;
+}
+
 function polyZclip(machine, linked, p) {
   const memory = machine.memory;
   const count = memory[p.PJnrv] | 0;
@@ -2327,7 +2481,7 @@ function poly3d(machine, linked) {
   const memory = machine.memory;
   const p = poly3dAddresses(linked);
   memory[p.PJmode] = 0;
-  polyRotate(machine, linked, p);
+  polyRotateDirect(machine, linked, p);
   memory[p.PJgate] = 1;
   if ((memory[p.PJdoflag] | 0) === 0) return;
   if ((memory[p.PJdoflag] | 0) === (memory[p.PJnrv] | 0)) polyZload(machine, linked, p);
@@ -2439,12 +2593,7 @@ function prepareMappedBlockSteps(machine, linked, p) {
   for (const [source, destination] of [
     [p.FSVX, p.FSK1], [p.FSVY, p.FSK2], [p.FSVZ, p.FSK3],
   ]) {
-    let result = scalarBinaryNumber(
-      readFloat64(memory, p.fw + source * 2),
-      readFloat64(memory, p.fw + p.FS16 * 2),
-      control,
-      "multiply",
-    );
+    let result = ((readFloat64(memory, p.fw + source * 2)) * (readFloat64(memory, p.fw + p.FS16 * 2)));
     writeScalarScratch(machine, linked, result);
     result = narrowScalar(machine, linked, result);
     writeFloat64(memory, p.fw + destination * 2, result);
@@ -2452,7 +2601,7 @@ function prepareMappedBlockSteps(machine, linked, p) {
   if ((memory[p.SPcull] | 0) !== 0) {
     for (const slot of [p.FSK1, p.FSK2, p.FSK3]) {
       const input = readFloat64(memory, p.fw + slot * 2);
-      let result = scalarBinaryNumber(input, input, control, "add");
+      let result = ((input) + (input));
       writeScalarScratch(machine, linked, result);
       result = narrowScalar(machine, linked, result);
       writeFloat64(memory, p.fw + slot * 2, result);
@@ -2511,7 +2660,7 @@ function polymap(machine, linked) {
   if ((memory[p.PJpreproject] | 0) === 0) {
     if (originalVertices === 3) {
       memory[p.PJnrv] = 3;
-      polyRotate(machine, linked, p);
+      polyRotateDirect(machine, linked, p);
       polyMove(machine, linked, p, p.FSRXF + 2, p.FSRXF + 3);
       polyMove(machine, linked, p, p.FSRYF + 2, p.FSRYF + 3);
       polyMove(machine, linked, p, p.FSRZF + 2, p.FSRZF + 3);
@@ -2520,7 +2669,7 @@ function polymap(machine, linked) {
       memory[p.PJdoflag] = (memory[p.PJdoflag] + flag) | 0;
     } else {
       memory[p.PJnrv] = 4;
-      polyRotate(machine, linked, p);
+      polyRotateDirect(machine, linked, p);
     }
   }
   memory[p.PJvr] = 4;
@@ -2886,45 +3035,20 @@ function projectMappedPolygon(machine, linked) {
   memory[minY] = 190;
   memory[maxY] = 10;
   for (let vertex = 0; vertex < count; vertex += 1) {
-    let factor = scalarBinaryNumber(
-      readFloat64(memory, floats + 50),
-      readFloat64(memory, floats + 128 + vertex * 2),
-      control,
-      "divide",
-    );
+    let factor = ((readFloat64(memory, floats + 50)) / (readFloat64(memory, floats + 128 + vertex * 2)));
     writeFloat64(memory, floats + 502, factor);
-    let projected = scalarBinaryNumber(
-      factor,
-      readFloat64(memory, floats + 96 + vertex * 2),
-      control,
-      "multiply",
-    );
+    let projected = ((factor) * (readFloat64(memory, floats + 96 + vertex * 2)));
     writeScalarScratch(machine, linked, projected);
-    projected = scalarBinaryNumber(
-      projected,
-      readFloat64(memory, floats + 38),
-      control,
-      "add",
-    );
+    projected = ((projected) + (readFloat64(memory, floats + 38)));
     writeScalarScratch(machine, linked, projected);
     const x = convertToInt32(projected, control);
     memory[points + vertex * 2] = x;
     if (x < memory[minX]) memory[minX] = x;
     if (x > memory[maxX]) memory[maxX] = x;
 
-    projected = scalarBinaryNumber(
-      factor,
-      readFloat64(memory, floats + 112 + vertex * 2),
-      control,
-      "multiply",
-    );
+    projected = ((factor) * (readFloat64(memory, floats + 112 + vertex * 2)));
     writeScalarScratch(machine, linked, projected);
-    projected = scalarBinaryNumber(
-      projected,
-      readFloat64(memory, floats + 40),
-      control,
-      "add",
-    );
+    projected = ((projected) + (readFloat64(memory, floats + 40)));
     writeScalarScratch(machine, linked, projected);
     const y = convertToInt32(projected, control);
     memory[points + vertex * 2 + 1] = y;
@@ -2938,30 +3062,15 @@ function projectMappedPoint(machine, linked) {
   const memory = machine.memory;
   const floats = value(memory, linked, "PJfwbase") >>> 0;
   const control = floatingPoint(machine).control;
-  const factor = scalarBinaryNumber(
-    readFloat64(memory, floats + 50),
-    readFloat64(memory, floats + 80),
-    control,
-    "divide",
-  );
+  const factor = ((readFloat64(memory, floats + 50)) / (readFloat64(memory, floats + 80)));
   writeFloat64(memory, floats + 502, factor);
   for (const [source, center, output] of [
     [64, 38, "GCx"],
     [72, 40, "GCy"],
   ]) {
-    let projected = scalarBinaryNumber(
-      factor,
-      readFloat64(memory, floats + source),
-      control,
-      "multiply",
-    );
+    let projected = ((factor) * (readFloat64(memory, floats + source)));
     writeScalarScratch(machine, linked, projected);
-    projected = scalarBinaryNumber(
-      projected,
-      readFloat64(memory, floats + center),
-      control,
-      "add",
-    );
+    projected = ((projected) + (readFloat64(memory, floats + center)));
     writeScalarScratch(machine, linked, projected);
     memory[address(linked, output)] = convertToInt32(projected, control);
   }
@@ -2971,39 +3080,19 @@ function terrainFacingDot(machine, linked) {
   const memory = machine.memory;
   const floats = value(memory, linked, "PJfwbase") >>> 0;
   const control = floatingPoint(machine).control;
-  let difference = scalarBinaryNumber(
-    readFloat64(memory, floats + 448),
-    readFloat64(memory, floats + 508),
-    control,
-    "subtract",
-  );
+  let difference = ((readFloat64(memory, floats + 448)) - (readFloat64(memory, floats + 508)));
   writeScalarScratch(machine, linked, difference);
-  let sum = scalarBinaryNumber(
-    difference,
-    readFloat64(memory, floats + 470),
-    control,
-    "multiply",
-  );
+  let sum = ((difference) * (readFloat64(memory, floats + 470)));
   writeFloat64(memory, floats + 496, sum);
   for (const [camera, vertex, normal, spillSum] of [
     [450, 516, 472, true],
     [452, 524, 474, false],
   ]) {
-    difference = scalarBinaryNumber(
-      readFloat64(memory, floats + camera),
-      readFloat64(memory, floats + vertex),
-      control,
-      "subtract",
-    );
+    difference = ((readFloat64(memory, floats + camera)) - (readFloat64(memory, floats + vertex)));
     writeScalarScratch(machine, linked, difference);
-    let product = scalarBinaryNumber(
-      difference,
-      readFloat64(memory, floats + normal),
-      control,
-      "multiply",
-    );
+    let product = ((difference) * (readFloat64(memory, floats + normal)));
     writeScalarScratch(machine, linked, product);
-    sum = scalarBinaryNumber(product, sum, control, "add");
+    sum = ((product) + (sum));
     if (spillSum) writeFloat64(memory, floats + 496, sum);
   }
   writeScalarScratch(machine, linked, sum);
@@ -3017,15 +3106,10 @@ function polygonMidpoint(machine, linked, vertices) {
   for (const [source, destination] of [[64, 408], [72, 410], [80, 412]]) {
     let sum = readFloat64(memory, floats + source);
     for (let vertex = 1; vertex < vertices; vertex += 1) {
-      sum = scalarBinaryNumber(
-        sum,
-        readFloat64(memory, floats + source + vertex * 2),
-        control,
-        "add",
-      );
+      sum = ((sum) + (readFloat64(memory, floats + source + vertex * 2)));
       writeScalarScratch(machine, linked, sum);
     }
-    sum = scalarBinaryNumber(sum, factor, control, "multiply");
+    sum = ((sum) * (factor));
     writeScalarScratch(machine, linked, sum);
     writeFloat64(memory, floats + destination, narrowScalar(machine, linked, sum));
   }
@@ -3043,26 +3127,11 @@ function transformMappedVertices(machine, linked) {
       [72, 392, 410, 418],
       [80, 400, 412, 420],
     ]) {
-      let result = scalarBinaryNumber(
-        readFloat64(memory, floats + source + vertex * 2),
-        readFloat64(memory, floats + midpoint),
-        control,
-        "subtract",
-      );
+      let result = ((readFloat64(memory, floats + source + vertex * 2)) - (readFloat64(memory, floats + midpoint)));
       writeScalarScratch(machine, linked, result);
-      result = scalarBinaryNumber(
-        result,
-        readFloat64(memory, floats + scale),
-        control,
-        "multiply",
-      );
+      result = ((result) * (readFloat64(memory, floats + scale)));
       writeScalarScratch(machine, linked, result);
-      result = scalarBinaryNumber(
-        result,
-        readFloat64(memory, floats + midpoint),
-        control,
-        "add",
-      );
+      result = ((result) + (readFloat64(memory, floats + midpoint)));
       writeScalarScratch(machine, linked, result);
       writeFloat64(
         memory,
@@ -3085,20 +3154,10 @@ function preparePolygonVectors(machine, linked, lastVertex) {
   ]) {
     const first = narrowScalar(machine, linked, readFloat64(memory, floats + source));
     writeFloat64(memory, floats + origin, first);
-    let result = scalarBinaryNumber(
-      readFloat64(memory, floats + source + 2),
-      first,
-      control,
-      "subtract",
-    );
+    let result = ((readFloat64(memory, floats + source + 2)) - (first));
     writeScalarScratch(machine, linked, result);
     writeFloat64(memory, floats + firstEdge, narrowScalar(machine, linked, result));
-    result = scalarBinaryNumber(
-      first,
-      readFloat64(memory, floats + source + lastVertex * 2),
-      control,
-      "subtract",
-    );
+    result = ((first) - (readFloat64(memory, floats + source + lastVertex * 2)));
     writeScalarScratch(machine, linked, result);
     writeFloat64(memory, floats + secondEdge, narrowScalar(machine, linked, result));
   }
@@ -3110,12 +3169,7 @@ function scalePolygonBasis(machine, linked) {
   const control = floatingPoint(machine).control;
   const scale = readFloat64(memory, floats + 484);
   for (const [source, destination] of [[6, 18], [8, 20], [10, 22]]) {
-    const result = scalarBinaryNumber(
-      readFloat64(memory, floats + source),
-      scale,
-      control,
-      "multiply",
-    );
+    const result = ((readFloat64(memory, floats + source)) * (scale));
     writeScalarScratch(machine, linked, result);
     writeFloat64(memory, floats + destination, narrowScalar(machine, linked, result));
   }
@@ -3127,7 +3181,7 @@ function doublePolygonBasis(machine, linked) {
   const control = floatingPoint(machine).control;
   for (const slot of [18, 20, 22]) {
     const input = readFloat64(memory, floats + slot);
-    const result = scalarBinaryNumber(input, input, control, "add");
+    const result = ((input) + (input));
     writeScalarScratch(machine, linked, result);
     writeFloat64(memory, floats + slot, narrowScalar(machine, linked, result));
   }
@@ -3140,23 +3194,13 @@ function mappedFacing(machine, linked) {
   const edge1 = [];
   const edge2 = [];
   for (const source of [504, 512, 520]) {
-    let result = scalarBinaryNumber(
-      readFloat64(memory, floats + source),
-      readFloat64(memory, floats + source + 4),
-      control,
-      "subtract",
-    );
+    let result = ((readFloat64(memory, floats + source)) - (readFloat64(memory, floats + source + 4)));
     writeScalarScratch(machine, linked, result);
     result = narrowScalar(machine, linked, result);
     edge1.push(result);
     writeFloat64(memory, floats + 464 + edge1.length * 2 - 2, result);
 
-    result = scalarBinaryNumber(
-      readFloat64(memory, floats + source + 2),
-      readFloat64(memory, floats + source + 4),
-      control,
-      "subtract",
-    );
+    result = ((readFloat64(memory, floats + source + 2)) - (readFloat64(memory, floats + source + 4)));
     writeScalarScratch(machine, linked, result);
     result = narrowScalar(machine, linked, result);
     edge2.push(result);
@@ -3171,11 +3215,11 @@ function mappedFacing(machine, linked) {
   const normal = [];
   for (let axis = 0; axis < 3; axis += 1) {
     const [a1, a2, b1, b2] = crossTerms[axis];
-    const first = scalarBinaryNumber(edge1[a1], edge2[a2], control, "multiply");
+    const first = ((edge1[a1]) * (edge2[a2]));
     writeFloat64(memory, floats + 496, first);
-    let second = scalarBinaryNumber(edge1[b1], edge2[b2], control, "multiply");
+    let second = ((edge1[b1]) * (edge2[b2]));
     writeScalarScratch(machine, linked, second);
-    second = scalarBinaryNumber(first, second, control, "subtract");
+    second = ((first) - (second));
     writeScalarScratch(machine, linked, second);
     const component = narrowScalar(machine, linked, second);
     normal.push(component);
@@ -3184,20 +3228,15 @@ function mappedFacing(machine, linked) {
 
   let sum = 0;
   for (let axis = 0; axis < 3; axis += 1) {
-    let difference = scalarBinaryNumber(
-      readFloat64(memory, floats + 448 + axis * 2),
-      readFloat64(memory, floats + 508 + axis * 8),
-      control,
-      "subtract",
-    );
+    let difference = ((readFloat64(memory, floats + 448 + axis * 2)) - (readFloat64(memory, floats + 508 + axis * 8)));
     writeScalarScratch(machine, linked, difference);
-    let product = scalarBinaryNumber(difference, normal[axis], control, "multiply");
+    let product = ((difference) * (normal[axis]));
     if (axis === 0) {
       sum = product;
       writeFloat64(memory, floats + 496, sum);
     } else {
       writeScalarScratch(machine, linked, product);
-      sum = scalarBinaryNumber(product, sum, control, "add");
+      sum = ((product) + (sum));
       if (axis === 1) writeFloat64(memory, floats + 496, sum);
     }
   }
@@ -3209,28 +3248,13 @@ function polygonGradient(machine, linked, xi, yi, xo, yo, scale, destination) {
   const memory = machine.memory;
   const floats = value(memory, linked, "PJfwbase") >>> 0;
   const control = floatingPoint(machine).control;
-  const first = scalarBinaryNumber(
-    readFloat64(memory, floats + xi * 2),
-    readFloat64(memory, floats + yi * 2),
-    control,
-    "multiply",
-  );
+  const first = ((readFloat64(memory, floats + xi * 2)) * (readFloat64(memory, floats + yi * 2)));
   writeFloat64(memory, floats + 502, first);
-  let second = scalarBinaryNumber(
-    readFloat64(memory, floats + xo * 2),
-    readFloat64(memory, floats + yo * 2),
-    control,
-    "multiply",
-  );
+  let second = ((readFloat64(memory, floats + xo * 2)) * (readFloat64(memory, floats + yo * 2)));
   writeScalarScratch(machine, linked, second);
-  second = scalarBinaryNumber(first, second, control, "subtract");
+  second = ((first) - (second));
   writeScalarScratch(machine, linked, second);
-  second = scalarBinaryNumber(
-    second,
-    readFloat64(memory, floats + scale * 2),
-    control,
-    "multiply",
-  );
+  second = ((second) * (readFloat64(memory, floats + scale * 2)));
   writeScalarScratch(machine, linked, second);
   const narrowed = narrowScalar(machine, linked, second);
   writeFloat64(memory, floats + destination * 2, narrowed);
@@ -3276,82 +3300,32 @@ function terrainTraceRow(machine, linked) {
     return number;
   };
   let factor = spill(memory[ipart + row] | 0);
-  factor = spill(scalarBinaryNumber(
-    factor,
-    readFloat64(memory, floats + 38),
-    control,
-    "subtract",
-  ));
-  factor = scalarBinaryNumber(
-    factor,
-    readFloat64(memory, floats + 36),
-    control,
-    "add",
-  );
+  factor = spill(((factor) - (readFloat64(memory, floats + 38))));
+  factor = ((factor) + (readFloat64(memory, floats + 36)));
   writeFloat64(memory, floats + 502, factor);
 
-  let z = scalarBinaryNumber(
-    factor,
-    readFloat64(memory, floats + 10),
-    control,
-    "multiply",
-  );
+  let z = ((factor) * (readFloat64(memory, floats + 10)));
   writeFloat64(memory, floats + 496, z);
   let vertical = spill(row);
-  vertical = spill(scalarBinaryNumber(
-    vertical,
-    readFloat64(memory, floats + 40),
-    control,
-    "subtract",
-  ));
-  vertical = spill(scalarBinaryNumber(
-    vertical,
-    readFloat64(memory, floats + 4),
-    control,
-    "multiply",
-  ));
-  z = spill(scalarBinaryNumber(vertical, z, control, "add"));
-  z = scalarBinaryNumber(z, readFloat64(memory, floats + 16), control, "add");
+  vertical = spill(((vertical) - (readFloat64(memory, floats + 40))));
+  vertical = spill(((vertical) * (readFloat64(memory, floats + 4))));
+  z = spill(((vertical) + (z)));
+  z = ((z) + (readFloat64(memory, floats + 16)));
   writeFloat64(memory, floats + 498, z);
   writeFloat64(memory, floats + 30, narrowScalar(machine, linked, z));
 
-  let reciprocal = spill(scalarBinaryNumber(
-    readFloat64(memory, floats + 36),
-    z,
-    control,
-    "divide",
-  ));
+  let reciprocal = spill(((readFloat64(memory, floats + 36)) / (z)));
   reciprocal = narrowScalar(machine, linked, reciprocal);
   writeFloat64(memory, floats + 24, reciprocal);
 
   const coordinate = (axisVector, gradient, origin, destination) => {
-    let result = scalarBinaryNumber(
-      factor,
-      readFloat64(memory, floats + axisVector),
-      control,
-      "multiply",
-    );
+    let result = ((factor) * (readFloat64(memory, floats + axisVector)));
     writeFloat64(memory, floats + 496, result);
     let rowPart = spill(row);
-    rowPart = spill(scalarBinaryNumber(
-      rowPart,
-      readFloat64(memory, floats + 40),
-      control,
-      "subtract",
-    ));
-    rowPart = spill(scalarBinaryNumber(
-      rowPart,
-      readFloat64(memory, floats + gradient),
-      control,
-      "multiply",
-    ));
-    result = spill(scalarBinaryNumber(rowPart, result, control, "add"));
-    result = spill(scalarBinaryNumber(
-      result,
-      readFloat64(memory, floats + origin),
-      control,
-      "add",
-    ));
+    rowPart = spill(((rowPart) - (readFloat64(memory, floats + 40))));
+    rowPart = spill(((rowPart) * (readFloat64(memory, floats + gradient))));
+    result = spill(((rowPart) + (result)));
+    result = spill(((result) + (readFloat64(memory, floats + origin))));
     result = narrowScalar(machine, linked, result);
     writeFloat64(memory, floats + destination, result);
     return result;
@@ -3359,21 +3333,11 @@ function terrainTraceRow(machine, linked) {
   const x = coordinate(6, 0, 12, 26);
   const y = coordinate(8, 2, 14, 28);
 
-  let texture = spill(scalarBinaryNumber(
-    x,
-    readFloat64(memory, floats + 32),
-    control,
-    "multiply",
-  ));
-  texture = spill(scalarBinaryNumber(texture, reciprocal, control, "multiply"));
+  let texture = spill(((x) * (readFloat64(memory, floats + 32))));
+  texture = spill(((texture) * (reciprocal)));
   memory[address(linked, "SPu")] = convertToInt32(texture, control);
-  texture = spill(scalarBinaryNumber(
-    y,
-    readFloat64(memory, floats + 34),
-    control,
-    "multiply",
-  ));
-  texture = spill(scalarBinaryNumber(texture, reciprocal, control, "multiply"));
+  texture = spill(((y) * (readFloat64(memory, floats + 34))));
+  texture = spill(((texture) * (reciprocal)));
   memory[address(linked, "SPv")] = convertToInt32(texture, control);
 }
 
@@ -3390,7 +3354,7 @@ function runTerrainEdgeRows(machine, linked, bndx, slope, row, count) {
     memory[address(linked, "EWax")] = edge;
     if (edge > (memory[fpart + row] | 0)) memory[fpart + row] = Math.min(edge, 311);
     if (edge < (memory[ipart + row] | 0)) memory[ipart + row] = Math.max(edge, 5);
-    bndx = scalarBinaryNumber(bndx, slope, control, "add");
+    bndx = ((bndx) + (slope));
     writeFloat64(memory, floats + 44, bndx);
     row += 1;
     count -= 1;
@@ -3441,7 +3405,7 @@ function polygonEdges(machine, linked) {
     memory[address(linked, "EWx2")] = x2;
     memory[address(linked, "EWy2")] = y2;
     if (y2 !== y1) {
-      let slope = scalarBinaryNumber(x2 - x1, y2 - y1, control, "divide");
+      let slope = ((x2 - x1) / (y2 - y1));
       writeScalarScratch(machine, linked, slope);
       slope = narrowScalar(machine, linked, slope);
       writeFloat64(memory, floats + 42, slope);
@@ -3449,9 +3413,9 @@ function polygonEdges(machine, linked) {
       let firstRow = y1;
       if (y1 < 5) {
         firstRow = 5;
-        let correction = scalarBinaryNumber(5 - y1, slope, control, "multiply");
+        let correction = ((5 - y1) * (slope));
         writeScalarScratch(machine, linked, correction);
-        correction = scalarBinaryNumber(x1, correction, control, "add");
+        correction = ((x1) + (correction));
         writeScalarScratch(machine, linked, correction);
         x1 = convertToInt32(correction, control);
         memory[address(linked, "EWx1")] = x1;
@@ -3481,12 +3445,7 @@ function terrainUvNext(machine, linked) {
   const floats = value(memory, linked, "PGfwbase") >>> 0;
   const control = floatingPoint(machine).control;
   const advance = (position, step, wide, narrowName) => {
-    const result = scalarBinaryNumber(
-      readFloat64(memory, floats + position),
-      readFloat64(memory, floats + step),
-      control,
-      "add",
-    );
+    const result = ((readFloat64(memory, floats + position)) + (readFloat64(memory, floats + step)));
     writeFloat64(memory, floats + wide, result);
     writeNamedFloat32(machine, linked, narrowName, result);
     const narrowed = readNamedFloat32(memory, linked, narrowName);
@@ -3496,25 +3455,15 @@ function terrainUvNext(machine, linked) {
   const z = advance(30, 22, 48, "PGUVZ");
   const x = advance(26, 18, 50, "PGUVX");
   const y = advance(28, 20, 52, "PGUVY");
-  let reciprocal = scalarBinaryNumber(
-    readFloat64(memory, floats + 36),
-    z,
-    control,
-    "divide",
-  );
+  let reciprocal = ((readFloat64(memory, floats + 36)) / (z));
   writeFloat64(memory, floats + 54, reciprocal);
   writeNamedFloat32(machine, linked, "PGUVK4", reciprocal);
   reciprocal = readNamedFloat32(memory, linked, "PGUVK4");
   writeFloat64(memory, floats + 24, reciprocal);
   const project = (coordinate, scale, outputName) => {
-    let result = scalarBinaryNumber(
-      coordinate,
-      readFloat64(memory, floats + scale),
-      control,
-      "multiply",
-    );
+    let result = ((coordinate) * (readFloat64(memory, floats + scale)));
     writeFloat64(memory, floats + 54, result);
-    result = scalarBinaryNumber(result, reciprocal, control, "multiply");
+    result = ((result) * (reciprocal));
     writeFloat64(memory, floats + 54, result);
     memory[address(linked, outputName)] = convertToInt32(result, control);
   };
@@ -5459,7 +5408,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.databaseScan]: databaseScan,
     [SERVICE_IDS.copyCupolaPanel]: copyCupolaPanel,
     [SERVICE_IDS.drawStickLine]: drawStickLine,
-    [SERVICE_IDS.rotateVertices]: (machine, linked) => rotateVertices(machine, linked, true),
+    [SERVICE_IDS.rotateVertices]: (machine, linked) => polyRotateDirect(machine, linked, poly3dAddresses(linked)),
     [SERVICE_IDS.rotateSelectedVertices]: (machine, linked) => rotateVertices(machine, linked, false),
     [SERVICE_IDS.projectMapGeneric]: projectMapGeneric,
     [SERVICE_IDS.project3d]: project3d,
