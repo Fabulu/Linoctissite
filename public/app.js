@@ -30,6 +30,9 @@ let gameHeight = 200;
 const heldKeys = Object.create(null);
 const consoleInput = [];
 let frameCount = 0;
+let frameRate = 0;
+let rateStartedAt = performance.now();
+let rateStartedFrame = 0;
 let linoFullscreenPress = false;
 let linoWindowDrag = null;
 let linoWindowResize = null;
@@ -116,6 +119,13 @@ function present(origin, width, height, memory) {
     );
   }
   frameCount += 1;
+  const now = performance.now();
+  const elapsed = now - rateStartedAt;
+  if (elapsed >= 1000) {
+    frameRate = (frameCount - rateStartedFrame) * 1000 / elapsed;
+    rateStartedFrame = frameCount;
+    rateStartedAt = now;
+  }
 }
 
 status.textContent = "Compiling the real 73-module Noctis project in this browser...";
@@ -204,7 +214,8 @@ async function requestGameFullscreen() {
 function runFrame() {
   try {
     const result = program.run(250_000);
-    status.textContent = `Noctis / ${frameCount} frame${frameCount === 1 ? "" : "s"} / ${result.status}`;
+    const rate = frameRate > 0 ? ` / ${frameRate.toFixed(1)} FPS` : "";
+    status.textContent = `Noctis / ${frameCount} presentations${rate} / ${result.status}`;
     if (!program.machine.halted) {
       if (result.sleepMilliseconds > 0) setTimeout(runFrame, result.sleepMilliseconds);
       else requestAnimationFrame(runFrame);

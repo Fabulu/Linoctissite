@@ -223,6 +223,15 @@ const SERVICE_IDS = Object.freeze({
   pgfReverseDivide: "service:pgfrquo",
   pgfInteger: "service:pgfint",
   pgfFromInteger: "service:pgffromint",
+  framebufferDigit: "service:fbdigitat",
+  alphaDim: "service:fxalphadim",
+  antialiasingDim: "service:fxantialiasingdim",
+  clearLayer: "service:clearl2l",
+  clearLayerRegion: "service:clearl2lregion",
+  copyLayer: "service:copyl2l",
+  copyLayerRegion: "service:copyl2lregion",
+  compareFloat64: "service:fcmp",
+  spaceClear: "service:vhgspaceclear",
 });
 
 const symbolCaches = new WeakMap();
@@ -537,6 +546,65 @@ function pgfFromInteger(machine, linked) {
   convertIntToFloat(machine, linked);
 }
 
+function pgfInlineLayout(linked) {
+  return {
+    fw: address(linked, "fw"), pgfi: address(linked, "PGFi"), pgfj: address(linked, "PGFj"),
+    fa: address(linked, "FA0"), fb: address(linked, "FB0"), ft: address(linked, "FT0"),
+    fs: address(linked, "FS0"), pgft: address(linked, "PGFt"), pgfu: address(linked, "PGFu"),
+    fi: address(linked, "FI"),
+  };
+}
+
+function pgfLoadInline(linked, destination, register = "A") {
+  const p = pgfInlineLayout(linked);
+  return `q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[${p[destination]}]=m[q];m[${p[destination] + 1}]=m[q+1];${register}=q|0;`;
+}
+
+function pgfBinaryInline(linked, operator) {
+  const p = pgfInlineLayout(linked);
+  return `${pgfLoadInline(linked, "fb")}f64w(${p.fa},f64r(${p.fa})${operator}f64r(${p.fb}));`;
+}
+
+function pgfReverseBinaryInline(linked, operator) {
+  const p = pgfInlineLayout(linked);
+  return `m[${p.ft}]=m[${p.fa}];m[${p.ft + 1}]=m[${p.fa + 1}];${pgfLoadInline(linked, "fa")}m[${p.fb}]=m[${p.ft}];m[${p.fb + 1}]=m[${p.ft + 1}];f64w(${p.fa},f64r(${p.fa})${operator}f64r(${p.fb}));`;
+}
+
+const PGF_SERVICE_INLINES = Object.freeze({
+  [SERVICE_IDS.pgfA]: (linked) => pgfLoadInline(linked, "fa"),
+  [SERVICE_IDS.pgfB]: (linked) => pgfLoadInline(linked, "fb"),
+  [SERVICE_IDS.pgfStoreA]: (linked) => {
+    const p = pgfInlineLayout(linked);
+    return `q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[q]=m[${p.fa}];m[q+1]=m[${p.fa + 1}];A=q|0;`;
+  },
+  [SERVICE_IDS.pgfMove]: (linked) => {
+    const p = pgfInlineLayout(linked);
+    return `q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;u=(${p.fw}+2*(m[${p.pgfj}]|0))>>>0;m[u]=m[q];m[u+1]=m[q+1];A=q|0;C=u|0;`;
+  },
+  [SERVICE_IDS.pgfLoadFloat32]: (linked) => {
+    const p = pgfInlineLayout(linked);
+    return `m[${p.fs}]=m[${p.pgft}];f64w(${p.fa},fread(m[${p.fs}]|0));`;
+  },
+  [SERVICE_IDS.pgfLoadFloat64]: (linked) => {
+    const p = pgfInlineLayout(linked);
+    return `m[${p.fa}]=m[${p.pgft}];m[${p.fa + 1}]=m[${p.pgfu}];`;
+  },
+  [SERVICE_IDS.pgfSetFloat32]: (linked) => {
+    const p = pgfInlineLayout(linked);
+    return `m[${p.fs}]=m[${p.pgft}];f64w(${p.fa},fread(m[${p.fs}]|0));q=(${p.fw}+2*(m[${p.pgfi}]|0))>>>0;m[q]=m[${p.fa}];m[q+1]=m[${p.fa + 1}];A=q|0;`;
+  },
+  [SERVICE_IDS.pgfAdd]: (linked) => pgfBinaryInline(linked, "+"),
+  [SERVICE_IDS.pgfSubtract]: (linked) => pgfBinaryInline(linked, "-"),
+  [SERVICE_IDS.pgfMultiply]: (linked) => pgfBinaryInline(linked, "*"),
+  [SERVICE_IDS.pgfDivide]: (linked) => pgfBinaryInline(linked, "/"),
+  [SERVICE_IDS.pgfReverseSubtract]: (linked) => pgfReverseBinaryInline(linked, "-"),
+  [SERVICE_IDS.pgfReverseDivide]: (linked) => pgfReverseBinaryInline(linked, "/"),
+  [SERVICE_IDS.pgfFromInteger]: (linked) => {
+    const p = pgfInlineLayout(linked);
+    return `f64w(${p.fa},m[${p.fi}]|0);`;
+  },
+});
+
 function noctisBuffer(linked, offsetName) {
   return (address(linked, "nw") + address(linked, offsetName)) >>> 0;
 }
@@ -651,6 +719,229 @@ function pageLoad(machine, linked) {
   const page = noctisBuffer(linked, "SADPT");
   const offset = value(memory, linked, "PGdi") & 0xffff;
   memory[address(linked, "PGval")] = memory[page + offset] & 0xff;
+}
+
+function framebufferDigit(machine, linked) {
+  const memory = machine.memory;
+  const digit = value(memory, linked, "DGdigit");
+  machine.A = digit;
+  if ((digit >>> 0) <= 32 || (digit >>> 0) > 96) return;
+
+  const colour = value(memory, linked, "DGcolor") & 0xff;
+  const shader = value(memory, linked, "DGshader");
+  const pixelAddress = address(linked, "DGpix");
+  const mapByteAddress = address(linked, "DGmapb");
+  const dAddress = address(linked, "DGd");
+  const nAddress = address(linked, "DGn");
+  const iAddress = address(linked, "DGi");
+  const valueAddress = address(linked, "DGval");
+  const rowAddress = address(linked, "DGrow");
+  const bitAddress = address(linked, "DGm");
+  const memoryBytePointer = address(linked, "MBptr");
+  const memoryByteValue = address(linked, "MBval");
+  const mapAddress = address(linked, "digimap2");
+  const page = noctisBuffer(linked, "RPSM");
+  const d = Math.imul((digit - 32) | 0, 36) | 0;
+  let pixel = colour % 64;
+  memory[pixelAddress] = pixel;
+  memory[mapByteAddress] = ((colour >>> 6) << 6) | 0;
+  memory[dAddress] = d;
+  memory[nAddress] = 0;
+
+  let rowBits = 0;
+  for (let row = 0; row < 36; row += 1) {
+    let index = Math.imul(row, 256) - 5;
+    memory[iAddress] = index;
+    memory[valueAddress] = 0;
+    memory[page + index - 1] = 0;
+    rowBits = memory[mapAddress + row + d] | 0;
+    memory[rowAddress] = rowBits;
+    memory[bitAddress] = 0;
+    for (let bit = 0; bit < 32; bit += 1) {
+      const output = (rowBits & (1 << bit)) !== 0 ? pixel : 0;
+      memory[valueAddress] = output;
+      memory[page + index] = output & 0xff;
+      index += 1;
+      memory[iAddress] = index;
+      memory[bitAddress] = bit + 1;
+    }
+    if (shader !== 0) {
+      pixel = (pixel - 1) | 0;
+      memory[pixelAddress] = pixel;
+    }
+    memory[nAddress] = row + 1;
+  }
+  memory[valueAddress] = 0;
+  memory[page + 9210] = 0;
+  memory[memoryBytePointer] = (address(linked, "RPSM") + 9210) | 0;
+  memory[memoryByteValue] = 0;
+  machine.A = (address(linked, "nw") + address(linked, "RPSM") + 9210) | 0;
+  machine.B = 0x80000000 | 0;
+  machine.C = 0;
+  machine.D = 31;
+}
+
+function alphaDim(machine) {
+  const memory = machine.memory;
+  const destination = machine.A >>> 0;
+  const source = machine.B | 0;
+  const current = memory[destination] | 0;
+  let blue = (current & 0xff) - (source & 0xff);
+  let green = (current & 0xff00) - (source & 0xff00);
+  let red = (current & 0xff0000) - (source & 0xff0000);
+  if (blue < 0) blue = 0;
+  if (green < 0) green = 0;
+  if (red < 0) red = 0;
+  const result = (blue | green | red) | 0;
+  memory[destination] = result;
+  machine.A = destination | 0;
+  machine.B = source & 0xff0000;
+  machine.C = result;
+  machine.D = green | 0;
+  machine.E = red | 0;
+}
+
+function antialiasingDim(machine, linked) {
+  const origin = machine.A | 0;
+  const source = machine.B | 0;
+  const width = value(machine.memory, linked, "Display Width");
+  const neighbour = ((source & 0xf0f0f0) >>> 4) | 0;
+  machine.A = origin;
+  machine.B = source;
+  alphaDim(machine);
+  for (const destination of [origin - 1, origin + 1, origin - width, origin + width]) {
+    machine.A = destination | 0;
+    machine.B = neighbour;
+    alphaDim(machine);
+  }
+  machine.A = origin;
+}
+
+function normalizeRegion(memory, linked, pointer) {
+  let left = memory[pointer] | 0;
+  let top = memory[pointer + 1] | 0;
+  let right = memory[pointer + 2] | 0;
+  let bottom = memory[pointer + 3] | 0;
+  if (right < left) [left, right] = [right, left];
+  if (bottom < top) [top, bottom] = [bottom, top];
+  const width = value(memory, linked, "Display Width");
+  const height = value(memory, linked, "Display Height");
+  if (left < 0) left = 0;
+  if (top < 0) top = 0;
+  if (right < 0) right = 0;
+  if (bottom < 0) bottom = 0;
+  if (left >= width) left = width - 1;
+  if (top >= height) top = height - 1;
+  if (right >= width) right = width - 1;
+  if (bottom >= height) bottom = height - 1;
+  memory[pointer] = left;
+  memory[pointer + 1] = top;
+  memory[pointer + 2] = right;
+  memory[pointer + 3] = bottom;
+  return { left, top, right, bottom, width };
+}
+
+function clearLayerRegion(machine, linked) {
+  const memory = machine.memory;
+  const pointer = value(memory, linked, "L2L Region");
+  if (pointer === 0) return;
+  memory[address(linked, "Region To Normalize")] = pointer;
+  const region = normalizeRegion(memory, linked, pointer);
+  const destination = value(memory, linked, "Destination Layer");
+  const colour = value(memory, linked, "L2L Region Color");
+  const rowWidth = (region.right - region.left + 1) | 0;
+  const rows = (region.bottom - region.top + 1) | 0;
+  let rowStart = (destination + Math.imul(region.top, region.width) + region.left) | 0;
+  for (let row = 0; row < rows; row += 1) {
+    memory.fill(colour, rowStart, rowStart + rowWidth);
+    rowStart = (rowStart + region.width) | 0;
+  }
+  machine.A = rowStart;
+  machine.B = rowWidth;
+  machine.C = 0;
+  machine.D = colour;
+  machine.E = pointer;
+}
+
+function clearLayer(machine, linked) {
+  const memory = machine.memory;
+  const count = Math.imul(
+    value(memory, linked, "Display Width"), value(memory, linked, "Display Height"),
+  ) | 0;
+  const destination = value(memory, linked, "Destination Layer");
+  const colour = value(memory, linked, "L2L Region Color");
+  memory.fill(colour, destination, destination + count);
+  machine.A = 0;
+  machine.B = (destination + count) | 0;
+  machine.C = colour;
+}
+
+function copyLayer(machine, linked) {
+  const memory = machine.memory;
+  const count = Math.imul(
+    value(memory, linked, "Display Width"), value(memory, linked, "Display Height"),
+  ) | 0;
+  let source = value(memory, linked, "Source Layer");
+  let destination = value(memory, linked, "Destination Layer");
+  for (let index = 0; index < count; index += 1) memory[destination++] = memory[source++];
+  machine.A = 0;
+  machine.B = source;
+  machine.C = destination;
+}
+
+function copyLayerRegion(machine, linked) {
+  const memory = machine.memory;
+  const pointer = value(memory, linked, "L2L Region");
+  if (pointer === 0) return;
+  memory[address(linked, "Region To Normalize")] = pointer;
+  const region = normalizeRegion(memory, linked, pointer);
+  const rowWidth = (region.right - region.left + 1) | 0;
+  const rows = (region.bottom - region.top + 1) | 0;
+  const rowOffset = (Math.imul(region.top, region.width) + region.left) | 0;
+  let source = (value(memory, linked, "Source Layer") + rowOffset) | 0;
+  let destination = (value(memory, linked, "Destination Layer") + rowOffset) | 0;
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < rowWidth; column += 1) {
+      memory[destination + column] = memory[source + column];
+    }
+    source = (source + region.width) | 0;
+    destination = (destination + region.width) | 0;
+  }
+  machine.A = source;
+  machine.B = destination;
+  machine.C = rowWidth;
+  machine.D = 0;
+  machine.E = pointer;
+}
+
+function spaceClear(machine, linked) {
+  const memory = machine.memory;
+  const start = noctisBuffer(linked, "RADPT") + 2880;
+  memory.fill(0, start, start + 58240);
+  machine.A = (start + 58240) | 0;
+  machine.B = 0;
+  machine.C = 0;
+}
+
+function compareFloat64Service(machine, linked) {
+  const memory = machine.memory;
+  compareFloat64(machine, linked);
+  const status = value(memory, linked, "FSW");
+  if ((status & 0x0400) !== 0) {
+    const flags = value(memory, linked, "FFLG") | 1;
+    memory[address(linked, "FFLG")] = flags;
+    memory[address(linked, "FI")] = 2;
+    machine.A = flags;
+  } else if ((status & 0x4000) !== 0) {
+    memory[address(linked, "FI")] = 0;
+    machine.A = status & 0x4000;
+  } else if ((status & 0x0100) !== 0) {
+    memory[address(linked, "FI")] = -1;
+    machine.A = -1;
+  } else {
+    memory[address(linked, "FI")] = 1;
+    machine.A = 0;
+  }
 }
 
 function multiplyUnsigned(machine) {
@@ -3452,7 +3743,7 @@ export const NOCTIS_INTRINSIC_IDS = IDS;
 export const NOCTIS_SERVICE_INTRINSIC_IDS = SERVICE_IDS;
 
 export function createNoctisIntrinsics(overrides = {}) {
-  return {
+  const implementations = {
     [SERVICE_IDS.pgfA]: pgfLoadA,
     [SERVICE_IDS.pgfB]: pgfLoadB,
     [SERVICE_IDS.pgfStoreA]: pgfStoreA,
@@ -3470,6 +3761,15 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.pgfReverseDivide]: (machine, linked) => pgfReverseBinary(machine, linked, divideFloat64),
     [SERVICE_IDS.pgfInteger]: pgfInteger,
     [SERVICE_IDS.pgfFromInteger]: pgfFromInteger,
+    [SERVICE_IDS.framebufferDigit]: framebufferDigit,
+    [SERVICE_IDS.alphaDim]: alphaDim,
+    [SERVICE_IDS.antialiasingDim]: antialiasingDim,
+    [SERVICE_IDS.clearLayer]: clearLayer,
+    [SERVICE_IDS.clearLayerRegion]: clearLayerRegion,
+    [SERVICE_IDS.copyLayer]: copyLayer,
+    [SERVICE_IDS.copyLayerRegion]: copyLayerRegion,
+    [SERVICE_IDS.compareFloat64]: compareFloat64Service,
+    [SERVICE_IDS.spaceClear]: spaceClear,
     [IDS.copyRegion]: copyRegion,
     [IDS.expandIndexed]: expandIndexed,
     [IDS.scale2x]: scale2x,
@@ -3699,4 +3999,8 @@ export function createNoctisIntrinsics(overrides = {}) {
     [IDS.landedVertexLoad]: landedVertexLoad,
     ...overrides,
   };
+  for (const [id, inline] of Object.entries(PGF_SERVICE_INLINES)) {
+    if (!Object.hasOwn(overrides, id)) implementations[id].inline = inline;
+  }
+  return implementations;
 }
