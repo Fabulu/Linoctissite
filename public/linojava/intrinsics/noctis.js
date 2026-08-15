@@ -244,6 +244,8 @@ const SERVICE_IDS = Object.freeze({
   drawPolygon: "service:pgdrawb",
   poly3d: "service:pgpoly3d",
   polymap: "service:pgpolymap",
+  terrainMapped: "service:vhgndterrainmapped",
+  terrainFacing: "service:vhgndterrainfacing",
 });
 
 const symbolCaches = new WeakMap();
@@ -251,6 +253,7 @@ const dataViewCaches = new WeakMap();
 const rasterAddressCaches = new WeakMap();
 const poly3dAddressCaches = new WeakMap();
 const polymapAddressCaches = new WeakMap();
+const landedTerrainAddressCaches = new WeakMap();
 const float32Scratch = new DataView(new ArrayBuffer(4));
 const float64Scratch = new DataView(new ArrayBuffer(8));
 
@@ -2170,7 +2173,7 @@ function directPolyStoreNarrow(memory, p, index, number, control) {
   return narrowed;
 }
 
-function polyRotateDirect(machine, linked, p) {
+function polyRotateDirect(machine, linked, p, startVertex = 0) {
   // This is the real-time mapper's existing binary64 calculation schedule
   // expressed directly in JavaScript. Stores still narrow at every original
   // binary32 spill and reproduce the floating-point workspace side effects.
@@ -2179,34 +2182,45 @@ function polyRotateDirect(machine, linked, p) {
   const control = floatingPoint(machine).control;
   const count = memory[p.PJnrv] | 0;
   const mode = memory[p.PJmode] | 0;
-  memory[p.PJvr] = 0;
+  memory[p.PJvr] = startVertex;
   memory[p.PJdoflag] = 0;
+  const cameraX = directPolySlot(memory, p, p.FSCAMX);
+  const cameraY = directPolySlot(memory, p, p.FSCAMY);
+  const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
+  const betaSin = directPolySlot(memory, p, mode === 0 ? p.FSPSB : p.FSTSB);
+  const betaCos = directPolySlot(memory, p, mode === 0 ? p.FSPCB : p.FSTCB);
+  const turnBetaCos = directPolySlot(memory, p, p.FSTCB);
+  const turnBetaSin = directPolySlot(memory, p, p.FSTSB);
+  const alphaCos = directPolySlot(memory, p, mode === 0 ? p.FSPCA : p.FSTCA);
+  const alphaSin = directPolySlot(memory, p, mode === 0 ? p.FSPSA : p.FSTSA);
+  const turnAlphaCos = directPolySlot(memory, p, p.FSTCA);
+  const turnAlphaSin = directPolySlot(memory, p, p.FSTSA);
+  const near = directPolySlot(memory, p, p.FSUNEG);
   let finalSecond = 0;
-  for (let vertex = 0; vertex < count; vertex += 1) {
-    const z = directPolyStoreNarrow(memory, p, p.FSZZ, directPolySlot(memory, p, p.FSINZ + vertex) - directPolySlot(memory, p, p.FSCAMZ), control);
-    const x = directPolyStoreNarrow(memory, p, p.FSXX, directPolySlot(memory, p, p.FSINX + vertex) - directPolySlot(memory, p, p.FSCAMX), control);
-    const y = directPolyStoreNarrow(memory, p, p.FSYY, directPolySlot(memory, p, p.FSINY + vertex) - directPolySlot(memory, p, p.FSCAMY), control);
+  for (let vertex = startVertex; vertex < count; vertex += 1) {
+    const z = directPolyStoreNarrow(memory, p, p.FSZZ, directPolySlot(memory, p, p.FSINZ + vertex) - cameraZ, control);
+    const x = directPolyStoreNarrow(memory, p, p.FSXX, directPolySlot(memory, p, p.FSINX + vertex) - cameraX, control);
+    const y = directPolyStoreNarrow(memory, p, p.FSYY, directPolySlot(memory, p, p.FSINY + vertex) - cameraY, control);
 
-    let work = z * directPolySlot(memory, p, mode === 0 ? p.FSPSB : p.FSTSB);
+    let work = z * betaSin;
     directPolyStoreWide(memory, p, p.FSW0, work);
     directPolyStoreNarrow(
       memory, p,
       p.FSRXF + vertex,
-      x * directPolySlot(memory, p, mode === 0 ? p.FSPCB : p.FSTCB) + work,
+      x * betaCos + work,
       control,
     );
 
-    work = z * directPolySlot(memory, p, p.FSTCB);
+    work = z * turnBetaCos;
     directPolyStoreWide(memory, p, p.FSW0, work);
-    const zProduct = x * directPolySlot(memory, p, p.FSTSB);
+    const zProduct = x * turnBetaSin;
     const z2 = directPolyStoreNarrow(memory, p, p.FSZ2, work - zProduct, control);
 
-    work = z2 * directPolySlot(memory, p, p.FSTCA);
+    work = z2 * turnAlphaCos;
     directPolyStoreWide(memory, p, p.FSW0, work);
-    const rotatedZWide = y * directPolySlot(memory, p, p.FSTSA) + work;
+    const rotatedZWide = y * turnAlphaSin + work;
     directPolyStoreWide(memory, p, p.FSW1, rotatedZWide);
     directPolyStoreNarrow(memory, p, p.FSRZF + vertex, rotatedZWide, control);
-    const near = directPolySlot(memory, p, p.FSUNEG);
     const status = Number.isNaN(rotatedZWide) || Number.isNaN(near)
       ? 17664 : rotatedZWide < near ? 256 : rotatedZWide === near ? 16384 : 0;
     memory[p.FSW] = status;
@@ -2230,9 +2244,9 @@ function polyRotateDirect(machine, linked, p) {
     memory[p.rwf + vertex] = visible;
     if (visible !== 0) memory[p.PJdoflag] = (memory[p.PJdoflag] + 1) | 0;
 
-    work = y * directPolySlot(memory, p, mode === 0 ? p.FSPCA : p.FSTCA);
+    work = y * alphaCos;
     directPolyStoreWide(memory, p, p.FSW0, work);
-    finalSecond = z2 * directPolySlot(memory, p, mode === 0 ? p.FSPSA : p.FSTSA);
+    finalSecond = z2 * alphaSin;
     directPolyStoreNarrow(memory, p, p.FSRYF + vertex, work - finalSecond, control);
     memory[p.PJvr] = vertex + 1;
     machine.A = (p.fw + (p.FSRYF + vertex) * 2) | 0;
@@ -2965,15 +2979,22 @@ function groundRandomSquare(machine) {
 
 function groundTileShade(machine, linked) {
   const memory = machine.memory;
+  const seedAddress = address(linked, "SUfseed");
   let seed = ((value(memory, linked, "VHGNDh1") + value(memory, linked, "VHGNDseed")) | 3) | 0;
-  memory[address(linked, "SUfseed")] = seed;
-  const product = BigInt(seed >>> 0) * BigInt(seed >>> 0);
-  const low = Number(product & 0xffffffffn) | 0;
-  const high = Number((product >> 32n) & 0xffffffffn) | 0;
+  memory[seedAddress] = seed;
+  const unsigned = seed >>> 0;
+  const lowHalf = unsigned & 0xffff;
+  const highHalf = unsigned >>> 16;
+  const lowProduct = lowHalf * lowHalf;
+  const middle = 2 * lowHalf * highHalf;
+  const lowerWide = lowProduct + (middle & 0xffff) * 0x10000;
+  const low = lowerWide | 0;
+  const high = (highHalf * highHalf + Math.floor(middle / 0x10000)
+    + Math.floor(lowerWide / 0x100000000)) | 0;
   const folded = (low & 0xffffff00) | (((low & 0xff) + (high & 0xff)) & 0xff);
   memory[address(linked, "SUfeax")] = folded;
   seed = (seed + folded) | 0;
-  memory[address(linked, "SUfseed")] = seed;
+  memory[seedAddress] = seed;
   memory[address(linked, "SUfmask")] = 7;
   const result = folded & 7;
   memory[address(linked, "SUfval")] = result;
@@ -4451,22 +4472,21 @@ function landedTreeVertex(machine, linked, leaf) {
 
 function landedDistance(machine, linked, dx, dz) {
   const memory = machine.memory;
-  const control = floatingPoint(machine).control;
-  writeScalarScratch(machine, linked, dx);
-  const dx2 = scalarBinaryNumber(dx, dx, control, "multiply");
-  writeFloat64(memory, address(linked, "FT0"), dx2);
-  writeScalarScratch(machine, linked, dz);
-  const dz2 = scalarBinaryNumber(dz, dz, control, "multiply");
-  writeScalarScratch(machine, linked, dz2);
-  const sum = scalarBinaryNumber(dz2, dx2, control, "add");
-  writeScalarScratch(machine, linked, sum);
+  const p = landedTerrainAddresses(linked);
+  const dx2 = dx * dx;
+  writeFloat64(memory, p.FT0, dx2);
+  writeFloat64(memory, p.FA0, dz);
+  const dz2 = dz * dz;
+  writeFloat64(memory, p.FA0, dz2);
+  const sum = dz2 + dx2;
+  writeFloat64(memory, p.FA0, sum);
   const distance = Math.sqrt(sum);
-  writeScalarScratch(machine, linked, distance);
+  writeFloat64(memory, p.FA0, distance);
   const fpu = floatingPoint(machine);
-  fpu.control = value(memory, linked, "GRcwc") & 0xffff;
-  memory[address(linked, "FI")] = convertToInt32(distance, fpu.control);
-  fpu.control = value(memory, linked, "GRcwn") & 0xffff;
-  return memory[address(linked, "FI")] | 0;
+  fpu.control = memory[p.GRcwc] & 0xffff;
+  memory[p.FI] = convertToInt32(distance, fpu.control);
+  fpu.control = memory[p.GRcwn] & 0xffff;
+  return memory[p.FI] | 0;
 }
 
 function landedTileDistance(machine, linked) {
@@ -4485,7 +4505,10 @@ function landedTileAdmission(machine, linked) {
   const manhattan = Math.abs(value(memory, linked, "VHGNDcamtx") - x)
     + Math.abs(value(memory, linked, "VHGNDcamtz") - z);
   memory[address(linked, "VHGNDmanhattan")] = manhattan;
-  if (manhattan > 90) return;
+  if (manhattan > 90) {
+    memory[address(linked, "VHGNDnativecomplete")] = 2;
+    return;
+  }
   memory[address(linked, "VHGNDh1")] = Math.imul(z, 200) + x;
   const dx = value(memory, linked, "VHGNDcamx") - ((x << 14) + 8192);
   const dz = value(memory, linked, "VHGNDcamz") - ((z << 14) + 8192);
@@ -4495,41 +4518,259 @@ function landedTileAdmission(machine, linked) {
   const raw = distance >> 14;
   memory[address(linked, "VHGNDrawdepth")] = raw;
   memory[address(linked, "VHGNDdepth")] = Math.max(raw - 1, 0);
+  landedTerrainTileCore(machine, linked, manhattan, raw);
+}
+
+function landedTerrainAddresses(linked) {
+  let cached = landedTerrainAddressCaches.get(linked);
+  if (cached) return cached;
+  const names = [
+    "VHGNDnativecomplete", "VHGNDmirror", "VHGNDruinpass", "VHGNDruinanchor",
+    "VHGNDdepth", "VHGNDshade", "VHGNDh1", "VHGNDs1", "VHGNDs2", "VHGNDs3", "VHGNDs4",
+    "GRiptype", "VHGNDsctype", "VHGNDruined", "SPtinta", "DBcol", "SPescr", "DBflar", "DBent",
+    "SPcull", "VHGNDtilepolys", "PJfwbase", "fw", "VHGNDvctri", "FCret", "PGtexf", "RPSM",
+    "VHGNDnormindex", "VHGNDnormgen", "VHGNDnormstamp", "VHGNDnormx", "VHGNDnormy", "VHGNDnormz",
+    "FI", "VHGNDvslot", "VHGNDvi", "PGFi", "FA0",
+    "VHGNDx", "VHGNDz", "VHGNDlodstep", "VHGNDvv",
+    "FT0", "GRcwc", "GRcwn",
+    "VHGNDseed", "SUfseed", "SUfeax", "SUfmask", "SUfval",
+  ];
+  cached = { ...Object.fromEntries(names.map((name) => [name, address(linked, name)])) };
+  cached.surface = noctisBuffer(linked, "RPSM");
+  landedTerrainAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  const done = p.VHGNDnativecomplete;
+  if ((memory[p.VHGNDmirror] | 0) !== 0
+      || (memory[p.VHGNDruinpass] | 0) !== 0
+      || (memory[p.VHGNDruinanchor] | 0) !== 0) return;
+  if (manhattan > 90 || rawDepth > 64) {
+    memory[done] = 2;
+    return;
+  }
+
+  const depth = memory[p.VHGNDdepth] | 0;
+  groundTileShade(machine, linked);
+  let shade = (machine.C + 8 + (depth >> 1)) | 0;
+  if ((shade >>> 0) > 32) shade = 32;
+  memory[p.VHGNDshade] = shade;
+
+  const h1 = memory[p.VHGNDh1] | 0;
+  const surface = p.surface;
+  const heights = [
+    memory[surface + h1] & 0xff,
+    memory[surface + h1 + 1] & 0xff,
+    memory[surface + h1 + 201] & 0xff,
+    memory[surface + h1 + 200] & 0xff,
+  ];
+  memory[p.VHGNDs1] = heights[0]; memory[p.VHGNDs2] = heights[1];
+  memory[p.VHGNDs3] = heights[2]; memory[p.VHGNDs4] = heights[3];
+  if ((memory[p.GRiptype] | 0) === 3
+      && (memory[p.VHGNDsctype] | 0) === 1
+      && heights[0] + heights[1] + heights[2] + heights[3] === 0) {
+    memory[done] = 2;
+    return;
+  }
+
+  memory[p.VHGNDruined] = 0;
+  memory[p.SPtinta] = shade;
+  memory[p.DBcol] = shade;
+  memory[p.SPescr] = 0;
+  memory[p.DBflar] = 0;
+  memory[p.DBent] = 0;
+  const sctype = memory[p.VHGNDsctype] | 0;
+  memory[p.SPcull] = sctype === 3 ? (depth < 4 ? 1 : 0) : (depth >= 4 ? 1 : 0);
+  memory[p.VHGNDtilepolys] = 0;
+  memory[p.PJfwbase] = p.fw;
+
+  for (let triangle = 0; triangle < 2; triangle += 1) {
+    memory[p.VHGNDvctri] = triangle;
+    landedTerrainTriangle(machine, linked);
+    terrainFacing(machine, linked);
+    if ((memory[p.FCret] | 0) === 0) continue;
+    memory[p.VHGNDtilepolys] = (memory[p.VHGNDtilepolys] + 1) | 0;
+    memory[p.PGtexf] = 5;
+    terrainMapped(machine, linked);
+  }
+  memory[done] = 1;
 }
 
 function landedTerrainTriangle(machine, linked) {
   const memory = machine.memory;
-  const floats = value(memory, linked, "PJfwbase") >>> 0;
-  const x0 = value(memory, linked, "VHGNDx") << 14;
-  const z0 = value(memory, linked, "VHGNDz") << 14;
-  const step = value(memory, linked, "VHGNDlodstep") << 14;
+  const p = landedTerrainAddresses(linked);
+  const floats = memory[p.PJfwbase] >>> 0;
+  const x0 = memory[p.VHGNDx] << 14;
+  const z0 = memory[p.VHGNDz] << 14;
+  const step = memory[p.VHGNDlodstep] << 14;
   const x1 = x0 + step;
   const z1 = z0 + step;
-  const triangle = value(memory, linked, "VHGNDvctri");
-  const vertices = triangle === 0
-    ? [[x0, value(memory, linked, "VHGNDs1"), z0], [x1, value(memory, linked, "VHGNDs2"), z0], [x0, value(memory, linked, "VHGNDs4"), z1]]
-    : [[x1, value(memory, linked, "VHGNDs2"), z0], [x1, value(memory, linked, "VHGNDs3"), z1], [x0, value(memory, linked, "VHGNDs4"), z1]];
-  vertices.forEach(([x, height, z], index) => {
-    writeFloat64(memory, floats + 504 + index * 2, x);
-    writeFloat64(memory, floats + 512 + index * 2, -(height << 11));
-    writeFloat64(memory, floats + 520 + index * 2, z);
-  });
+  const triangle = memory[p.VHGNDvctri] | 0;
+  const ax = triangle === 0 ? x0 : x1;
+  const ay = triangle === 0 ? memory[p.VHGNDs1] : memory[p.VHGNDs2];
+  const az = z0;
+  const bx = x1;
+  const by = triangle === 0 ? memory[p.VHGNDs2] : memory[p.VHGNDs3];
+  const bz = triangle === 0 ? z0 : z1;
+  const cx = x0;
+  const cy = memory[p.VHGNDs4];
+  const cz = z1;
+  writeFloat64(memory, floats + 504, ax); writeFloat64(memory, floats + 506, bx); writeFloat64(memory, floats + 508, cx);
+  writeFloat64(memory, floats + 512, -(ay << 11)); writeFloat64(memory, floats + 514, -(by << 11)); writeFloat64(memory, floats + 516, -(cy << 11));
+  writeFloat64(memory, floats + 520, az); writeFloat64(memory, floats + 522, bz); writeFloat64(memory, floats + 524, cz);
   const finalY = readFloat64(memory, floats + 516);
-  writeScalarScratch(machine, linked, finalY);
-  memory[address(linked, "VHGNDvv")] = memory[address(linked, "FA0")];
-  memory[address(linked, "VHGNDvi")] = 2;
-  memory[address(linked, "VHGNDvslot")] = 256;
-  memory[address(linked, "PGFi")] = 258;
+  writeFloat64(memory, p.FA0, finalY);
+  memory[p.VHGNDvv] = memory[p.FA0];
+  memory[p.VHGNDvi] = 2;
+  memory[p.VHGNDvslot] = 256;
+  memory[p.PGFi] = 258;
 }
 
 function landedVertexLoad(machine, linked) {
   const memory = machine.memory;
-  const input = value(memory, linked, "FI");
-  writeScalarScratch(machine, linked, input);
-  const floats = value(memory, linked, "PJfwbase") >>> 0;
-  const slot = value(memory, linked, "VHGNDvslot") + value(memory, linked, "VHGNDvi");
-  memory[address(linked, "PGFi")] = slot;
+  const p = landedTerrainAddresses(linked);
+  const input = memory[p.FI] | 0;
+  writeFloat64(memory, p.FA0, input);
+  const floats = memory[p.PJfwbase] >>> 0;
+  const slot = (memory[p.VHGNDvslot] + memory[p.VHGNDvi]) | 0;
+  memory[p.PGFi] = slot;
   writeFloat64(memory, floats + slot * 2, input);
+}
+
+function terrainMapped(machine, linked) {
+  const memory = machine.memory;
+  const p = polymapAddresses(linked);
+  const at = (name) => address(linked, name);
+  const spterrain = at("SPterrain");
+  memory[spterrain] = 1;
+
+  const generic = () => {
+    memory[p.PJpreproject] = 0;
+    memory[p.PJnrv] = 3;
+    polymap(machine, linked);
+    memory[spterrain] = 0;
+  };
+  if ((memory[at("VHGNDmirror")] | 0) !== 0) {
+    generic();
+    return;
+  }
+
+  const h1 = memory[at("VHGNDh1")] | 0;
+  const triangle = memory[at("VHGNDvctri")] | 0;
+  const indices = triangle === 0 ? [h1, h1 + 1, h1 + 200] : [h1 + 1, h1 + 201, h1 + 200];
+  const generation = memory[at("VHGNDvcgen")] | 0;
+  const stamp = at("VHGNDvcstamp");
+  const visible = at("VHGNDvcvisible");
+  const cacheX0 = at("VHGNDvcrx0");
+  const cacheX1 = at("VHGNDvcrx1");
+  const cacheY0 = at("VHGNDvcry0");
+  const cacheY1 = at("VHGNDvcry1");
+  const cacheZ0 = at("VHGNDvcrz0");
+  const cacheZ1 = at("VHGNDvcrz1");
+  const cachePX = at("VHGNDvcpx");
+  const cachePY = at("VHGNDvcpy");
+  const viAddress = at("VHGNDvi");
+  const indexAddress = at("VHGNDvcindex");
+
+  for (let vertex = 0; vertex < 3; vertex += 1) {
+    const index = indices[vertex];
+    memory[viAddress] = vertex;
+    memory[indexAddress] = index;
+    if ((memory[stamp + index] | 0) === generation) continue;
+
+    memory[p.PJmode] = 1;
+    memory[p.PJvr] = vertex;
+    memory[p.PJnrv] = vertex + 1;
+    polyRotateDirect(machine, linked, p, vertex);
+    const x = p.fw + (p.FSRXF + vertex) * 2;
+    const y = p.fw + (p.FSRYF + vertex) * 2;
+    const z = p.fw + (p.FSRZF + vertex) * 2;
+    memory[cacheX0 + index] = memory[x]; memory[cacheX1 + index] = memory[x + 1];
+    memory[cacheY0 + index] = memory[y]; memory[cacheY1 + index] = memory[y + 1];
+    memory[cacheZ0 + index] = memory[z]; memory[cacheZ1 + index] = memory[z + 1];
+    const vertexVisible = memory[p.rwf + vertex] | 0;
+    memory[visible + index] = vertexVisible;
+    if (vertexVisible !== 0) {
+      memory[p.fw + p.FSUX * 2] = memory[x]; memory[p.fw + p.FSUX * 2 + 1] = memory[x + 1];
+      memory[p.fw + p.FSUY * 2] = memory[y]; memory[p.fw + p.FSUY * 2 + 1] = memory[y + 1];
+      memory[p.fw + p.FSUZ * 2] = memory[z]; memory[p.fw + p.FSUZ * 2 + 1] = memory[z + 1];
+      memory[p.PJvr2] = 1;
+      projectMapGeneric(machine, linked);
+      memory[cachePX + index] = memory[p.mp];
+      memory[cachePY + index] = memory[p.mp + 1];
+    }
+    memory[stamp + index] = generation;
+  }
+
+  for (let vertex = 0; vertex < 3; vertex += 1) {
+    const index = indices[vertex];
+    memory[viAddress] = vertex;
+    memory[indexAddress] = index;
+    if ((memory[visible + index] | 0) === 0) {
+      generic();
+      return;
+    }
+    const x = p.fw + (p.FSRXF + vertex) * 2;
+    const y = p.fw + (p.FSRYF + vertex) * 2;
+    const z = p.fw + (p.FSRZF + vertex) * 2;
+    memory[x] = memory[cacheX0 + index]; memory[x + 1] = memory[cacheX1 + index];
+    memory[y] = memory[cacheY0 + index]; memory[y + 1] = memory[cacheY1 + index];
+    memory[z] = memory[cacheZ0 + index]; memory[z + 1] = memory[cacheZ1 + index];
+    memory[p.mp + vertex * 2] = memory[cachePX + index];
+    memory[p.mp + vertex * 2 + 1] = memory[cachePY + index];
+    memory[p.rwf + vertex] = 1;
+  }
+  memory[viAddress] = 3;
+  const finalIndex = indices[2];
+  memory[indexAddress] = finalIndex;
+  for (const slot of [p.FSRXF, p.FSRYF, p.FSRZF]) {
+    const source = p.fw + (slot + 2) * 2;
+    memory[source + 2] = memory[source];
+    memory[source + 3] = memory[source + 1];
+  }
+  memory[p.mp + 6] = memory[p.mp + 4];
+  memory[p.mp + 7] = memory[p.mp + 5];
+  memory[p.rwf + 3] = 1;
+  memory[p.PJdoflag] = 4;
+  memory[at("VHGNDmpbase")] = p.mp;
+  groundCachedBounds(machine, linked);
+  memory[p.PJvr] = 4;
+  memory[p.PJpreproject] = 1;
+  memory[p.PJnrv] = 3;
+  polymap(machine, linked);
+  memory[spterrain] = 0;
+}
+
+function terrainFacing(machine, linked) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  if ((memory[p.VHGNDmirror] | 0) !== 0) {
+    mappedFacing(machine, linked);
+    return;
+  }
+  const floats = memory[p.PJfwbase] >>> 0;
+  const index = Math.imul(memory[p.VHGNDh1] | 0, 2) + (memory[p.VHGNDvctri] | 0);
+  memory[p.VHGNDnormindex] = index;
+  const generation = memory[p.VHGNDnormgen] | 0;
+  const stamp = p.VHGNDnormstamp;
+  const caches = [p.VHGNDnormx, p.VHGNDnormy, p.VHGNDnormz];
+  if ((memory[stamp + index] | 0) !== generation) {
+    mappedFacing(machine, linked);
+    for (let axis = 0; axis < 3; axis += 1) {
+      memory[caches[axis] + index] = float32Bits(readFloat64(memory, floats + 470 + axis * 2));
+    }
+    memory[stamp + index] = generation;
+    return;
+  }
+  for (let axis = 0; axis < 3; axis += 1) {
+    writeFloat64(memory, floats + 470 + axis * 2, float32FromBits(memory[caches[axis] + index]));
+  }
+  terrainFacingDot(machine, linked);
+  const dot = readFloat64(memory, address(linked, "FA0"));
+  memory[p.FCret] = !Number.isNaN(dot) && dot >= 0 ? 1 : 0;
 }
 
 function enterFloatingPoint(machine, linked) {
@@ -5409,12 +5650,17 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.copyCupolaPanel]: copyCupolaPanel,
     [SERVICE_IDS.drawStickLine]: drawStickLine,
     [SERVICE_IDS.rotateVertices]: (machine, linked) => polyRotateDirect(machine, linked, poly3dAddresses(linked)),
-    [SERVICE_IDS.rotateSelectedVertices]: (machine, linked) => rotateVertices(machine, linked, false),
+    [SERVICE_IDS.rotateSelectedVertices]: (machine, linked) => {
+      const p = poly3dAddresses(linked);
+      polyRotateDirect(machine, linked, p, machine.memory[p.PJvr] >>> 0);
+    },
     [SERVICE_IDS.projectMapGeneric]: projectMapGeneric,
     [SERVICE_IDS.project3d]: project3d,
     [SERVICE_IDS.drawPolygon]: drawPolygon,
     [SERVICE_IDS.poly3d]: poly3d,
     [SERVICE_IDS.polymap]: polymap,
+    [SERVICE_IDS.terrainMapped]: terrainMapped,
+    [SERVICE_IDS.terrainFacing]: terrainFacing,
     [IDS.copyRegion]: copyRegion,
     [IDS.expandIndexed]: expandIndexed,
     [IDS.scale2x]: scale2x,
