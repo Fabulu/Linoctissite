@@ -23,6 +23,7 @@ async function firstFile(candidates, suffixes) {
 
 function candidates(specifier, importer) {
   const name = specifier.replaceAll("\\", "/");
+  if (importer === null || importer === undefined) return [resolve(specifier)];
   if (name.startsWith("/")) return [resolve(linoRoot, "main/lib", name.slice(1))];
   return [resolve(dirname(importer ?? entryPath), name), resolve(linoRoot, "main/lib", name)];
 }
