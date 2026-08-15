@@ -267,6 +267,8 @@ const SERVICE_IDS = Object.freeze({
   surfaceNegate: "service:sunegate",
   surfaceRandomPattern: "service:surndpat",
   surfaceSda: "service:susda",
+  groundTextureDarkline: "service:vhgndtexturedarklinecommon",
+  groundPostSurface: "service:vhgndpostsurfacecommon",
   spaceFade: "service:vhsfade",
   flareSourceStick: "service:vhfsourcestick",
   glowRaster: "service:spglowraster",
@@ -299,6 +301,8 @@ const tgaAddressCaches = new WeakMap();
 const textAddressCaches = new WeakMap();
 const ekeyAddressCaches = new WeakMap();
 const surfaceBulkAddressCaches = new WeakMap();
+const groundTextureDarklineAddressCaches = new WeakMap();
+const groundPostSurfaceAddressCaches = new WeakMap();
 const spaceFadeAddressCaches = new WeakMap();
 const flareSourceStickAddressCaches = new WeakMap();
 const glowRasterAddressCaches = new WeakMap();
@@ -4446,6 +4450,213 @@ function groundLimitFloat(machine, linked) {
   groundStoreFloat(machine, linked, "GRfy", value(machine.memory, linked, "GRfscl"));
 }
 
+function groundTextureDarkline(machine, linked) {
+  const memory = machine.memory;
+  let p = groundTextureDarklineAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "nw", "brtlseed", "brtln", "SUbnc", "SUbh", "SUhx", "SUhv",
+      "VHGNDtexbase", "VHGNDlinex", "VHGNDlinez", "VHGNDlinelen",
+      "VHGNDlinetrendx", "VHGNDlinetrendz", "VHGNDptr",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    groundTextureDarklineAddressCaches.set(linked, p);
+  }
+
+  let seed = memory[p.brtlseed] >>> 0;
+  let drawCount = memory[p.SUbnc] >>> 0;
+  let hash = memory[p.SUbh] >>> 0;
+  let lastRandom = 0;
+  let lastBound = 0;
+  let lastC = 0;
+  const draw = (bound) => {
+    lastBound = bound;
+    seed = (Math.imul(seed, 0x015a4e35) + 1) >>> 0;
+    const random = (seed >>> 16) & 0x7fff;
+    lastRandom = Math.trunc((random * bound) / 0x8000) | 0;
+    drawCount = (drawCount + 1) >>> 0;
+    let word = lastRandom >>> 0;
+    for (let byte = 0; byte < 4; byte += 1) {
+      hash = Math.imul((hash ^ (word & 0xff)) >>> 0, 16777619) >>> 0;
+      word >>>= 8;
+    }
+    return lastRandom;
+  };
+
+  let lineX = draw(256);
+  let lineZ = draw(256);
+  memory[p.VHGNDlinex] = lineX;
+  memory[p.VHGNDlinez] = lineZ;
+  let remaining = memory[p.VHGNDlinelen] | 0;
+  const trendX = memory[p.VHGNDlinetrendx] | 0;
+  const trendZ = memory[p.VHGNDlinetrendz] | 0;
+  const textureBase = (p.nw + (memory[p.VHGNDtexbase] >>> 0)) >>> 0;
+  let texturePointer = memory[p.VHGNDptr] | 0;
+  lastC = lastRandom;
+
+  while (remaining !== 0) {
+    lineX = (lineX + draw(3) + trendX) | 0;
+    memory[p.VHGNDlinex] = lineX;
+    lineZ = (lineZ + draw(3) + trendZ) | 0;
+    memory[p.VHGNDlinez] = lineZ;
+    texturePointer = (Math.imul(lineZ, 256) + lineX) & 0xffff;
+    memory[p.VHGNDptr] = texturePointer;
+    lastC = lastRandom;
+    if (texturePointer > 0) {
+      const address = textureBase + texturePointer;
+      lastC = (memory[address] & 0xff) >>> 1;
+      memory[address] = lastC;
+    }
+    remaining = (remaining - 1) | 0;
+  }
+
+  memory[p.brtlseed] = seed;
+  memory[p.brtln] = lastBound;
+  memory[p.SUbnc] = drawCount;
+  memory[p.SUhv] = lastRandom;
+  memory[p.SUhx] = hash;
+  memory[p.SUbh] = hash;
+  memory[p.VHGNDlinelen] = 0;
+  machine.A = 0;
+  machine.B = 0;
+  machine.C = lastC;
+  machine.D = hash | 0;
+  machine.X = LINO_DONE;
+}
+
+function groundPostSurface(machine, linked) {
+  const memory = machine.memory;
+  let p = groundPostSurfaceAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "nw", "RPSM", "ROBJ", "brtlseed", "brtln", "SUbnc", "SUbh",
+      "SUhx", "SUhv", "VHGNDpostn", "VHGNDlinex", "VHGNDlinez",
+      "VHGNDlinelen", "VHGNDdeviation", "VHGNDvariability", "VHGNDptr",
+      "VHGNDtmp", "VHGNDs1", "VHGNDs2", "VHGNDincl", "VHGNDoval",
+      "MBptr", "MBval",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    groundPostSurfaceAddressCaches.set(linked, p);
+  }
+
+  let seed = memory[p.brtlseed] >>> 0;
+  let drawCount = memory[p.SUbnc] >>> 0;
+  let hash = memory[p.SUbh] >>> 0;
+  let lastRandom = 0;
+  let lastBound = 0;
+  const draw = (bound) => {
+    lastBound = bound;
+    seed = (Math.imul(seed, 0x015a4e35) + 1) >>> 0;
+    const random = (seed >>> 16) & 0x7fff;
+    lastRandom = Math.trunc((random * bound) / 0x8000) | 0;
+    drawCount = (drawCount + 1) >>> 0;
+    let word = lastRandom >>> 0;
+    for (let byte = 0; byte < 4; byte += 1) {
+      hash = Math.imul((hash ^ (word & 0xff)) >>> 0, 16777619) >>> 0;
+      word >>>= 8;
+    }
+    return lastRandom;
+  };
+
+  const surfaceBase = p.nw + p.RPSM;
+  const objectsBase = p.nw + p.ROBJ;
+  let postCount = draw(5);
+  memory[p.VHGNDpostn] = postCount;
+  let pointer = memory[p.VHGNDptr] | 0;
+  let temporary = memory[p.VHGNDtmp] | 0;
+
+  if (postCount !== 0) {
+    while (postCount !== 0) {
+      let remaining = draw(500);
+      memory[p.VHGNDlinelen] = remaining;
+      let lineX = draw(200);
+      let lineZ = draw(200);
+      let deviation = (draw(25) - 50) | 0;
+      const variability = (draw(10) + 2) | 0;
+
+      while (remaining !== 0) {
+        lineX = (lineX + draw(3) - 1) | 0;
+        lineZ = (lineZ + draw(3) - 1) | 0;
+        deviation = (deviation + draw(variability) - (variability >>> 1)) | 0;
+        pointer = (Math.imul(lineZ, 200) + lineX) & 0xffff;
+        if (pointer > 0 && pointer < 40000) {
+          temporary = ((memory[surfaceBase + pointer] & 0xff) + deviation) | 0;
+          if (temporary < 0) temporary = 0;
+          else if (temporary > 127) temporary = 127;
+          memory[surfaceBase + pointer] = temporary;
+          memory[surfaceBase + pointer + 1] = temporary;
+          memory[surfaceBase + pointer - 1] = temporary;
+          memory[surfaceBase + pointer + 200] = temporary;
+          memory[surfaceBase + pointer - 200] = temporary;
+        }
+        remaining = (remaining - 1) | 0;
+      }
+
+      memory[p.VHGNDlinex] = lineX;
+      memory[p.VHGNDlinez] = lineZ;
+      memory[p.VHGNDlinelen] = 0;
+      memory[p.VHGNDdeviation] = deviation;
+      memory[p.VHGNDvariability] = variability;
+      postCount = (postCount - 1) | 0;
+      memory[p.VHGNDpostn] = postCount;
+    }
+
+    for (pointer = 200; pointer < 38800; pointer += 1) {
+      temporary = (
+        (memory[surfaceBase + pointer] & 0xff)
+        + (memory[surfaceBase + pointer - 1] & 0xff)
+        + (memory[surfaceBase + pointer + 1] & 0xff)
+        + (memory[surfaceBase + pointer - 200] & 0xff)
+        + (memory[surfaceBase + pointer + 200] & 0xff)
+      ) >>> 0;
+      temporary = Math.trunc(temporary / 5) | 0;
+      memory[surfaceBase + pointer] = temporary;
+    }
+  }
+
+  let first = 0;
+  let second = 0;
+  let inclination = 0;
+  let objectValue = 0;
+  for (pointer = 0; pointer < 40000; pointer += 1) {
+    first = memory[surfaceBase + pointer] & 0xff;
+    second = memory[surfaceBase + pointer + 1] & 0xff;
+    inclination = Math.abs(first - second);
+    second = memory[surfaceBase + pointer + 200] & 0xff;
+    inclination += Math.abs(first - second);
+    objectValue = 0;
+    if (inclination < 20) {
+      objectValue = draw(2);
+      if (inclination < 15) {
+        objectValue = draw(3);
+        if (inclination < 10) objectValue = draw(4);
+      }
+    }
+    memory[objectsBase + pointer] = ((memory[objectsBase + pointer] & 0xfc) | objectValue) & 0xff;
+  }
+
+  memory[p.brtlseed] = seed;
+  memory[p.brtln] = lastBound;
+  memory[p.SUbnc] = drawCount;
+  memory[p.SUhv] = lastRandom;
+  memory[p.SUhx] = hash;
+  memory[p.SUbh] = hash;
+  memory[p.VHGNDpostn] = 0;
+  memory[p.VHGNDptr] = 40000;
+  memory[p.VHGNDtmp] = temporary;
+  memory[p.VHGNDs1] = first;
+  memory[p.VHGNDs2] = second;
+  memory[p.VHGNDincl] = inclination;
+  memory[p.VHGNDoval] = objectValue;
+  memory[p.MBptr] = p.ROBJ + 39999;
+  memory[p.MBval] = memory[objectsBase + 39999] & 0xff;
+  machine.A = 40000;
+  machine.B = 0;
+  machine.C = lastRandom;
+  machine.D = hash | 0;
+  machine.X = LINO_DONE;
+}
+
 function landedFastRandom(machine, linked, mask) {
   const memory = machine.memory;
   const seed = value(memory, linked, "SUfseed") >>> 0;
@@ -6187,6 +6398,11 @@ function renderCupolaCache(machine, linked) {
     const numerator = directPolySlot(memory, p, p.FSUNO);
     const centerX = directPolySlot(memory, p, p.FSXC);
     const centerY = directPolySlot(memory, p, p.FSYC);
+    const projectionKey = [
+      cameraX, cameraYFloat, cameraZ, betaSin, betaCos, turnBetaCos,
+      turnBetaSin, alphaCos, alphaSin, turnAlphaCos, turnAlphaSin,
+      near, numerator, centerX, centerY,
+    ];
     for (let id = 0; id < topology.coordinates.length; id += 1) {
       const [xb, yb, zb] = topology.coordinates[id];
       const z = roundFloat32(float32FromBits(zb) - cameraZ, control);
@@ -6212,6 +6428,7 @@ function renderCupolaCache(machine, linked) {
         topology.iy[id] = convertToInt32(screenYWide, control);
       }
     }
+    topology.projectionKey = projectionKey;
 
     for (let panel = 0; panel < 140; panel += 1) {
       const record = cacheBase + panel * 12;
@@ -6283,23 +6500,34 @@ function renderCupolaCache(machine, linked) {
     const numerator = directPolySlot(memory, p, p.FSUNO);
     const centerX = directPolySlot(memory, p, p.FSXC);
     const centerY = directPolySlot(memory, p, p.FSYC);
-    for (let id = 0; id < topology.coordinates.length; id += 1) {
-      const [xb, yb, zb] = topology.coordinates[id];
-      const z = roundFloat32(float32FromBits(zb) - cameraZ, control);
-      const x = roundFloat32(float32FromBits(xb) - cameraX, control);
-      const y = roundFloat32(float32FromBits(yb) - cameraYFloat, control);
-      const rx = roundFloat32(x * betaCos + z * betaSin, control);
-      const z2 = roundFloat32(z * turnBetaCos - x * turnBetaSin, control);
-      const rzWide = y * turnAlphaSin + z2 * turnAlphaCos;
-      const rz = roundFloat32(rzWide, control);
-      const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
-      const visible = !Number.isNaN(rzWide) && rzWide >= 200;
-      topology.visible[id] = visible ? 1 : 0;
-      if (visible) {
-        const factor = numerator / rz;
-        topology.ix[id] = convertToInt32(factor * rx + centerX, control);
-        topology.iy[id] = convertToInt32(factor * ry + centerY, control);
+    const projectionKey = [
+      cameraX, cameraYFloat, cameraZ, betaSin, betaCos, turnBetaCos,
+      turnBetaSin, alphaCos, alphaSin, turnAlphaCos, turnAlphaSin,
+      200, numerator, centerX, centerY,
+    ];
+    const projected = topology.projectionKey;
+    const reuseProjection = projected?.length === projectionKey.length
+      && projected.every((value, index) => Object.is(value, projectionKey[index]));
+    if (!reuseProjection) {
+      for (let id = 0; id < topology.coordinates.length; id += 1) {
+        const [xb, yb, zb] = topology.coordinates[id];
+        const z = roundFloat32(float32FromBits(zb) - cameraZ, control);
+        const x = roundFloat32(float32FromBits(xb) - cameraX, control);
+        const y = roundFloat32(float32FromBits(yb) - cameraYFloat, control);
+        const rx = roundFloat32(x * betaCos + z * betaSin, control);
+        const z2 = roundFloat32(z * turnBetaCos - x * turnBetaSin, control);
+        const rzWide = y * turnAlphaSin + z2 * turnAlphaCos;
+        const rz = roundFloat32(rzWide, control);
+        const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
+        const visible = !Number.isNaN(rzWide) && rzWide >= 200;
+        topology.visible[id] = visible ? 1 : 0;
+        if (visible) {
+          const factor = numerator / rz;
+          topology.ix[id] = convertToInt32(factor * rx + centerX, control);
+          topology.iy[id] = convertToInt32(factor * ry + centerY, control);
+        }
       }
+      topology.projectionKey = projectionKey;
     }
     const lineP = stick3dAddresses(linked);
     memory[p.VHSflare] = 0;
@@ -8954,6 +9182,8 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.surfaceNegate]: surfaceNegate,
     [SERVICE_IDS.surfaceRandomPattern]: surfaceRandomPattern,
     [SERVICE_IDS.surfaceSda]: surfaceSda,
+    [SERVICE_IDS.groundTextureDarkline]: groundTextureDarkline,
+    [SERVICE_IDS.groundPostSurface]: groundPostSurface,
     [SERVICE_IDS.spaceFade]: spaceFade,
     [SERVICE_IDS.flareSourceStick]: flareSourceStick,
     [SERVICE_IDS.glowRaster]: glowRaster,

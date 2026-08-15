@@ -28,6 +28,33 @@ let pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, p
 
 const canonical = (value) => String(value).replace(/[\x00-\x20]+/g, "").replaceAll("\\", "/").toLowerCase();
 
+function isolatedNoctisIntrinsics() {
+  // Keep Chromium from folding the complete renderer into one unstable
+  // optimization unit. The cold branch also provides an on-demand profiler.
+  const implementations = createNoctisIntrinsics();
+  globalThis.__linoIntrinsicProfile = Object.create(null);
+  globalThis.__linoProfileIntrinsics = false;
+  for (const [id, original] of Object.entries(implementations)) {
+    const wrapped = (...args) => {
+      if (globalThis.__linoProfileIntrinsics) {
+        const started = performance.now();
+        try {
+          return original(...args);
+        } finally {
+          const item = globalThis.__linoIntrinsicProfile[id]
+            ??= { calls: 0, milliseconds: 0 };
+          item.calls += 1;
+          item.milliseconds += performance.now() - started;
+        }
+      }
+      return original(...args);
+    };
+    Object.assign(wrapped, original);
+    implementations[id] = wrapped;
+  }
+  return implementations;
+}
+
 function currentPcmOffset() {
   if (pcmState.frames <= 0 || pcmState.paused) return pcmState.offset | 0;
   const elapsed = Math.max(0, Math.floor((performance.now() - pcmState.startedAt) * pcmState.rate / 1000));
@@ -262,7 +289,7 @@ async function initialize(message) {
   };
   program = await compileProject(entry, resolvers, {
     host,
-    intrinsics: createNoctisIntrinsics(),
+    intrinsics: isolatedNoctisIntrinsics(),
     regionSize: 1024,
     physicalWidth: Math.max(1, message.physicalWidth | 0),
     physicalHeight: Math.max(1, message.physicalHeight | 0),
