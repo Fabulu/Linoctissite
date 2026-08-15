@@ -64,6 +64,16 @@ export function createProgram(host = {}) {
     step,
     get(name) { const symbol = symbolTable[String(name).toLowerCase()]; if (!symbol) throw new Error(`Unknown Lino symbol: ${name}`); return symbol.kind === "constant" ? symbol.value : mem[symbol.address]; },
     set(name, value) { const symbol = symbolTable[String(name).toLowerCase()]; if (!symbol || symbol.kind !== "memory") throw new Error(`Not a writable Lino symbol: ${name}`); mem[symbol.address] = value | 0; },
+    snapshot() { return { version: 1, memory: Array.from(mem), registers: { A, B, C, D, E }, pc, halted, callStack: Array.from(callStack) }; },
+    restore(saved) {
+      if (!saved || saved.version !== 1 || !Array.isArray(saved.memory) || saved.memory.length !== mem.length) throw new Error("Incompatible LinoJava snapshot");
+      mem.set(saved.memory.map((value) => value | 0));
+      const registers = saved.registers ?? {};
+      A = registers.A | 0; B = registers.B | 0; C = registers.C | 0; D = registers.D | 0; E = registers.E | 0;
+      pc = saved.pc | 0; halted = Boolean(saved.halted);
+      callStack.length = 0;
+      if (Array.isArray(saved.callStack)) for (const value of saved.callStack) callStack.push(value | 0);
+    },
     get registers() { return { A, B, C, D, E }; },
     get halted() { return halted; }
   };

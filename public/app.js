@@ -7,13 +7,25 @@ const fullscreenButton = document.querySelector("#fullscreen");
 const exitFullscreenButton = document.querySelector("#exit-fullscreen");
 const menuButton = document.querySelector("#game-menu");
 const menuPanel = document.querySelector("#menu-panel");
+const resetStateButton = document.querySelector("#reset-state");
 const status = document.querySelector("#status");
 const coordinates = document.querySelector("#coordinates");
 const keys = new Set();
 const image = context.createImageData(canvas.width, canvas.height);
 const pixels = new Uint32Array(image.data.buffer);
+const snapshotKey = "linoctis.machine.v1";
 
 const program = createProgram({ isocall: () => true });
+let restored = false;
+try {
+  const saved = localStorage.getItem(snapshotKey);
+  if (saved) {
+    program.restore(JSON.parse(saved));
+    restored = true;
+  }
+} catch {
+  localStorage.removeItem(snapshotKey);
+}
 
 function pressed(...names) {
   return names.some((name) => keys.has(name));
@@ -66,7 +78,10 @@ function tick() {
   program.set("input_y", (pressed("KeyS", "ArrowDown") ? speed : 0) - (pressed("KeyW", "ArrowUp") ? speed : 0));
   const result = program.step();
   render();
-  status.textContent = `Running ${metadata.backend} / ${metadata.blocks} blocks / ${result.status}`;
+  const frame = program.get("frame");
+  if ((frame % 300) === 0) localStorage.setItem(snapshotKey, JSON.stringify(program.snapshot()));
+  status.textContent = `${restored ? "State restored / " : ""}Running ${metadata.backend} / ${metadata.blocks} blocks / ${result.status}`;
+  restored = false;
   requestAnimationFrame(tick);
 }
 
@@ -79,6 +94,9 @@ window.addEventListener("keydown", (event) => {
 
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => keys.clear());
+window.addEventListener("beforeunload", () => {
+  localStorage.setItem(snapshotKey, JSON.stringify(program.snapshot()));
+});
 
 fullscreenButton.addEventListener("click", async () => {
   if (document.fullscreenElement) {
@@ -100,6 +118,11 @@ menuButton.addEventListener("click", () => {
   const open = menuPanel.hidden;
   menuPanel.hidden = !open;
   menuButton.setAttribute("aria-expanded", String(open));
+});
+
+resetStateButton.addEventListener("click", () => {
+  localStorage.removeItem(snapshotKey);
+  location.reload();
 });
 
 tick();

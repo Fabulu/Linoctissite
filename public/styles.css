@@ -152,6 +152,15 @@ button { font: inherit; }
 
 .menu-panel[hidden] { display: none; }
 
+.menu-panel button {
+  margin-top: 5px;
+  padding: 5px 7px;
+  border: 1px solid #263b50;
+  background: linear-gradient(#f0f5f8, #9fb3c4);
+  color: #08131e;
+  cursor: pointer;
+}
+
 .viewport-shell {
   position: relative;
   min-height: 0;

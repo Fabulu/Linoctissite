@@ -10,4 +10,6 @@ test("ships visible and keyboard fullscreen exits", async () => {
   assert.match(app, /requestFullscreen\(\)/);
   assert.match(app, /exitFullscreen\(\)/);
   assert.match(app, /event\.key !== "Escape"/);
+  assert.match(app, /program\.snapshot\(\)/);
+  assert.match(app, /program\.restore\(/);
 });
