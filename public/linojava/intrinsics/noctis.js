@@ -232,6 +232,13 @@ const SERVICE_IDS = Object.freeze({
   copyLayerRegion: "service:copyl2lregion",
   compareFloat64: "service:fcmp",
   spaceClear: "service:vhgspaceclear",
+  scanNotEqual: "service:pgrepne",
+  scanEqual: "service:pgrepe",
+  databaseScan: "service:pgdbscan",
+  copyCupolaPanel: "service:vhccopycachedpanel",
+  drawStickLine: "service:vhsdrawline",
+  rotateVertices: "service:pjrotate",
+  rotateSelectedVertices: "service:pjrotateselected",
 });
 
 const symbolCaches = new WeakMap();
@@ -721,6 +728,7 @@ function pageLoad(machine, linked) {
   memory[address(linked, "PGval")] = memory[page + offset] & 0xff;
 }
 
+
 function framebufferDigit(machine, linked) {
   const memory = machine.memory;
   const digit = value(memory, linked, "DGdigit");
@@ -816,6 +824,29 @@ function antialiasingDim(machine, linked) {
   }
   machine.A = origin;
 }
+
+function alphaDimInline(destination, source) {
+  return `{
+    const alphaDestination=(${destination})>>>0,alphaSource=(${source})|0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+  }`;
+}
+
+function antialiasingDimInline(linked) {
+  const width = address(linked, "Display Width");
+  return `{
+    const origin=A|0,source=B|0,width=m[${width}]|0,neighbour=((source&15790320)>>>4)|0;
+    ${alphaDimInline("origin", "source")}
+    ${alphaDimInline("origin-1", "neighbour")}
+    ${alphaDimInline("origin+1", "neighbour")}
+    ${alphaDimInline("origin-width", "neighbour")}
+    ${alphaDimInline("origin+width", "neighbour")}
+    A=origin;
+  }`;
+}
+
 
 function normalizeRegion(memory, linked, pointer) {
   let left = memory[pointer] | 0;
@@ -944,6 +975,26 @@ function compareFloat64Service(machine, linked) {
   }
 }
 
+function compareFloat64Inline(linked) {
+  const fa = address(linked, "FA0");
+  const fb = address(linked, "FB0");
+  const fsw = address(linked, "FSW");
+  const flags = address(linked, "FFLG");
+  const integer = address(linked, "FI");
+  return `{
+    const left=f64r(${fa}),right=f64r(${fb});
+    q=Number.isNaN(left)||Number.isNaN(right)?17664:left<right?256:left===right?16384:0;
+    m[${fsw}]=q;
+    if(!machine.fpu)machine.fpu={control:895,status:0,stack:[]};
+    machine.fpu.status=q;
+    if((q&1024)!==0){m[${flags}]=(m[${flags}]|1);m[${integer}]=2;A=m[${flags}]|0;}
+    else if((q&16384)!==0){m[${integer}]=0;A=q&16384;}
+    else if((q&256)!==0){m[${integer}]=-1;A=-1;}
+    else{m[${integer}]=1;A=0;}
+  }`;
+}
+
+
 function multiplyUnsigned(machine) {
   const product = BigInt(machine.A >>> 0) * BigInt(machine.B >>> 0);
   machine.A = Number(product & 0xffffffffn) | 0;
@@ -1029,6 +1080,257 @@ function scanNotEqual(machine, linked) {
 
 function scanEqual(machine, linked) {
   scanPage(machine, linked, true);
+}
+
+function scanService(machine, linked, repeatEqual) {
+  if ((value(machine.memory, linked, "SCcx") >>> 0) === 0) return;
+  machine.A = address(linked, "nw") | 0;
+  scanPage(machine, linked, repeatEqual);
+}
+
+function scanInline(linked, repeatEqual) {
+  const scCount = address(linked, "SCcx");
+  const scOffset = address(linked, "SCdi");
+  const expected = address(linked, "SCal");
+  const zeroFlag = address(linked, "SCzf");
+  const pgOffset = address(linked, "PGdi");
+  const pgValue = address(linked, "PGval");
+  const page = noctisBuffer(linked, "SADPT");
+  const nw = address(linked, "nw");
+  return `if((m[${scCount}]>>>0)!==0){A=${nw}|0;let count=m[${scCount}]>>>0,offset=m[${scOffset}]&65535,sample=0,equal=false,expected=m[${expected}]|0;do{sample=m[${page}+offset]&255;count=(count-1)>>>0;offset=(offset+1)&65535;equal=sample===expected;}while(count!==0&&equal===${repeatEqual});m[${pgOffset}]=(offset-1)&65535;m[${pgValue}]=sample;m[${zeroFlag}]=equal?1:0;m[${scOffset}]=offset;m[${scCount}]=count|0;}`;
+}
+
+function databaseScan(machine, linked) {
+  const memory = machine.memory;
+  const scOffset = address(linked, "SCdi");
+  const zeroFlag = address(linked, "SCzf");
+  const mode = address(linked, "DBmode");
+  let accumulator = value(memory, linked, "DBdi");
+  memory[scOffset] = accumulator;
+  memory[address(linked, "SCcx")] = value(memory, linked, "DBbytes");
+  memory[address(linked, "SCal")] = 255;
+  memory[zeroFlag] = 0;
+  memory[mode] = 0;
+  scanService(machine, linked, false);
+  accumulator = memory[zeroFlag] | 0;
+  machine.A = accumulator;
+  if (accumulator === 0) return;
+  accumulator = memory[scOffset] | 0;
+  machine.A = accumulator;
+  memory[address(linked, "DBsi")] = accumulator;
+  scanService(machine, linked, true);
+  accumulator = memory[scOffset] | 0;
+  machine.A = accumulator;
+  memory[address(linked, "DBbx")] = accumulator;
+  scanService(machine, linked, false);
+  accumulator = memory[zeroFlag] | 0;
+  machine.A = accumulator;
+  if (accumulator === 0) {
+    memory[mode] = 2;
+    return;
+  }
+  scanService(machine, linked, true);
+  accumulator = memory[scOffset] | 0;
+  machine.A = accumulator;
+  memory[address(linked, "DBdi")] = accumulator;
+  memory[mode] = 1;
+}
+
+function databaseScanInline(linked) {
+  const scOffset = address(linked, "SCdi");
+  const scCount = address(linked, "SCcx");
+  const zeroFlag = address(linked, "SCzf");
+  const mode = address(linked, "DBmode");
+  const dbOffset = address(linked, "DBdi");
+  const dbBytes = address(linked, "DBbytes");
+  const dbStart = address(linked, "DBsi");
+  const dbEnd = address(linked, "DBbx");
+  const expected = address(linked, "SCal");
+  return `dbscan:{A=m[${dbOffset}]|0;m[${scOffset}]=A;m[${scCount}]=m[${dbBytes}];m[${expected}]=255;m[${zeroFlag}]=0;m[${mode}]=0;${scanInline(linked, false)}A=m[${zeroFlag}]|0;if(A===0)break dbscan;A=m[${scOffset}]|0;m[${dbStart}]=A;${scanInline(linked, true)}A=m[${scOffset}]|0;m[${dbEnd}]=A;${scanInline(linked, false)}A=m[${zeroFlag}]|0;if(A===0){m[${mode}]=2;break dbscan;}${scanInline(linked, true)}A=m[${scOffset}]|0;m[${dbOffset}]=A;m[${mode}]=1;}`;
+}
+
+function copyCupolaPanel(machine, linked) {
+  const memory = machine.memory;
+  const source = value(memory, linked, "VHCcachep") >>> 0;
+  const destination = address(linked, "vhcpoly");
+  memory.set(memory.subarray(source, source + 12), destination);
+  memory[address(linked, "VHCcopy")] = 12;
+  machine.A = 12;
+  machine.C = memory[source + 11] | 0;
+}
+
+function copyCupolaPanelInline(linked) {
+  const source = address(linked, "VHCcachep");
+  const destination = address(linked, "vhcpoly");
+  const copy = address(linked, "VHCcopy");
+  return `q=m[${source}]>>>0;m.set(m.subarray(q,q+12),${destination});m[${copy}]=12;A=12;C=m[q+11]|0;`;
+}
+
+function drawStickLine(machine, linked) {
+  const memory = machine.memory;
+  const xAddress = address(linked, "VHSpx0");
+  const yAddress = address(linked, "VHSpy0");
+  const phaseAddress = address(linked, "VHSphase");
+  const drawnAddress = address(linked, "VHSdrawn");
+  const errorAddress = address(linked, "VHSerr");
+  const e2Address = address(linked, "VHSe2");
+  const page = noctisBuffer(linked, "RADPT");
+  const xEnd = value(memory, linked, "VHSpx1");
+  const yEnd = value(memory, linked, "VHSpy1");
+  const dx = value(memory, linked, "VHSdx");
+  const dy = value(memory, linked, "VHSdy");
+  const xStep = value(memory, linked, "VHSsx");
+  const yStep = value(memory, linked, "VHSsy");
+  const flare = value(memory, linked, "VHSflare");
+  const colour = value(memory, linked, "VHScolor") & 255;
+  let x = memory[xAddress] | 0;
+  let y = memory[yAddress] | 0;
+  let error = memory[errorAddress] | 0;
+  let phase = memory[phaseAddress] | 0;
+  let drawn = memory[drawnAddress] | 0;
+  let c = machine.C | 0;
+  let destination = 0;
+  while (true) {
+    destination = (page + Math.imul(y, 320) + x) | 0;
+    if (flare === 1) {
+      if ((phase & 1) === 0) {
+        const current = memory[destination] & 255;
+        c = (current & 63) + 8;
+        if (c > 62) c = 62;
+        c |= current & 192;
+        memory[destination] = c;
+      }
+    } else {
+      memory[destination] = 0;
+      c = colour;
+      memory[destination + 1] = c;
+    }
+    phase = (phase + 1) | 0;
+    drawn = (drawn + 1) | 0;
+    if (x === xEnd && y === yEnd) break;
+    const e2 = (error + error) | 0;
+    memory[e2Address] = e2;
+    if (e2 >= dy) {
+      error = (error + dy) | 0;
+      x = (x + xStep) | 0;
+    }
+    if (e2 <= dx) {
+      error = (error + dx) | 0;
+      y = (y + yStep) | 0;
+    }
+  }
+  memory[xAddress] = x;
+  memory[yAddress] = y;
+  memory[errorAddress] = error;
+  memory[phaseAddress] = phase;
+  memory[drawnAddress] = drawn;
+  machine.A = y;
+  machine.C = c;
+  machine.D = destination;
+}
+
+function drawStickLineInline(linked) {
+  const x = address(linked, "VHSpx0");
+  const y = address(linked, "VHSpy0");
+  const xEnd = address(linked, "VHSpx1");
+  const yEnd = address(linked, "VHSpy1");
+  const dx = address(linked, "VHSdx");
+  const dy = address(linked, "VHSdy");
+  const xStep = address(linked, "VHSsx");
+  const yStep = address(linked, "VHSsy");
+  const error = address(linked, "VHSerr");
+  const e2 = address(linked, "VHSe2");
+  const phase = address(linked, "VHSphase");
+  const drawn = address(linked, "VHSdrawn");
+  const flare = address(linked, "VHSflare");
+  const colour = address(linked, "VHScolor");
+  const page = noctisBuffer(linked, "RADPT");
+  return `{
+    let x=m[${x}]|0,y=m[${y}]|0,error=m[${error}]|0,phase=m[${phase}]|0,drawn=m[${drawn}]|0;
+    const xEnd=m[${xEnd}]|0,yEnd=m[${yEnd}]|0,dx=m[${dx}]|0,dy=m[${dy}]|0,xStep=m[${xStep}]|0,yStep=m[${yStep}]|0,flare=m[${flare}]|0,colour=m[${colour}]&255;
+    while(true){D=(${page}+Math.imul(y,320)+x)|0;if(flare===1){if((phase&1)===0){A=m[D]&255;C=(A&63)+8;if(C>62)C=62;A&=192;C|=A;m[D]=C;}}else{m[D]=0;C=colour;m[D+1]=C;}phase=(phase+1)|0;drawn=(drawn+1)|0;if(x===xEnd&&y===yEnd)break;A=(error+error)|0;m[${e2}]=A;if(A>=dy){error=(error+dy)|0;x=(x+xStep)|0;}if(A<=dx){error=(error+dx)|0;y=(y+yStep)|0;}}
+    m[${x}]=x;m[${y}]=y;m[${error}]=error;m[${phase}]=phase;m[${drawn}]=drawn;A=y;
+  }`;
+}
+
+function rotateVertices(machine, linked, resetVertex) {
+  const memory = machine.memory;
+  const pgfi = address(linked, "PGFi");
+  const vertexAddress = address(linked, "PJvr");
+  const vertexCount = value(memory, linked, "PJnrv") >>> 0;
+  const mode = value(memory, linked, "PJmode");
+  const doFlag = address(linked, "PJdoflag");
+  const visibility = address(linked, "rwf");
+  const slot = (name) => address(linked, name);
+  const load = (index) => { memory[pgfi] = index; pgfLoadA(machine, linked); };
+  const binary = (index, operation) => {
+    memory[pgfi] = index;
+    pgfBinary(machine, linked, operation);
+  };
+  const reverse = (index, operation) => {
+    memory[pgfi] = index;
+    pgfReverseBinary(machine, linked, operation);
+  };
+  const store = (index) => { memory[pgfi] = index; pgfStoreA(machine, linked); };
+  const storeNarrow = (index) => { store(index); pgfNarrow(machine, linked); };
+  let vertex = resetVertex ? 0 : memory[vertexAddress] >>> 0;
+  if (resetVertex) memory[vertexAddress] = 0;
+  memory[doFlag] = 0;
+  for (; vertex < vertexCount; vertex += 1) {
+    load(slot("FSINZ") + vertex);
+    binary(slot("FSCAMZ"), subtractFloat64);
+    storeNarrow(slot("FSZZ"));
+    load(slot("FSINX") + vertex);
+    binary(slot("FSCAMX"), subtractFloat64);
+    storeNarrow(slot("FSXX"));
+    load(slot("FSINY") + vertex);
+    binary(slot("FSCAMY"), subtractFloat64);
+    storeNarrow(slot("FSYY"));
+
+    load(slot("FSZZ"));
+    binary(mode === 0 ? slot("FSPSB") : slot("FSTSB"), multiplyFloat64);
+    store(slot("FSW0"));
+    load(slot("FSXX"));
+    binary(mode === 0 ? slot("FSPCB") : slot("FSTCB"), multiplyFloat64);
+    binary(slot("FSW0"), addFloat64);
+    storeNarrow(slot("FSRXF") + vertex);
+
+    load(slot("FSZZ"));
+    binary(slot("FSTCB"), multiplyFloat64);
+    store(slot("FSW0"));
+    load(slot("FSXX"));
+    binary(slot("FSTSB"), multiplyFloat64);
+    reverse(slot("FSW0"), subtractFloat64);
+    storeNarrow(slot("FSZ2"));
+
+    load(slot("FSZ2"));
+    binary(slot("FSTCA"), multiplyFloat64);
+    store(slot("FSW0"));
+    load(slot("FSYY"));
+    binary(slot("FSTSA"), multiplyFloat64);
+    binary(slot("FSW0"), addFloat64);
+    store(slot("FSW1"));
+    storeNarrow(slot("FSRZF") + vertex);
+    load(slot("FSW1"));
+    memory[pgfi] = slot("FSUNEG");
+    pgfLoadB(machine, linked);
+    compareFloat64Service(machine, linked);
+    const comparison = value(memory, linked, "FI");
+    const visible = comparison !== 2 && comparison >= 0 ? 1 : 0;
+    memory[visibility + vertex] = visible;
+    if (visible) memory[doFlag] = (memory[doFlag] + 1) | 0;
+
+    load(slot("FSYY"));
+    binary(mode === 0 ? slot("FSPCA") : slot("FSTCA"), multiplyFloat64);
+    store(slot("FSW0"));
+    load(slot("FSZ2"));
+    binary(mode === 0 ? slot("FSPSA") : slot("FSTSA"), multiplyFloat64);
+    reverse(slot("FSW0"), subtractFloat64);
+    storeNarrow(slot("FSRYF") + vertex);
+    memory[vertexAddress] = vertex + 1;
+  }
+  machine.A = vertex | 0;
+  machine.C = mode;
 }
 
 function fillBytes(machine, linked) {
@@ -3770,6 +4072,13 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.copyLayerRegion]: copyLayerRegion,
     [SERVICE_IDS.compareFloat64]: compareFloat64Service,
     [SERVICE_IDS.spaceClear]: spaceClear,
+    [SERVICE_IDS.scanNotEqual]: (machine, linked) => scanService(machine, linked, false),
+    [SERVICE_IDS.scanEqual]: (machine, linked) => scanService(machine, linked, true),
+    [SERVICE_IDS.databaseScan]: databaseScan,
+    [SERVICE_IDS.copyCupolaPanel]: copyCupolaPanel,
+    [SERVICE_IDS.drawStickLine]: drawStickLine,
+    [SERVICE_IDS.rotateVertices]: (machine, linked) => rotateVertices(machine, linked, true),
+    [SERVICE_IDS.rotateSelectedVertices]: (machine, linked) => rotateVertices(machine, linked, false),
     [IDS.copyRegion]: copyRegion,
     [IDS.expandIndexed]: expandIndexed,
     [IDS.scale2x]: scale2x,
@@ -4001,6 +4310,30 @@ export function createNoctisIntrinsics(overrides = {}) {
   };
   for (const [id, inline] of Object.entries(PGF_SERVICE_INLINES)) {
     if (!Object.hasOwn(overrides, id)) implementations[id].inline = inline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.scanNotEqual)) {
+    implementations[SERVICE_IDS.scanNotEqual].inline = (linked) => scanInline(linked, false);
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.scanEqual)) {
+    implementations[SERVICE_IDS.scanEqual].inline = (linked) => scanInline(linked, true);
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.databaseScan)) {
+    implementations[SERVICE_IDS.databaseScan].inline = databaseScanInline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.copyCupolaPanel)) {
+    implementations[SERVICE_IDS.copyCupolaPanel].inline = copyCupolaPanelInline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.drawStickLine)) {
+    implementations[SERVICE_IDS.drawStickLine].inline = drawStickLineInline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.compareFloat64)) {
+    implementations[SERVICE_IDS.compareFloat64].inline = compareFloat64Inline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.alphaDim)) {
+    implementations[SERVICE_IDS.alphaDim].inline = () => alphaDimInline("A", "B");
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.antialiasingDim)) {
+    implementations[SERVICE_IDS.antialiasingDim].inline = antialiasingDimInline;
   }
   return implementations;
 }
