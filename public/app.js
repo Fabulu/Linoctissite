@@ -10,12 +10,57 @@ const exitFullscreenButton = document.querySelector("#exit-fullscreen");
 const status = document.querySelector("#status");
 const sourceRoot = new URL("./lino-src/", location.href);
 const entry = new URL("work/vhgame.txt", sourceRoot).href;
+
+async function openPersistence() {
+  if (!window.indexedDB) return null;
+  return new Promise((resolve) => {
+    const request = indexedDB.open("linoctis", 1);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains("files")) database.createObjectStore("files");
+      if (!database.objectStoreNames.contains("globalK")) database.createObjectStore("globalK");
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+  });
+}
+
+async function readPersistenceStore(database, name) {
+  if (!database) return [];
+  return new Promise((resolve) => {
+    const transaction = database.transaction(name, "readonly");
+    const store = transaction.objectStore(name);
+    const keysRequest = store.getAllKeys();
+    const valuesRequest = store.getAll();
+    transaction.oncomplete = () => resolve(keysRequest.result.map((key, index) => [key, valuesRequest.result[index]]));
+    transaction.onerror = () => resolve([]);
+  });
+}
+
+function writePersistence(database, storeName, key, value) {
+  if (!database) return;
+  try {
+    const store = database.transaction(storeName, "readwrite").objectStore(storeName);
+    if (value === null) store.delete(key);
+    else store.put(value, key);
+  } catch { /* persistence remains optional when storage is unavailable */ }
+}
+
+const persistence = await openPersistence();
 const manifest = await fetch(new URL("manifest.json", sourceRoot)).then((response) => response.json());
 const namedFiles = new Map(await Promise.all(Object.entries(manifest.files ?? {}).map(async ([name, filename]) => {
   const response = await fetch(new URL(filename, sourceRoot));
   if (!response.ok) throw new Error(`Unable to load ${filename}`);
   return [name, new Uint8Array(await response.arrayBuffer())];
 })));
+for (const [name, bytes] of await readPersistenceStore(persistence, "files")) {
+  namedFiles.set(String(name).replaceAll("\\", "/").toLowerCase(), new Uint8Array(bytes));
+}
+const globalK = new Map();
+for (const [name, units] of await readPersistenceStore(persistence, "globalK")) {
+  const saved = units instanceof Int32Array ? units : new Int32Array(units);
+  if (saved.length === 255) globalK.set(String(name), saved);
+}
 let pointerX = 0;
 let pointerY = 0;
 let pointerButtons = 0;
@@ -223,7 +268,14 @@ status.textContent = "Compiling the real 73-module Noctis project in this browse
 const host = {
   directory: ".",
   files: namedFiles,
-  globalK: new Map(),
+  globalK,
+  fileChanged(name, bytes) {
+    const key = String(name).replaceAll("\\", "/").toLowerCase();
+    writePersistence(persistence, "files", key, bytes === null ? null : new Uint8Array(bytes));
+  },
+  globalKChanged(name, units) {
+    writePersistence(persistence, "globalK", String(name), units === null ? null : new Int32Array(units));
+  },
   keys: heldKeys,
   consoleInput,
   pointer({ mode }) {
