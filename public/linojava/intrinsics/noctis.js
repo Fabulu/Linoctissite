@@ -2812,7 +2812,8 @@ function polymapAddresses(linked) {
     "PGtexi", "PGtexv", "PGtmp", "PGdi", "PGval", "PGi", "PGj", "CSpix",
     "EWvr22", "EWminy", "EWmaxy", "EWsi", "EWx1", "EWy1", "EWx2", "EWy2",
     "EWity", "EWjty", "EWax", "EWcx", "EWh", "FS16", "FSVX", "FSVY",
-    "FSVZ", "FSK1", "FSK2", "FSK3", "D64THLO", "D64THHI", "D64QLO",
+    "FSVZ", "FSK1", "FSK2", "FSK3", "FSK4", "FSX", "FSY", "FSZ", "FSTX", "FSTY",
+    "D64THLO", "D64THHI", "D64QLO",
     "D64QHI", "PJthird0", "PJthird1", "ipart", "fpart", "nw", "SADPT",
     "RPSM", "RPBG", "RNGLB", "PGSCRT", "PGSCRE", "PGDOFF",
     "PGUVZ", "PGUVX", "PGUVY", "PGUVK4",
@@ -3945,35 +3946,35 @@ function terrainUvNext(machine, linked, p = null) {
   const control = floatingPoint(machine).control;
   const nearest = (control & 0x0c00) === 0;
   const view = dataView(memory);
-  let z = readFloat64View(view, floats + 30) + readFloat64View(view, floats + 22);
-  writeFloat64View(view, floats + 48, z);
+  let z = readFloat64View(view, floats + p.FSZ * 2) + readFloat64View(view, floats + p.FSK3 * 2);
+  writeFloat64View(view, floats + p.FSW0 * 2, z);
   let narrowed = nearest ? Math.fround(z) : roundFloat32(z, control);
   memory[p.PGUVZ] = float32Bits(narrowed);
-  writeFloat64View(view, floats + 30, narrowed);
-  let x = readFloat64View(view, floats + 26) + readFloat64View(view, floats + 18);
-  writeFloat64View(view, floats + 50, x);
+  writeFloat64View(view, floats + p.FSZ * 2, narrowed);
+  let x = readFloat64View(view, floats + p.FSX * 2) + readFloat64View(view, floats + p.FSK1 * 2);
+  writeFloat64View(view, floats + p.FSW1 * 2, x);
   narrowed = nearest ? Math.fround(x) : roundFloat32(x, control);
   memory[p.PGUVX] = float32Bits(narrowed);
-  writeFloat64View(view, floats + 26, narrowed);
-  let y = readFloat64View(view, floats + 28) + readFloat64View(view, floats + 20);
-  writeFloat64View(view, floats + 52, y);
+  writeFloat64View(view, floats + p.FSX * 2, narrowed);
+  let y = readFloat64View(view, floats + p.FSY * 2) + readFloat64View(view, floats + p.FSK2 * 2);
+  writeFloat64View(view, floats + p.FSW2 * 2, y);
   narrowed = nearest ? Math.fround(y) : roundFloat32(y, control);
   memory[p.PGUVY] = float32Bits(narrowed);
-  writeFloat64View(view, floats + 28, narrowed);
-  let reciprocal = readFloat64View(view, floats + 36) / z;
-  writeFloat64View(view, floats + 54, reciprocal);
+  writeFloat64View(view, floats + p.FSY * 2, narrowed);
+  let reciprocal = readFloat64View(view, floats + p.FSUNO * 2) / z;
+  writeFloat64View(view, floats + p.FSW3 * 2, reciprocal);
   reciprocal = nearest ? Math.fround(reciprocal) : roundFloat32(reciprocal, control);
   memory[p.PGUVK4] = float32Bits(reciprocal);
-  writeFloat64View(view, floats + 24, reciprocal);
-  let result = x * readFloat64View(view, floats + 32);
-  writeFloat64View(view, floats + 54, result);
+  writeFloat64View(view, floats + p.FSK4 * 2, reciprocal);
+  let result = x * readFloat64View(view, floats + p.FSTX * 2);
+  writeFloat64View(view, floats + p.FSW3 * 2, result);
   result *= reciprocal;
-  writeFloat64View(view, floats + 54, result);
+  writeFloat64View(view, floats + p.FSW3 * 2, result);
   memory[p.SPun] = convertToInt32(result, control);
-  result = y * readFloat64View(view, floats + 34);
-  writeFloat64View(view, floats + 54, result);
+  result = y * readFloat64View(view, floats + p.FSTY * 2);
+  writeFloat64View(view, floats + p.FSW3 * 2, result);
   result *= reciprocal;
-  writeFloat64View(view, floats + 54, result);
+  writeFloat64View(view, floats + p.FSW3 * 2, result);
   memory[p.SPvn] = convertToInt32(result, control);
 }
 
@@ -6725,15 +6726,15 @@ function whiteRaster(machine, linked) {
   let p = whiteRasterAddressCaches.get(linked);
   if (!p) {
     const names = [
-      "nw", "RADPT", "fw", "FA0", "FI", "PGFi", "GBt",
+      "nw", "RADPT", "fw", "FA0", "FI", "PGFi", "PGFt", "PGFu", "GBt",
       "WHmag", "WHfgm", "WHshape", "WHsun", "WHok", "WHxsunl", "WHxsunh",
       "WHcxl", "WHcxh", "WHcyl", "WHcyh", "WHiy", "WHix", "WHptr",
       "WHpix", "WHtex", "WHn", "WHclamp", "WHwrap", "WHrows", "WHcols",
       "SFXX", "SFYY", "SFZZ", "FSPCB", "FSPSB", "FSTCB", "FSTSB",
       "FSTCA", "FSTSA", "FSPCA", "FSPSA", "SFRX", "SFZ2", "SFRZ", "SFRY",
-      "SFMAG", "SFCX", "SFCY", "SFMG", "SFFGM", "SFSHE", "SFISE",
+      "SFT1", "SFT2", "SFMAG", "SFCX", "SFCY", "SFMG", "SFFGM", "SFSHE", "SFISE",
       "SFMSQ", "SFFSQ", "SFYA", "SFYB", "SFYP", "SFXA", "SFXB", "SFXP",
-      "SFZW", "SFV0", "SFV1", "F32XC", "F32YC",
+      "SFZW", "SFV0", "SFV1", "F32XC", "F32YC", "D12H", "D24H",
     ];
     p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
     whiteRasterAddressCaches.set(linked, p);
@@ -6795,7 +6796,13 @@ function whiteRaster(machine, linked) {
 
   const centerX = projectedX + centerOffsetX + 0.5;
   const centerY = projectedY + centerOffsetY + 0.5;
+  // The source widens both float32 centre constants through SFT1 and keeps
+  // the binary64 0.5 addend in SFT2.  Those slots are shared, observable
+  // Lino state even when the body is wholly outside the viewport.
+  store(p.SFT1, centerOffsetX);
+  store(p.SFT2, 0.5);
   store(p.SFCX, centerX);
+  store(p.SFT1, centerOffsetY);
   store(p.SFCY, centerY);
   const mag = magnitude * 100 + 1.5;
   const fgm = float32FromBits(memory[p.WHfgm]) * mag;
@@ -6822,6 +6829,7 @@ function whiteRaster(machine, linked) {
   store(p.SFYP, sampleY);
   store(p.SFV0, step);
   store(p.SFV1, yStep);
+  memory[p.PGFu] = shape === 1 ? p.D12H : p.D24H;
 
   const page = p.nw + p.RADPT;
   let rows = 0;
@@ -6829,12 +6837,12 @@ function whiteRaster(machine, linked) {
   let stored = 0;
   let clamps = 0;
   let wraps = 0;
-  let ix = 0;
-  let iy = 0;
-  let pointer = 0;
-  let pixel = 0;
-  let texture = 0;
-  let rawSum = 0;
+  let ix = memory[p.WHix] | 0;
+  let iy = memory[p.WHiy] | 0;
+  let pointer = memory[p.WHptr] | 0;
+  let pixel = memory[p.WHpix] | 0;
+  let texture = memory[p.WHtex] | 0;
+  let rawSum = memory[p.GBt] | 0;
   let xa = -mag;
   let xEnd = centerX + mag;
   let sampleX = centerX - mag;
@@ -6848,7 +6856,11 @@ function whiteRaster(machine, linked) {
     while (compare(sampleX, xEnd) < 0) {
       columns += 1;
       iy = convertToInt32(sampleY, 0x0c00);
-      ix = convertToInt32(sampleX, 0x0c00);
+      memory[p.WHiy] = iy;
+      if (iy >= 10 && iy <= 189) {
+        ix = convertToInt32(sampleX, 0x0c00);
+        memory[p.WHix] = ix;
+      }
       if (iy >= 10 && iy <= 189 && ix >= 10 && ix <= 312) {
         radial = xa * xa + ya * ya;
         if (compare(radial, magSquared) < 0) {
@@ -6856,14 +6868,20 @@ function whiteRaster(machine, linked) {
             const intensity = 63 - (Math.sqrt(radial) - fgm) * intensityScale;
             pixel = signExtendByte(convertToInt32(intensity, 0x0c00) & 255);
           } else pixel = 63;
+          memory[p.WHpix] = pixel;
           pointer = (Math.imul(iy, 320) + ix) & 0xffff;
+          memory[p.WHptr] = pointer;
           texture = memory[page + pointer] | 0;
+          memory[p.WHtex] = texture;
           rawSum = (pixel + texture) | 0;
+          memory[p.GBt] = rawSum;
           const wrapped = signExtendByte(rawSum & 255);
           if (rawSum !== wrapped) wraps += 1;
           pixel = wrapped;
+          memory[p.WHpix] = pixel;
           if (pixel > 63) {
             pixel = 63;
+            memory[p.WHpix] = pixel;
             clamps += 1;
           }
           const output = pixel & 255;
@@ -6898,12 +6916,6 @@ function whiteRaster(machine, linked) {
   memory[p.WHn] = stored;
   memory[p.WHclamp] = clamps;
   memory[p.WHwrap] = wraps;
-  memory[p.WHiy] = iy;
-  memory[p.WHix] = ix;
-  memory[p.WHptr] = pointer;
-  memory[p.WHpix] = pixel;
-  memory[p.WHtex] = texture;
-  memory[p.GBt] = rawSum;
   writeFloat64(memory, p.WHcxl, centerX);
   writeFloat64(memory, p.WHcyl, centerY);
   writeFloat64(memory, p.FA0, centerY);
@@ -7221,25 +7233,6 @@ function drawMode2Cache(machine, linked) {
   }
   const count = memory[p.VHRcachecount] >>> 0;
   const view = dataView(memory);
-  const projectionKey = [
-    p.FSCAMX, p.FSCAMY, p.FSCAMZ, p.FSPSB, p.FSPCB, p.FSTCB, p.FSTSB,
-    p.FSPCA, p.FSPSA, p.FSTCA, p.FSTSA, p.FSUNEG, p.FSUNO, p.FSXC, p.FSYC,
-  ].flatMap((slot) => [memory[p.fw + slot * 2] | 0, memory[p.fw + slot * 2 + 1] | 0]);
-  const frameKey = `${count}:${projectionKey.join(",")}`;
-  if (!machine.noctisDisableHullFrameCache && p.frameCache?.key === frameKey) {
-    const page = p.page;
-    const { offsets, pixels } = p.frameCache;
-    for (let index = 0; index < offsets.length; index += 1) memory[page + offsets[index]] = pixels[index];
-    memory[p.VHRcachep] = count;
-    memory[p.VHRdrawn] = count;
-    machine.X = LINO_DONE;
-    return;
-  }
-  if (p.lastRenderedKey === frameKey) p.stableFrameCount = (p.stableFrameCount ?? 1) + 1;
-  else {
-    p.lastRenderedKey = frameKey;
-    p.stableFrameCount = 1;
-  }
   if (!p.topology || p.topology.count !== count) {
     const keys = new Map();
     const vertexIds = new Int32Array(count * 3);
@@ -7315,9 +7308,6 @@ function drawMode2Cache(machine, linked) {
       p.topology.iy[id] = convertToInt32(screenYWide, control);
     }
   }
-  const captureFrame = !machine.noctisDisableHullFrameCache && p.stableFrameCount === 4;
-  const touched = captureFrame ? new Uint8Array(65536) : null;
-  machine.noctisSolidTouched = touched;
   for (let leaf = 0; leaf < count; leaf += 1) {
     const record = p.vhrcache + leaf * 10;
     memory[p.VHRcachep] = leaf;
@@ -7368,20 +7358,6 @@ function drawMode2Cache(machine, linked) {
     } else if (visibleCount !== 0) poly3d(machine, linked);
     memory[p.VHRdrawn] = (memory[p.VHRdrawn] + 1) | 0;
   }
-  machine.noctisSolidTouched = null;
-  if (touched) {
-    let size = 0;
-    for (let offset = 0; offset < touched.length; offset += 1) size += touched[offset];
-    const offsets = new Uint16Array(size);
-    const pixels = new Uint8Array(size);
-    for (let offset = 0, index = 0; offset < touched.length; offset += 1) {
-      if (touched[offset] === 0) continue;
-      offsets[index] = offset;
-      pixels[index] = memory[p.page + offset] & 255;
-      index += 1;
-    }
-    p.frameCache = { key: frameKey, offsets, pixels };
-  }
   memory[p.VHRcachep] = count;
   machine.X = LINO_DONE;
 }
@@ -7400,6 +7376,8 @@ function renderCupolaCache(machine, linked) {
       VHCpanels: address(linked, "VHCpanels"),
       VHCcachep: address(linked, "VHCcachep"),
       VHCcopy: address(linked, "VHCcopy"),
+      VHCi: address(linked, "VHCi"),
+      VHCvi: address(linked, "VHCvi"),
       VHVcamyi: address(linked, "VHVcamyi"),
       vhccache: address(linked, "vhccache"),
       vhcpoly: address(linked, "vhcpoly"),
@@ -7546,6 +7524,12 @@ function renderCupolaCache(machine, linked) {
       }
       memory[p.VHCpanels] = panel + 1;
     }
+
+    // VHC draw panel's four-vertex source loop leaves these public cursors
+    // at the values from its final vertex.  The shared-topology path skips
+    // that loop, so publish the same state before returning.
+    memory[p.VHCi] = 4;
+    memory[p.VHCvi] = 3;
 
     memory[p.FI] = cameraY;
     const narrowedCameraY = Math.fround(cameraY);
@@ -8892,7 +8876,7 @@ function rectangle(machine, linked) {
     }
   }
   memory[p.rectdisplaypointer] = pointer;
-  memory[p.rectpixels] = 0;
+  memory[p.rectpixels] = pixels;
   memory[p.rectscanlines] = 0;
   machine.X = LINO_DONE;
 }
