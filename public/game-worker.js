@@ -36,7 +36,6 @@ let rateInstructions = 0;
 let renderedFps = 0;
 let runnerMillisecondsPerFrame = 0;
 let instructionsPerFrame = 0;
-let nextFrameAt = performance.now();
 let pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, paused: false };
 
 const canonical = (value) => String(value).replace(/[\x00-\x20]+/g, "").replaceAll("\\", "/").toLowerCase();
@@ -245,12 +244,10 @@ function runMachine() {
       emitMessage({ type: "stopped", status: result.status });
       return;
     }
-    let delay = result.sleepMilliseconds > 0 ? result.sleepMilliseconds : 0;
-    if (workerScope && producedFrame) {
-      const now = performance.now();
-      nextFrameAt = Math.max(nextFrameAt + 1000 / 60, now);
-      delay = Math.max(delay, nextFrameAt - now);
-    }
+    // Lino's TK wait is the authoritative frame clock. Do not add another
+    // host-side presentation delay after a completed frame; doing so stacks
+    // two schedulers and drops a nominal 60 Hz run toward 30 Hz.
+    const delay = result.sleepMilliseconds > 0 ? result.sleepMilliseconds : 0;
     // Long Lino redraws can consume several runner budgets without reaching a
     // presentation. Yield through the worker event loop between those slices
     // so pointer releases and other host messages cannot be starved by our
@@ -368,7 +365,6 @@ async function initialize(message) {
     if (y) program.machine.memory[y.value] = Math.round(bounds.y) | 0;
   }
   running = true;
-  nextFrameAt = performance.now();
   emitMessage({ type: "ready" });
   queueRun();
 }

@@ -1144,7 +1144,6 @@ function cycleStarTexture(machine, linked) {
 function smoothStarPage(machine, linked) {
   const memory = machine.memory;
   const base = value(memory, linked, "VHTsmoothbase") >>> 0;
-  let accumulator = 0;
   const quarter = (pointer) => (((memory[pointer - 320] & 0xff)
     + (memory[pointer] & 0xff) + (memory[pointer + 320] & 0xff)
     + (memory[pointer + 640] & 0xff)) & 0xfc) >>> 2;
@@ -1154,9 +1153,9 @@ function smoothStarPage(machine, linked) {
   let q2 = quarter(destination + 2);
   let q3 = quarter(destination + 3);
   for (let index = 0; index < 56960; index += 1) {
-    accumulator = (accumulator + q0 + q1 + q2 + q3) & 0xff;
-    accumulator >>>= 2;
-    memory[destination] = accumulator;
+    // The native back-edge lands on XOR EBP,EBP immediately before the four
+    // packed-lane quarters. The accumulator is local to one destination.
+    memory[destination] = ((q0 + q1 + q2 + q3) & 0xff) >>> 2;
     destination += 1;
     q0 = q1;
     q1 = q2;
@@ -6596,16 +6595,11 @@ function spaceFade(machine, linked) {
   const relative = p.radpt + 2876;
   const base = p.nw + relative;
   memory[p.base] = relative;
-  // NIV's fade runs at its presentation cadence. A slow browser otherwise
-  // leaves the additive ship/star passes alive for seconds and creates a
-  // fill-rate feedback loop. Apply the equivalent number of 60 Hz fades.
-  const now = performance.now();
-  const previous = machine.noctisSpaceFadeTimestamp;
-  machine.noctisSpaceFadeTimestamp = now;
-  const elapsedFrames = previous === undefined
-    ? 1
-    : Math.max(1, Math.min(8, Math.round((now - previous) * 60 / 1000)));
-  const decrement = elapsedFrames * 8;
+  // pfade is paired with one complete additive render pass. Applying extra
+  // wall-clock decay steps without replaying those draws changes the source
+  // image, punching holes into stars and white smear effects on slower hosts.
+  // Keep the original one eight-level fade per rendered frame.
+  const decrement = 8;
   let output = 0;
   for (let index = 0; index < 57920; index += 1) {
     output = memory[base + index] & 63;
