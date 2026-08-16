@@ -285,6 +285,7 @@ const SERVICE_IDS = Object.freeze({
   panelOrbitProject: "service:vhporbitproject",
   panelMoonProject: "service:vhpmoonproject",
   panelIntegerStick: "service:vhpintegerstick",
+  panelMappedQuadLoad: "service:vhpmappedquadload",
   panelSystemOrbits: "service:vhpsystemorbits",
   panelMoonScoreBounds: "service:vhpmoonscorebounds",
   glassBubble: "service:spglassbubble",
@@ -318,6 +319,7 @@ const drawCupolaPanelAddressCaches = new WeakMap();
 const stick3dAddressCaches = new WeakMap();
 const flareDrawAddressCaches = new WeakMap();
 const panelRenderAddressCaches = new WeakMap();
+const panelMappedQuadAddressCaches = new WeakMap();
 const glassBubbleAddressCaches = new WeakMap();
 const bodyVectorAddressCaches = new WeakMap();
 const bodyVectorValueCaches = new WeakMap();
@@ -7351,6 +7353,39 @@ function panelIntegerStick(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function panelMappedQuadLoad(machine, linked) {
+  const memory = machine.memory;
+  let p = panelMappedQuadAddressCaches.get(linked);
+  if (!p) {
+    p = {
+      ...polymapAddresses(linked),
+      VHPi: address(linked, "VHPi"),
+      vhcpoly: address(linked, "vhcpoly"),
+      PGFt: address(linked, "PGFt"),
+    };
+    panelMappedQuadAddressCaches.set(linked, p);
+  }
+  const slots = [p.FSINX, p.FSINY, p.FSINZ];
+  for (let vertex = 0; vertex < 4; vertex += 1) {
+    memory[p.VHPi] = vertex;
+    const source = p.vhcpoly + vertex * 3;
+    for (let axis = 0; axis < 3; axis += 1) {
+      const slot = slots[axis] + vertex;
+      const bits = memory[source + axis] | 0;
+      memory[p.PGFi] = slot;
+      memory[p.PGFt] = bits;
+      memory[p.FS0] = bits;
+      const converted = float32FromBits(bits);
+      writeFloat64(memory, p.FA0, converted);
+      writeFloat64(memory, p.fw + slot * 2, converted);
+    }
+  }
+  memory[p.VHPi] = 4;
+  machine.A = 4;
+  machine.C = p.vhcpoly + 9;
+  machine.X = LINO_DONE;
+}
+
 function panelSystemOrbits(machine, linked) {
   const memory = machine.memory;
   const p = panelRenderAddresses(linked);
@@ -9892,6 +9927,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.panelOrbitProject]: panelOrbitProject,
     [SERVICE_IDS.panelMoonProject]: panelMoonProject,
     [SERVICE_IDS.panelIntegerStick]: panelIntegerStick,
+    [SERVICE_IDS.panelMappedQuadLoad]: panelMappedQuadLoad,
     [SERVICE_IDS.panelSystemOrbits]: panelSystemOrbits,
     [SERVICE_IDS.panelMoonScoreBounds]: panelMoonScoreBounds,
     [SERVICE_IDS.glassBubble]: glassBubble,
