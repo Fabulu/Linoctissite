@@ -116,9 +116,9 @@ const savedGlobalK = (await readPersistenceStore(persistence, "globalK"))
   .map(([name, units]) => [String(name), units instanceof Int32Array ? units : new Int32Array(units)])
   .filter(([, units]) => units.length === 255);
 const pcmHost = createPcmHost();
-const worker = new URLSearchParams(location.search).get("runtime") === "worker"
-  ? new Worker(new URL("./game-worker.js", import.meta.url), { type: "module" })
-  : createForegroundRuntime();
+const worker = new URLSearchParams(location.search).get("runtime") === "foreground"
+  ? createForegroundRuntime()
+  : new Worker(new URL("./game-worker.js", import.meta.url), { type: "module" });
 globalThis.__linoRuntime = worker;
 
 let pointerX = 0;
@@ -142,6 +142,12 @@ let displayRate = 0;
 let displayStartedAt = performance.now();
 let displayMilliseconds = 0;
 let lastMetrics = null;
+
+function releaseFrame(frame) {
+  if (!frame) return;
+  if (frame.borrowed) worker.postMessage({ type: "frameCredit" });
+  else worker.postMessage({ type: "frameCredit", buffer: frame.pixels.buffer }, [frame.pixels.buffer]);
+}
 
 function configureDisplay(width, height) {
   const visible = width > 0 && height > 0;
@@ -201,8 +207,7 @@ function animationFrame(now) {
     const frame = pendingFrame;
     pendingFrame = null;
     present(frame);
-    if (frame.borrowed) worker.postMessage({ type: "frameCredit" });
-    else worker.postMessage({ type: "frameCredit", buffer: frame.pixels.buffer }, [frame.pixels.buffer]);
+    releaseFrame(frame);
   }
   const elapsed = now - displayStartedAt;
   if (elapsed >= 1000) {
@@ -385,7 +390,10 @@ document.addEventListener("fullscreenchange", () => {
 worker.addEventListener("message", (event) => {
   const message = event.data ?? {};
   if (message.type === "ready") status.textContent = "Starting Noctis...";
-  else if (message.type === "frame") pendingFrame = message;
+  else if (message.type === "frame") {
+    releaseFrame(pendingFrame);
+    pendingFrame = message;
+  }
   else if (message.type === "display") {
     configureDisplay(message.width | 0, message.height | 0);
     positionBrowserWindow(message.x | 0, message.y | 0);

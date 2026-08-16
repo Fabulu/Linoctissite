@@ -23,7 +23,8 @@ const heldKeys = Object.create(null);
 const consoleInput = [];
 let pendingFrame = null;
 let completedFrame = false;
-let frameCredit = true;
+const maxFrameCredits = workerScope ? 3 : 1;
+let frameCredits = maxFrameCredits;
 const frameBuffers = [];
 let runQueued = false;
 let delayedRun = 0;
@@ -35,6 +36,7 @@ let rateInstructions = 0;
 let renderedFps = 0;
 let runnerMillisecondsPerFrame = 0;
 let instructionsPerFrame = 0;
+let nextFrameAt = performance.now();
 let pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, paused: false };
 
 const canonical = (value) => String(value).replace(/[\x00-\x20]+/g, "").replaceAll("\\", "/").toLowerCase();
@@ -225,7 +227,13 @@ function runMachine() {
       emitMessage({ type: "stopped", status: result.status });
       return;
     }
-    queueRun(result.sleepMilliseconds > 0 ? result.sleepMilliseconds : 0);
+    let delay = result.sleepMilliseconds > 0 ? result.sleepMilliseconds : 0;
+    if (workerScope && producedFrame) {
+      const now = performance.now();
+      nextFrameAt = Math.max(nextFrameAt + 1000 / 60, now);
+      delay = Math.max(delay, nextFrameAt - now);
+    }
+    queueRun(delay);
   } catch (error) {
     running = false;
     emitMessage({ type: "error", message: error?.stack || error?.message || String(error) });
@@ -293,8 +301,8 @@ async function initialize(message) {
     monotonicMilliseconds: () => performance.now(),
     retrace(origin, width, height, memory) {
       completedFrame = true;
-      if (frameCredit) {
-        frameCredit = false;
+      if (frameCredits > 0) {
+        frameCredits -= 1;
         const count = width * height;
         let pixels;
         if (foregroundRuntime) pixels = memory.subarray(origin, origin + count);
@@ -332,6 +340,7 @@ async function initialize(message) {
     if (y) program.machine.memory[y.value] = Math.round(bounds.y) | 0;
   }
   running = true;
+  nextFrameAt = performance.now();
   emitMessage({ type: "ready" });
   queueRun();
 }
@@ -347,7 +356,7 @@ function handleMessage(message) {
     for (const name of Object.keys(heldKeys)) delete heldKeys[name];
   } else if (message.type === "frameCredit") {
     if (message.buffer instanceof ArrayBuffer) frameBuffers.push(new Int32Array(message.buffer));
-    frameCredit = true;
+    frameCredits = Math.min(maxFrameCredits, frameCredits + 1);
   } else if (message.type === "ascii") consoleInput.push(message.value | 0);
   else if (message.type === "pointer") {
     pointerX = message.x | 0;
