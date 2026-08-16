@@ -6595,10 +6595,20 @@ function spaceFade(machine, linked) {
   const relative = p.radpt + 2876;
   const base = p.nw + relative;
   memory[p.base] = relative;
+  // NIV's fade runs at its presentation cadence. A slow browser otherwise
+  // leaves the additive ship/star passes alive for seconds and creates a
+  // fill-rate feedback loop. Apply the equivalent number of 60 Hz fades.
+  const now = performance.now();
+  const previous = machine.noctisSpaceFadeTimestamp;
+  machine.noctisSpaceFadeTimestamp = now;
+  const elapsedFrames = previous === undefined
+    ? 1
+    : Math.max(1, Math.min(8, Math.round((now - previous) * 60 / 1000)));
+  const decrement = elapsedFrames * 8;
   let output = 0;
   for (let index = 0; index < 57920; index += 1) {
     output = memory[base + index] & 63;
-    output = output >= 8 ? output - 8 : 0;
+    output = output >= decrement ? output - decrement : 0;
     memory[base + index] = output;
   }
   memory[p.index] = 57920;
