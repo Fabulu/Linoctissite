@@ -307,6 +307,10 @@ const symbolCaches = new WeakMap();
 const codeHandleCaches = new WeakMap();
 const dataViewCaches = new WeakMap();
 const float64ViewCaches = new WeakMap();
+let latestDataViewMemory = null;
+let latestDataView = null;
+let latestFloat64Memory = null;
+let latestFloat64View = null;
 const rasterAddressCaches = new WeakMap();
 const poly3dAddressCaches = new WeakMap();
 const polymapAddressCaches = new WeakMap();
@@ -385,20 +389,26 @@ function floatingPoint(machine) {
 }
 
 function dataView(memory) {
+  if (memory === latestDataViewMemory) return latestDataView;
   let view = dataViewCaches.get(memory);
   if (!view) {
     view = new DataView(memory.buffer, memory.byteOffset, memory.byteLength);
     dataViewCaches.set(memory, view);
   }
+  latestDataViewMemory = memory;
+  latestDataView = view;
   return view;
 }
 
 function float64View(memory) {
+  if (memory === latestFloat64Memory) return latestFloat64View;
   let view = float64ViewCaches.get(memory);
   if (!view) {
     view = new Float64Array(memory.buffer, memory.byteOffset, memory.byteLength >>> 3);
     float64ViewCaches.set(memory, view);
   }
+  latestFloat64Memory = memory;
+  latestFloat64View = view;
   return view;
 }
 
@@ -2461,8 +2471,16 @@ function directPolySlot(memory, p, index) {
   return readFloat64(memory, p.fw + index * 2);
 }
 
+function directPolySlotView(view, p, index) {
+  return readFloat64View(view, p.fw + index * 2);
+}
+
 function directPolyStoreWide(memory, p, index, number) {
   writeFloat64(memory, p.fw + index * 2, number);
+}
+
+function directPolyStoreWideView(view, p, index, number) {
+  writeFloat64View(view, p.fw + index * 2, number);
 }
 
 function directPolyStoreNarrow(memory, p, index, number, control) {
@@ -2472,54 +2490,62 @@ function directPolyStoreNarrow(memory, p, index, number, control) {
   return narrowed;
 }
 
+function directPolyStoreNarrowView(memory, view, p, index, number, control) {
+  const narrowed = roundFloat32(number, control);
+  memory[p.FS0] = float32Bits(narrowed);
+  writeFloat64View(view, p.fw + index * 2, narrowed);
+  return narrowed;
+}
+
 function polyRotateDirect(machine, linked, p, startVertex = 0) {
   // This is the real-time mapper's existing binary64 calculation schedule
   // expressed directly in JavaScript. Stores still narrow at every original
   // binary32 spill and reproduce the floating-point workspace side effects.
   // Planet and surface generation continue to use the exact scalar emulator.
   const memory = machine.memory;
+  const view = machine.noctisDataView ??= dataView(memory);
   const control = floatingPoint(machine).control;
   const count = memory[p.PJnrv] | 0;
   const mode = memory[p.PJmode] | 0;
   memory[p.PJvr] = startVertex;
   memory[p.PJdoflag] = 0;
-  const cameraX = directPolySlot(memory, p, p.FSCAMX);
-  const cameraY = directPolySlot(memory, p, p.FSCAMY);
-  const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
-  const betaSin = directPolySlot(memory, p, mode === 0 ? p.FSPSB : p.FSTSB);
-  const betaCos = directPolySlot(memory, p, mode === 0 ? p.FSPCB : p.FSTCB);
-  const turnBetaCos = directPolySlot(memory, p, p.FSTCB);
-  const turnBetaSin = directPolySlot(memory, p, p.FSTSB);
-  const alphaCos = directPolySlot(memory, p, mode === 0 ? p.FSPCA : p.FSTCA);
-  const alphaSin = directPolySlot(memory, p, mode === 0 ? p.FSPSA : p.FSTSA);
-  const turnAlphaCos = directPolySlot(memory, p, p.FSTCA);
-  const turnAlphaSin = directPolySlot(memory, p, p.FSTSA);
-  const near = directPolySlot(memory, p, p.FSUNEG);
+  const cameraX = directPolySlotView(view, p, p.FSCAMX);
+  const cameraY = directPolySlotView(view, p, p.FSCAMY);
+  const cameraZ = directPolySlotView(view, p, p.FSCAMZ);
+  const betaSin = directPolySlotView(view, p, mode === 0 ? p.FSPSB : p.FSTSB);
+  const betaCos = directPolySlotView(view, p, mode === 0 ? p.FSPCB : p.FSTCB);
+  const turnBetaCos = directPolySlotView(view, p, p.FSTCB);
+  const turnBetaSin = directPolySlotView(view, p, p.FSTSB);
+  const alphaCos = directPolySlotView(view, p, mode === 0 ? p.FSPCA : p.FSTCA);
+  const alphaSin = directPolySlotView(view, p, mode === 0 ? p.FSPSA : p.FSTSA);
+  const turnAlphaCos = directPolySlotView(view, p, p.FSTCA);
+  const turnAlphaSin = directPolySlotView(view, p, p.FSTSA);
+  const near = directPolySlotView(view, p, p.FSUNEG);
   let finalSecond = 0;
   for (let vertex = startVertex; vertex < count; vertex += 1) {
-    const z = directPolyStoreNarrow(memory, p, p.FSZZ, directPolySlot(memory, p, p.FSINZ + vertex) - cameraZ, control);
-    const x = directPolyStoreNarrow(memory, p, p.FSXX, directPolySlot(memory, p, p.FSINX + vertex) - cameraX, control);
-    const y = directPolyStoreNarrow(memory, p, p.FSYY, directPolySlot(memory, p, p.FSINY + vertex) - cameraY, control);
+    const z = directPolyStoreNarrowView(memory, view, p, p.FSZZ, directPolySlotView(view, p, p.FSINZ + vertex) - cameraZ, control);
+    const x = directPolyStoreNarrowView(memory, view, p, p.FSXX, directPolySlotView(view, p, p.FSINX + vertex) - cameraX, control);
+    const y = directPolyStoreNarrowView(memory, view, p, p.FSYY, directPolySlotView(view, p, p.FSINY + vertex) - cameraY, control);
 
     let work = z * betaSin;
-    directPolyStoreWide(memory, p, p.FSW0, work);
-    directPolyStoreNarrow(
-      memory, p,
+    directPolyStoreWideView(view, p, p.FSW0, work);
+    directPolyStoreNarrowView(
+      memory, view, p,
       p.FSRXF + vertex,
       x * betaCos + work,
       control,
     );
 
     work = z * turnBetaCos;
-    directPolyStoreWide(memory, p, p.FSW0, work);
+    directPolyStoreWideView(view, p, p.FSW0, work);
     const zProduct = x * turnBetaSin;
-    const z2 = directPolyStoreNarrow(memory, p, p.FSZ2, work - zProduct, control);
+    const z2 = directPolyStoreNarrowView(memory, view, p, p.FSZ2, work - zProduct, control);
 
     work = z2 * turnAlphaCos;
-    directPolyStoreWide(memory, p, p.FSW0, work);
+    directPolyStoreWideView(view, p, p.FSW0, work);
     const rotatedZWide = y * turnAlphaSin + work;
-    directPolyStoreWide(memory, p, p.FSW1, rotatedZWide);
-    directPolyStoreNarrow(memory, p, p.FSRZF + vertex, rotatedZWide, control);
+    directPolyStoreWideView(view, p, p.FSW1, rotatedZWide);
+    directPolyStoreNarrowView(memory, view, p, p.FSRZF + vertex, rotatedZWide, control);
     const status = Number.isNaN(rotatedZWide) || Number.isNaN(near)
       ? 17664 : rotatedZWide < near ? 256 : rotatedZWide === near ? 16384 : 0;
     memory[p.FSW] = status;
@@ -2544,15 +2570,15 @@ function polyRotateDirect(machine, linked, p, startVertex = 0) {
     if (visible !== 0) memory[p.PJdoflag] = (memory[p.PJdoflag] + 1) | 0;
 
     work = y * alphaCos;
-    directPolyStoreWide(memory, p, p.FSW0, work);
+    directPolyStoreWideView(view, p, p.FSW0, work);
     finalSecond = z2 * alphaSin;
-    directPolyStoreNarrow(memory, p, p.FSRYF + vertex, work - finalSecond, control);
+    directPolyStoreNarrowView(memory, view, p, p.FSRYF + vertex, work - finalSecond, control);
     memory[p.PJvr] = vertex + 1;
     machine.A = (p.fw + (p.FSRYF + vertex) * 2) | 0;
   }
   memory[p.PGFi] = p.FSRYF + count - 1;
-  writeFloat64(memory, p.FA0, directPolySlot(memory, p, p.FSRYF + count - 1));
-  writeFloat64(memory, p.FB0, finalSecond);
+  writeFloat64View(view, p.FA0, directPolySlotView(view, p, p.FSRYF + count - 1));
+  writeFloat64View(view, p.FB0, finalSecond);
   writeFloat64(memory, p.FT0, finalSecond);
   machine.A = (p.fw + (p.FSRYF + count - 1) * 2) | 0;
   machine.C = mode;
@@ -6014,18 +6040,19 @@ function rockCommandBounds(commands) {
 
 function rockBoundsMayRender(machine, p, bounds, margin = 2) {
   const memory = machine.memory;
+  const view = machine.noctisDataView ??= dataView(memory);
   const control = floatingPoint(machine).control;
-  const cameraX = directPolySlot(memory, p, p.FSCAMX);
-  const cameraY = directPolySlot(memory, p, p.FSCAMY);
-  const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
-  const betaSin = directPolySlot(memory, p, p.FSTSB);
-  const betaCos = directPolySlot(memory, p, p.FSTCB);
-  const alphaCos = directPolySlot(memory, p, p.FSTCA);
-  const alphaSin = directPolySlot(memory, p, p.FSTSA);
-  const near = directPolySlot(memory, p, p.FSUNEG);
-  const distance = directPolySlot(memory, p, p.FSDPP);
-  const centerX = directPolySlot(memory, p, p.FSXC);
-  const centerY = directPolySlot(memory, p, p.FSYC);
+  const cameraX = directPolySlotView(view, p, p.FSCAMX);
+  const cameraY = directPolySlotView(view, p, p.FSCAMY);
+  const cameraZ = directPolySlotView(view, p, p.FSCAMZ);
+  const betaSin = directPolySlotView(view, p, p.FSTSB);
+  const betaCos = directPolySlotView(view, p, p.FSTCB);
+  const alphaCos = directPolySlotView(view, p, p.FSTCA);
+  const alphaSin = directPolySlotView(view, p, p.FSTSA);
+  const near = directPolySlotView(view, p, p.FSUNEG);
+  const distance = directPolySlotView(view, p, p.FSDPP);
+  const centerX = directPolySlotView(view, p, p.FSXC);
+  const centerY = directPolySlotView(view, p, p.FSYC);
   let visibleCorners = 0;
   let minScreenX = Infinity; let maxScreenX = -Infinity;
   let minScreenY = Infinity; let maxScreenY = -Infinity;
@@ -6116,6 +6143,12 @@ function landedTreeRenderAddresses(linked) {
     SUfeax: address(linked, "SUfeax"),
     SUfval: address(linked, "SUfval"),
     SUfmask: address(linked, "SUfmask"),
+    PGFt: address(linked, "PGFt"),
+    GRcwc: address(linked, "GRcwc"),
+    GRcwn: address(linked, "GRcwn"),
+    mushpxf: address(linked, "VHGNDmushpxf"),
+    mushpyf: address(linked, "VHGNDmushpyf"),
+    mushpzf: address(linked, "VHGNDmushpzf"),
     leafx: address(linked, "VHGNDtreeleafx"),
     leafz: address(linked, "VHGNDtreeleafz"),
     rangef: address(linked, "VHGNDtreerangef"),
@@ -6218,14 +6251,15 @@ function indexTreeModelVertices(commands) {
 function projectTreeModelVertices(machine, tree, model) {
   const memory = machine.memory;
   const p = tree.p;
+  const view = machine.noctisDataView ??= dataView(memory);
   const control = floatingPoint(machine).control;
   const signature = [
-    directPolySlot(memory, p, p.FSCAMX), directPolySlot(memory, p, p.FSCAMY),
-    directPolySlot(memory, p, p.FSCAMZ), directPolySlot(memory, p, p.FSTSB),
-    directPolySlot(memory, p, p.FSTCB), directPolySlot(memory, p, p.FSTSA),
-    directPolySlot(memory, p, p.FSTCA), directPolySlot(memory, p, p.FSUNEG),
-    directPolySlot(memory, p, p.FSDPP), directPolySlot(memory, p, p.FSXC),
-    directPolySlot(memory, p, p.FSYC), control,
+    directPolySlotView(view, p, p.FSCAMX), directPolySlotView(view, p, p.FSCAMY),
+    directPolySlotView(view, p, p.FSCAMZ), directPolySlotView(view, p, p.FSTSB),
+    directPolySlotView(view, p, p.FSTCB), directPolySlotView(view, p, p.FSTSA),
+    directPolySlotView(view, p, p.FSTCA), directPolySlotView(view, p, p.FSUNEG),
+    directPolySlotView(view, p, p.FSDPP), directPolySlotView(view, p, p.FSXC),
+    directPolySlotView(view, p, p.FSYC), control,
     model.dynamicWind ? float32FromBits(memory[tree.windx]) : 0,
     model.dynamicWind ? float32FromBits(memory[tree.windz]) : 0,
   ];
@@ -6426,26 +6460,27 @@ function restoreTreePolygon(machine, linked, command, projection = null) {
 function projectGreenmushPoint(machine, linked, tree) {
   const memory = machine.memory;
   const p = tree.p;
+  const view = machine.noctisDataView ??= dataView(memory);
   memory[p.PJnrv] = 1;
   memory[p.PJmode] = 1;
   polyRotateDirect(machine, linked, p);
   memory[tree.GCret] = 0;
   if ((memory[p.rwf] | 0) === 0) return false;
   const control = floatingPoint(machine).control;
-  let factor = readFloat64(memory, p.fw + p.FSDPP * 2)
-    / readFloat64(memory, p.fw + p.FSRZF * 2);
-  writeFloat64(memory, p.fw + p.FSW3 * 2, factor);
-  let projected = factor * readFloat64(memory, p.fw + p.FSRXF * 2);
-  writeScalarScratch(machine, linked, projected);
-  projected += readFloat64(memory, p.fw + p.FSXC * 2);
-  writeScalarScratch(machine, linked, projected);
+  let factor = directPolySlotView(view, p, p.FSDPP)
+    / directPolySlotView(view, p, p.FSRZF);
+  directPolyStoreWideView(view, p, p.FSW3, factor);
+  let projected = factor * directPolySlotView(view, p, p.FSRXF);
+  writeFloat64View(view, p.FA0, projected);
+  projected += directPolySlotView(view, p, p.FSXC);
+  writeFloat64View(view, p.FA0, projected);
   const x = convertToInt32(projected, control);
   memory[tree.GCx] = x;
-  factor = readFloat64(memory, p.fw + p.FSW3 * 2);
-  projected = factor * readFloat64(memory, p.fw + p.FSRYF * 2);
-  writeScalarScratch(machine, linked, projected);
-  projected += readFloat64(memory, p.fw + p.FSYC * 2);
-  writeScalarScratch(machine, linked, projected);
+  factor = directPolySlotView(view, p, p.FSW3);
+  projected = factor * directPolySlotView(view, p, p.FSRYF);
+  writeFloat64View(view, p.FA0, projected);
+  projected += directPolySlotView(view, p, p.FSYC);
+  writeFloat64View(view, p.FA0, projected);
   const y = convertToInt32(projected, control);
   memory[tree.GCy] = y;
   if (x <= p.PGLBX || x >= p.PGUBX || y <= p.PGLBY || y >= p.PGUBY) return false;
@@ -6460,7 +6495,28 @@ function renderGreenmushDirect(machine, linked, tree) {
   const halfScale = scale >> 1;
   memory[tree.VHGNDtmp] = halfScale;
   const floating = (memory[state[8]] | 0) !== 0;
-  if (floating) landedMushroomSetup(machine, linked);
+  if (floating) {
+    const control = floatingPoint(machine).control;
+    const view = machine.noctisDataView ??= dataView(memory);
+    for (let axis = 9; axis <= 11; axis += 1) {
+      const source = float32FromBits(memory[state[axis]]);
+      writeFloat64View(view, tree.p.FB0, source);
+      writeFloat64View(view, tree.p.FA0, halfScale);
+      let result = scalarBinaryNumber(halfScale, source, control, "add");
+      writeFloat64View(view, tree.p.FA0, result);
+      result = roundFloat32(result, control);
+      memory[state[axis]] = float32Bits(result);
+      writeFloat64View(view, tree.p.FA0, result);
+    }
+    const fpu = floatingPoint(machine);
+    fpu.control = memory[tree.GRcwc] & 0xffff;
+    memory[state[0]] = convertToInt32(float32FromBits(memory[state[9]]), fpu.control);
+    memory[state[1]] = convertToInt32(float32FromBits(memory[state[10]]), fpu.control);
+    memory[state[2]] = convertToInt32(float32FromBits(memory[state[11]]), fpu.control);
+    memory[tree.PGFt] = memory[state[11]];
+    fpu.control = memory[tree.GRcwn] & 0xffff;
+    writeFloat64View(view, tree.p.FA0, float32FromBits(memory[state[11]]));
+  }
   else {
     memory[state[0]] = ((memory[state[0]] | 0) + halfScale) | 0;
     memory[state[1]] = ((memory[state[1]] | 0) + halfScale) | 0;
@@ -6476,7 +6532,23 @@ function renderGreenmushDirect(machine, linked, tree) {
   while (outer > 0) {
     memory[tree.SUfmask] = scale;
     if (floating) {
-      landedMushroomPoint(machine, linked);
+      const control = floatingPoint(machine).control;
+      const view = machine.noctisDataView ??= dataView(memory);
+      const floats = memory[tree.p.PJfwbase] >>> 0;
+      const sources = [state[11], state[10], state[9]];
+      const destinations = [tree.mushpzf, tree.mushpyf, tree.mushpxf];
+      const slots = [520, 512, 504];
+      for (let axis = 0; axis < 3; axis += 1) {
+        const random = landedFastRandom(machine, linked, scale, tree);
+        writeFloat64View(view, tree.p.FB0, random);
+        let result = scalarBinaryNumber(
+          float32FromBits(memory[sources[axis]]), random, control, "subtract",
+        );
+        writeFloat64View(view, tree.p.FA0, result);
+        result = roundFloat32(result, control);
+        memory[destinations[axis]] = float32Bits(result);
+        writeFloat64View(view, floats + slots[axis], result);
+      }
       memory[tree.VHGNDvi] = 0;
     }
     else {
