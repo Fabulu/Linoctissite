@@ -250,6 +250,7 @@ const SERVICE_IDS = Object.freeze({
   terrainMapped: "service:vhgndterrainmapped",
   terrainFacing: "service:vhgndterrainfacing",
   terrainTraverse: "service:vhgndtraversefaithful",
+  waterBackdrop: "service:vhgndwaterbackdrop",
   terrainRenderRandom: "service:vhgndrenderrandom",
   terrainVertexLoad: "service:vhgndvload",
   rectangle: "service:rectangle",
@@ -2738,34 +2739,43 @@ function poly3d(machine, linked) {
   polyProjectedTail(machine, linked, p);
 }
 
+function polyClipStage(machine, linked, p, count, xi, yi, xo, yo,
+  bound, direction, integer, result, gate) {
+  const memory = machine.memory;
+  memory[p.CLxi] = xi;
+  memory[p.CLyi] = yi;
+  memory[p.CLxo] = xo;
+  memory[p.CLyo] = yo;
+  memory[p.CLn] = count;
+  memory[p.CLbnd] = bound;
+  memory[p.CLdir] = direction;
+  memory[p.CLint] = integer;
+  polyClip(machine, linked, p);
+  count = memory[p.CLout] | 0;
+  memory[result] = count;
+  memory[p.PJgate] = gate;
+  return count;
+}
+
 function polyProjectedTail(machine, linked, p) {
   const memory = machine.memory;
   memory[p.BXn] = memory[p.PJvr2];
   polyBounds(memory, p);
   memory[p.PJgate] = 0;
   if ((memory[p.BXsi] | 0) !== 0) {
-    const stages = [
-      [p.FSVY0, p.FSVX0, p.FSVY1, p.FSVX1, p.FSLBYF, 0, 0, p.PJvr3, 3],
-      [p.FSVY1, p.FSVX1, p.FSVY2, p.FSVX2, p.FSUBYF, 1, 0, p.PJvr4, 4],
-      [p.FSVX2, p.FSVY2, p.FSVX3, p.FSVY3, p.FSLBXF, 0, 0, p.PJvr5, 5],
-      [p.FSVX3, p.FSVY3, 0, 0, p.FSUBXF, 1, 1, p.PJvr6, 6],
-    ];
     let count = memory[p.PJvr2] | 0;
-    for (const [xi, yi, xo, yo, bound, direction, integer, result, gate] of stages) {
-      memory[p.CLxi] = xi;
-      memory[p.CLyi] = yi;
-      memory[p.CLxo] = xo;
-      memory[p.CLyo] = yo;
-      memory[p.CLn] = count;
-      memory[p.CLbnd] = bound;
-      memory[p.CLdir] = direction;
-      memory[p.CLint] = integer;
-      polyClip(machine, linked, p);
-      count = memory[p.CLout] | 0;
-      memory[result] = count;
-      memory[p.PJgate] = gate;
-      if (count < 3) return;
-    }
+    count = polyClipStage(machine, linked, p, count,
+      p.FSVY0, p.FSVX0, p.FSVY1, p.FSVX1, p.FSLBYF, 0, 0, p.PJvr3, 3);
+    if (count < 3) return;
+    count = polyClipStage(machine, linked, p, count,
+      p.FSVY1, p.FSVX1, p.FSVY2, p.FSVX2, p.FSUBYF, 1, 0, p.PJvr4, 4);
+    if (count < 3) return;
+    count = polyClipStage(machine, linked, p, count,
+      p.FSVX2, p.FSVY2, p.FSVX3, p.FSVY3, p.FSLBXF, 0, 0, p.PJvr5, 5);
+    if (count < 3) return;
+    count = polyClipStage(machine, linked, p, count,
+      p.FSVX3, p.FSVY3, 0, 0, p.FSUBXF, 1, 1, p.PJvr6, 6);
+    if (count < 3) return;
     memory[p.PJvr2] = memory[p.PJvr6];
     memory[p.PJgate] = 0;
   }
@@ -5240,6 +5250,8 @@ function landedTerrainAddresses(linked) {
     "VHGNDx", "VHGNDz", "VHGNDxlo", "VHGNDxhi", "VHGNDzlo", "VHGNDzhi",
     "VHGNDlodstep", "VHGNDlodradius", "VHGNDbackspan", "VHGNDmindepth", "VHGNDmaxdepth",
     "VHGNDcamtx", "VHGNDcamtz", "VHGNDcamx", "VHGNDcamz", "VHGlanded", "VHGNDbeta", "VHGNDtmp",
+    "VHGNDalpha", "VHGNDwaterhorizon", "VHGNDwaterden", "VHGNDwatery",
+    "GRSKnightzone", "VHGNDwaterbase", "VHGNDwaterptr", "VHGNDwatercount",
     "VHGNDmanhattan", "VHGNDrawdepth", "VHGNDvv",
     "VHGdrawhud", "VHGhudcount", "VHGNDsurlight", "VHGseamless",
     "VHGNDframei", "VHGNDframey", "VHGNDframecol", "VHGNDframeoff", "VHGNDframecount",
@@ -5255,6 +5267,33 @@ function landedTerrainAddresses(linked) {
   cached.surface = noctisBuffer(linked, "RPSM");
   landedTerrainAddressCaches.set(linked, cached);
   return cached;
+}
+
+function waterBackdrop(machine, linked) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  let horizon = 100 - Math.imul(memory[p.VHGNDalpha] | 0, 5);
+  if (horizon < 10) horizon = 10;
+  if (horizon > 190) horizon = 190;
+  const denominator = 191 - horizon;
+  const page = noctisBuffer(linked, "RADPT");
+  const night = (memory[p.GRSKnightzone] | 0) !== 0;
+  memory[p.VHGNDwaterhorizon] = horizon;
+  memory[p.VHGNDwaterden] = denominator;
+  for (let y = horizon; y < 191; y += 1) {
+    let color = 128;
+    if (!night) color = 144 + Math.min(Math.trunc(((y - horizon) * 16) / denominator), 15);
+    const start = page + y * 320 + 5;
+    memory.fill(color, start, start + 307);
+    memory[p.VHGNDwatery] = y;
+    memory[p.VHGNDwaterbase] = color;
+    memory[p.VHGNDwaterptr] = start + 307;
+    memory[p.VHGNDwatercount] = 0;
+  }
+  memory[p.VHGNDwatery] = 191;
+  machine.A = 191;
+  machine.C = memory[p.VHGNDwaterbase] | 0;
+  machine.X = LINO_DONE;
 }
 
 function terrainTraverseFaithful(machine, linked) {
@@ -9420,6 +9459,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.terrainMapped]: terrainMapped,
     [SERVICE_IDS.terrainFacing]: terrainFacing,
     [SERVICE_IDS.terrainTraverse]: terrainTraverseFaithful,
+    [SERVICE_IDS.waterBackdrop]: waterBackdrop,
     [SERVICE_IDS.terrainRenderRandom]: terrainRenderRandom,
     [SERVICE_IDS.terrainVertexLoad]: landedVertexLoad,
     [SERVICE_IDS.rectangle]: rectangle,
