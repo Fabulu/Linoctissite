@@ -2897,7 +2897,7 @@ function polymapAddresses(linked) {
     "D64THLO", "D64THHI", "D64QLO",
     "D64QHI", "PJthird0", "PJthird1", "ipart", "fpart", "nw", "SADPT",
     "RPSM", "RPBG", "RNGLB", "PGSCRT", "PGSCRE", "PGDOFF",
-    "PGUVZ", "PGUVX", "PGUVY", "PGUVK4",
+    "PGUVZ", "PGUVX", "PGUVY", "PGUVK4", "FCret",
   ];
   cached = {
     ...poly3dAddresses(linked),
@@ -3767,83 +3767,91 @@ function doublePolygonBasis(machine, linked) {
   }
 }
 
-function mappedFacing(machine, linked) {
+function mappedFacing(machine, linked, p = null) {
   const memory = machine.memory;
-  const floats = value(memory, linked, "PJfwbase") >>> 0;
+  p ??= polymapAddresses(linked);
+  const floats = memory[p.PJfwbase] >>> 0;
+  const control = floatingPoint(machine).control;
+  const scratch = (number) => writeFloat64(memory, p.FA0, number);
+  const narrow = (number) => {
+    const narrowed = roundFloat32(number, control);
+    memory[p.FS0] = float32Bits(narrowed);
+    return narrowed;
+  };
   let edge1x = readFloat64(memory, floats + 504) - readFloat64(memory, floats + 508);
-  writeScalarScratch(machine, linked, edge1x);
-  edge1x = narrowScalar(machine, linked, edge1x);
+  scratch(edge1x);
+  edge1x = narrow(edge1x);
   writeFloat64(memory, floats + 464, edge1x);
   let edge2x = readFloat64(memory, floats + 506) - readFloat64(memory, floats + 508);
-  writeScalarScratch(machine, linked, edge2x);
-  edge2x = narrowScalar(machine, linked, edge2x);
+  scratch(edge2x);
+  edge2x = narrow(edge2x);
   writeFloat64(memory, floats + 458, edge2x);
 
   let edge1y = readFloat64(memory, floats + 512) - readFloat64(memory, floats + 516);
-  writeScalarScratch(machine, linked, edge1y);
-  edge1y = narrowScalar(machine, linked, edge1y);
+  scratch(edge1y);
+  edge1y = narrow(edge1y);
   writeFloat64(memory, floats + 466, edge1y);
   let edge2y = readFloat64(memory, floats + 514) - readFloat64(memory, floats + 516);
-  writeScalarScratch(machine, linked, edge2y);
-  edge2y = narrowScalar(machine, linked, edge2y);
+  scratch(edge2y);
+  edge2y = narrow(edge2y);
   writeFloat64(memory, floats + 460, edge2y);
 
   let edge1z = readFloat64(memory, floats + 520) - readFloat64(memory, floats + 524);
-  writeScalarScratch(machine, linked, edge1z);
-  edge1z = narrowScalar(machine, linked, edge1z);
+  scratch(edge1z);
+  edge1z = narrow(edge1z);
   writeFloat64(memory, floats + 468, edge1z);
   let edge2z = readFloat64(memory, floats + 522) - readFloat64(memory, floats + 524);
-  writeScalarScratch(machine, linked, edge2z);
-  edge2z = narrowScalar(machine, linked, edge2z);
+  scratch(edge2z);
+  edge2z = narrow(edge2z);
   writeFloat64(memory, floats + 462, edge2z);
 
   let first = edge1y * edge2z;
   writeFloat64(memory, floats + 496, first);
   let second = edge1z * edge2y;
-  writeScalarScratch(machine, linked, second);
+  scratch(second);
   second = first - second;
-  writeScalarScratch(machine, linked, second);
-  const normalX = narrowScalar(machine, linked, second);
+  scratch(second);
+  const normalX = narrow(second);
   writeFloat64(memory, floats + 470, normalX);
 
   first = edge1z * edge2x;
   writeFloat64(memory, floats + 496, first);
   second = edge1x * edge2z;
-  writeScalarScratch(machine, linked, second);
+  scratch(second);
   second = first - second;
-  writeScalarScratch(machine, linked, second);
-  const normalY = narrowScalar(machine, linked, second);
+  scratch(second);
+  const normalY = narrow(second);
   writeFloat64(memory, floats + 472, normalY);
 
   first = edge1x * edge2y;
   writeFloat64(memory, floats + 496, first);
   second = edge1y * edge2x;
-  writeScalarScratch(machine, linked, second);
+  scratch(second);
   second = first - second;
-  writeScalarScratch(machine, linked, second);
-  const normalZ = narrowScalar(machine, linked, second);
+  scratch(second);
+  const normalZ = narrow(second);
   writeFloat64(memory, floats + 474, normalZ);
 
   let difference = readFloat64(memory, floats + 448) - readFloat64(memory, floats + 508);
-  writeScalarScratch(machine, linked, difference);
+  scratch(difference);
   let sum = difference * normalX;
   writeFloat64(memory, floats + 496, sum);
 
   difference = readFloat64(memory, floats + 450) - readFloat64(memory, floats + 516);
-  writeScalarScratch(machine, linked, difference);
+  scratch(difference);
   let product = difference * normalY;
-  writeScalarScratch(machine, linked, product);
+  scratch(product);
   sum = product + sum;
   writeFloat64(memory, floats + 496, sum);
 
   difference = readFloat64(memory, floats + 452) - readFloat64(memory, floats + 524);
-  writeScalarScratch(machine, linked, difference);
+  scratch(difference);
   product = difference * normalZ;
-  writeScalarScratch(machine, linked, product);
+  scratch(product);
   sum = product + sum;
-  writeScalarScratch(machine, linked, sum);
+  scratch(sum);
   const visible = !Number.isNaN(sum) && sum >= 0 ? 1 : 0;
-  memory[address(linked, "FCret")] = visible;
+  memory[p.FCret] = visible;
   const treeRecording = machine.noctisTreeRecording;
   if (treeRecording) {
     treeRecording.commands.push(captureTreePolygon(machine, linked, true, 4));
@@ -5845,6 +5853,7 @@ function landedTerrainAddresses(linked) {
     "VHGNDmushx", "VHGNDmushy", "VHGNDmushz", "VHGNDmushmask1",
     "VHGNDmushmask2", "VHGNDmushscale", "VHGNDmushbase",
     "VHGNDmushcolmask", "VHGNDmushfloat",
+    "GRmushscale",
   ];
   cached = { ...Object.fromEntries(names.map((name) => [name, address(linked, name)])) };
   cached.surface = noctisBuffer(linked, "RPSM");
@@ -6623,7 +6632,7 @@ function restoreTreePolygon(machine, linked, command, projection = null) {
   memory[p.PJnrv] = command.vertices;
   if (command.kind === "faced-polygon") {
     mappedFacing(machine, linked);
-    if ((memory[address(linked, "FCret")] | 0) === 0) return;
+    if ((memory[p.FCret] | 0) === 0) return;
   }
   if (projection && command.vertexIndices) {
     let allVisible = true;
@@ -7162,6 +7171,20 @@ function terrainVegetation(machine, linked, p) {
   machine.A = 0;
 }
 
+function terrainBushDistant(machine, linked, p) {
+  const memory = machine.memory;
+  memory[p.VHGNDmushx] = memory[p.VHGNDoox];
+  memory[p.VHGNDmushy] = memory[p.VHGNDooy];
+  memory[p.VHGNDmushz] = memory[p.VHGNDooz];
+  memory[p.VHGNDmushmask1] = 7;
+  memory[p.VHGNDmushmask2] = 7;
+  memory[p.VHGNDmushscale] = memory[p.GRmushscale];
+  memory[p.VHGNDmushbase] = 209;
+  memory[p.VHGNDmushcolmask] = 31;
+  memory[p.VHGNDmushfloat] = 0;
+  terrainGreenmush(machine, linked);
+}
+
 function renderTerrainTileObjects(machine, linked, p, handles, x, z) {
   const memory = machine.memory;
   memory[p.VHGNDh1] = Math.imul(z, 200) + x;
@@ -7202,7 +7225,9 @@ function renderTerrainTileObjects(machine, linked, p, handles, x, z) {
         try { terrainTree(machine, linked); }
         finally { machine.noctisTerrainTreeObjectKey = undefined; }
       }
-      else machine.callCode(handles.bush);
+      else if ((memory[p.VHGNDdepth] | 0) >= 3 && !machine.noctisDisableBushDistant) {
+        terrainBushDistant(machine, linked, p);
+      } else machine.callCode(handles.bush);
     }
 
     memory[p.VHGNDobjid] = ((memory[p.VHGNDobjid] | 0) + 1) | 0;
