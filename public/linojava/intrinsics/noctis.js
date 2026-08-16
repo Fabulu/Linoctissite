@@ -7751,6 +7751,88 @@ function applyPixelEffect(memory, linked, p, handle, pointer, color) {
   }
 }
 
+function rectanglePixelWriter(memory, p, effect) {
+  const width = memory[p.displaywidth] | 0;
+  const alphaLight = (pointer, color) => {
+    memory[pointer] = pixelAlphaLight(memory[pointer] | 0, color);
+  };
+  const alphaDim = (pointer, color) => {
+    memory[pointer] = pixelAlphaDim(memory[pointer] | 0, color);
+  };
+  const smooth = (pointer, color) => {
+    const amount = (color & 0xfcfcfc) >>> 2;
+    const above = (memory[pointer - width] & 0xfcfcfc) >>> 2;
+    const upperLeft = (memory[pointer - width - 1] & 0xfcfcfc) >>> 2;
+    const upperRight = (memory[pointer - width + 1] & 0xfcfcfc) >>> 2;
+    memory[pointer] = (amount + above + upperLeft + upperRight) | 0;
+  };
+  const antialiasLight = (pointer, color) => {
+    alphaLight(pointer, color);
+    const amount = (color & 0xf0f0f0) >>> 4;
+    alphaLight(pointer - 1, amount); alphaLight(pointer + 1, amount);
+    alphaLight(pointer - width, amount); alphaLight(pointer + width, amount);
+  };
+  const antialiasDim = (pointer, color) => {
+    alphaDim(pointer, color);
+    const amount = (color & 0xf0f0f0) >>> 4;
+    alphaDim(pointer - 1, amount); alphaDim(pointer + 1, amount);
+    alphaDim(pointer - width, amount); alphaDim(pointer + width, amount);
+  };
+  let write;
+  switch (effect.kind) {
+    case "null": write = () => {}; break;
+    case "raw": write = (pointer, color) => { memory[pointer] = color; }; break;
+    case "negate": write = (pointer) => { memory[pointer] = ~memory[pointer]; }; break;
+    case "semi": write = (pointer, color) => {
+      memory[pointer] = (((color & 0xfefefe) >>> 1)
+        + ((memory[pointer] & 0xfefefe) >>> 1)) | 0;
+    }; break;
+    case "light": write = alphaLight; break;
+    case "dim": write = alphaDim; break;
+    case "filter": write = (pointer, color) => {
+      memory[pointer] = (((color & 0xfefefe) >>> 1)
+        + ((memory[p.fxfiltercolor] & 0xfefefe) >>> 1)) | 0;
+    }; break;
+    case "filterLight": write = (pointer, color) => {
+      memory[pointer] = pixelAlphaLight(color, memory[p.fxfiltercolor] | 0);
+    }; break;
+    case "filterDim": write = (pointer, color) => {
+      memory[pointer] = pixelAlphaDim(color, memory[p.fxfiltercolor] | 0);
+    }; break;
+    case "glow": write = (pointer, color) => {
+      memory[pointer] = color;
+      const half = (color & 0xfefefe) >>> 1;
+      for (const at of [pointer - 1, pointer + 1, pointer - width, pointer + width]) {
+        memory[at] = (((memory[at] & 0xfefefe) >>> 1) + half) | 0;
+      }
+    }; break;
+    case "smooth": write = smooth; break;
+    case "doubleSmooth": write = (pointer, color) => {
+      smooth(pointer + 1, color); smooth(pointer - 1, color);
+      smooth(pointer + width, color); smooth(pointer - width, color); smooth(pointer, color);
+    }; break;
+    case "aaLight": write = antialiasLight; break;
+    case "aaDim": write = antialiasDim; break;
+    case "doubleAaLight": write = (pointer, color) => {
+      antialiasLight(pointer, (color & 0xfcfcfc) >>> 2);
+      const half = (color & 0xfefefe) >>> 1;
+      antialiasLight(pointer - 1, half); antialiasLight(pointer + 1, half);
+      antialiasLight(pointer - width, half); antialiasLight(pointer + width, half);
+    }; break;
+    case "doubleAaDim": write = (pointer, color) => {
+      antialiasDim(pointer, (color & 0xfcfcfc) >>> 2);
+      const half = (color & 0xfefefe) >>> 1;
+      antialiasDim(pointer - 1, half); antialiasDim(pointer + 1, half);
+      antialiasDim(pointer - width, half); antialiasDim(pointer + width, half);
+    }; break;
+    default: throw new RangeError(`Unsupported Rectangle pixel effect ${effect.kind}`);
+  }
+  if (!effect.transparent) return write;
+  return (pointer, color) => {
+    if (color !== (memory[p.fxtransparentcolor] | 0)) write(pointer, color);
+  };
+}
+
 function rectangle(machine, linked) {
   const memory = machine.memory;
   const p = rectangleAddresses(linked);
@@ -7788,6 +7870,7 @@ function rectangle(machine, linked) {
   const effectDescriptor = pixelEffects(linked).get(effect);
   if (!effectDescriptor) throw new RangeError(`Unsupported Rectangle pixel effect handle ${effect}`);
   const raw = effectDescriptor.kind === "raw" && !effectDescriptor.transparent;
+  const writePixel = raw ? null : rectanglePixelWriter(memory, p, effectDescriptor);
   const constantRows = horizontalValues.every((channel) => channel === 0);
   const channelByte = (channel) => Math.max(0, Math.min(255,
     nearestEven(Math.fround(channel * 255)),
@@ -7808,7 +7891,7 @@ function rectangle(machine, linked) {
       for (let x = 0; x < pixels; x += 1) {
         const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
         if (raw) memory[pointer] = color;
-        else applyPixelEffect(memory, linked, p, effect, pointer, color);
+        else writePixel(pointer, color);
         pointer += 1;
         red = Math.fround(red + horizontalValues[0]);
         green = Math.fround(green + horizontalValues[1]);
