@@ -1,3 +1,5 @@
+import { createForegroundRuntime } from "./game-worker.js";
+
 const linoWindow = document.querySelector("#lino-window");
 const gameStage = document.querySelector("#game-stage");
 const canvas = document.querySelector("#game");
@@ -114,7 +116,10 @@ const savedGlobalK = (await readPersistenceStore(persistence, "globalK"))
   .map(([name, units]) => [String(name), units instanceof Int32Array ? units : new Int32Array(units)])
   .filter(([, units]) => units.length === 255);
 const pcmHost = createPcmHost();
-const worker = new Worker(new URL("./game-worker.js", import.meta.url), { type: "module" });
+const worker = new URLSearchParams(location.search).get("runtime") === "worker"
+  ? new Worker(new URL("./game-worker.js", import.meta.url), { type: "module" })
+  : createForegroundRuntime();
+globalThis.__linoRuntime = worker;
 
 let pointerX = 0;
 let pointerY = 0;
@@ -191,6 +196,7 @@ function present(frame) {
 
 function animationFrame(now) {
   displayTicks += 1;
+  worker.tick?.();
   if (pendingFrame) {
     const frame = pendingFrame;
     pendingFrame = null;
@@ -202,7 +208,7 @@ function animationFrame(now) {
     displayRate = displayTicks * 1000 / elapsed;
     const displayPerTick = displayMilliseconds / Math.max(1, displayTicks);
     if (lastMetrics) {
-      status.textContent = `Noctis / ${lastMetrics.renderedFrames} presentations / ${lastMetrics.renderedFps.toFixed(1)} FPS rendered / ${displayRate.toFixed(1)} Hz display / worker ${lastMetrics.runnerMillisecondsPerFrame.toFixed(1)} ms + display ${displayPerTick.toFixed(1)} ms / ${(lastMetrics.instructionsPerFrame / 1_000_000).toFixed(2)}M ops / ${lastMetrics.status}`;
+      status.textContent = `Noctis / ${lastMetrics.renderedFrames} presentations / ${lastMetrics.renderedFps.toFixed(1)} FPS rendered / ${displayRate.toFixed(1)} Hz display / render ${lastMetrics.runnerMillisecondsPerFrame.toFixed(1)} ms + display ${displayPerTick.toFixed(1)} ms / ${(lastMetrics.instructionsPerFrame / 1_000_000).toFixed(2)}M ops / ${lastMetrics.status}`;
     }
     displayTicks = 0;
     displayMilliseconds = 0;
@@ -377,7 +383,7 @@ document.addEventListener("fullscreenchange", () => {
 
 worker.addEventListener("message", (event) => {
   const message = event.data ?? {};
-  if (message.type === "ready") status.textContent = "Starting Noctis in the JavaScript worker...";
+  if (message.type === "ready") status.textContent = "Starting Noctis...";
   else if (message.type === "frame") pendingFrame = message;
   else if (message.type === "display") {
     configureDisplay(message.width | 0, message.height | 0);
@@ -394,7 +400,7 @@ worker.addEventListener("message", (event) => {
 });
 worker.addEventListener("error", (event) => { status.textContent = `Lino worker failed: ${event.message}`; });
 
-status.textContent = "Compiling the real 73-module Noctis project in a JavaScript worker...";
+status.textContent = "Compiling the real 73-module Noctis project in JavaScript...";
 const windowBounds = linoWindow.getBoundingClientRect();
 worker.postMessage({
   type: "init", sourceRoot: sourceRoot.href, files: savedFiles, globalK: savedGlobalK,

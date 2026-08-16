@@ -1,5 +1,10 @@
 import { compileProject, createNoctisIntrinsics } from "./linojava/compiler.js";
 
+const workerScope = typeof WorkerGlobalScope !== "undefined"
+  && globalThis instanceof WorkerGlobalScope;
+let foregroundRuntime = false;
+let emitMessage = (message, transfer = []) => globalThis.postMessage(message, transfer);
+
 let program = null;
 let running = false;
 let pointerX = 0;
@@ -80,7 +85,7 @@ function pcmCommand(request) {
       loop: command === 6,
       paused: false,
     };
-    postMessage({
+    emitMessage({
       type: "pcm", command, samples, channels: 2, bitsPerSample: 16,
       samplesPerSecond: pcmState.rate, offset: pcmState.offset,
     }, [samples.buffer]);
@@ -89,7 +94,7 @@ function pcmCommand(request) {
   if (command === 7) {
     pcmState.offset = currentPcmOffset();
     pcmState.paused = true;
-    postMessage({ type: "pcm", command });
+    emitMessage({ type: "pcm", command });
     return { success: pcmState.frames > 0, offset: pcmState.offset, status: 2 };
   }
   if (command === 8) {
@@ -97,13 +102,13 @@ function pcmCommand(request) {
     if (success) {
       pcmState.startedAt = performance.now();
       pcmState.paused = false;
-      postMessage({ type: "pcm", command });
+      emitMessage({ type: "pcm", command });
     }
     return { success, offset: pcmState.offset, status: 1 };
   }
   if (command === 9) {
     pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, paused: false };
-    postMessage({ type: "pcm", command });
+    emitMessage({ type: "pcm", command });
     return { success: true, offset: 0, status: 1 };
   }
   return { success: false };
@@ -142,16 +147,22 @@ function symbolValues(names, lengths = {}) {
   return output;
 }
 
-const runChannel = new MessageChannel();
-runChannel.port1.addEventListener("message", () => {
-  runQueued = false;
-  runMachine();
-});
-runChannel.port1.start();
+const runChannel = workerScope ? new MessageChannel() : null;
+if (runChannel) {
+  runChannel.port1.addEventListener("message", () => {
+    runQueued = false;
+    runMachine();
+  });
+  runChannel.port1.start();
+}
 
 function queueRun(delay = 0) {
   if (!running || runQueued) return;
   runQueued = true;
+  if (foregroundRuntime) {
+    if (delay > 0) delayedRun = setTimeout(() => { delayedRun = 0; }, delay);
+    return;
+  }
   if (delay > 0) {
     delayedRun = setTimeout(() => {
       delayedRun = 0;
@@ -192,7 +203,7 @@ function publishFrame(result, runnerMilliseconds, producedFrame) {
     renderedFrames, renderedFps, runnerMillisecondsPerFrame, instructionsPerFrame,
     status: result.status,
   };
-  postMessage(frame, [frame.pixels.buffer]);
+  emitMessage(frame, [frame.pixels.buffer]);
 }
 
 function runMachine() {
@@ -206,13 +217,13 @@ function runMachine() {
     publishFrame(result, runnerMilliseconds, producedFrame);
     if (program.machine.halted) {
       running = false;
-      postMessage({ type: "stopped", status: result.status });
+      emitMessage({ type: "stopped", status: result.status });
       return;
     }
     queueRun(result.sleepMilliseconds > 0 ? result.sleepMilliseconds : 0);
   } catch (error) {
     running = false;
-    postMessage({ type: "error", message: error?.stack || error?.message || String(error) });
+    emitMessage({ type: "error", message: error?.stack || error?.message || String(error) });
   }
 }
 
@@ -246,18 +257,18 @@ async function initialize(message) {
     globalK,
     fileChanged(name, bytes) {
       const copy = bytes === null ? null : new Uint8Array(bytes);
-      postMessage({ type: "fileChanged", name, bytes: copy }, copy ? [copy.buffer] : []);
+      emitMessage({ type: "fileChanged", name, bytes: copy }, copy ? [copy.buffer] : []);
     },
     globalKChanged(name, units) {
       const copy = units === null ? null : new Int32Array(units);
-      postMessage({ type: "globalKChanged", name, units: copy }, copy ? [copy.buffer] : []);
+      emitMessage({ type: "globalKChanged", name, units: copy }, copy ? [copy.buffer] : []);
     },
     keys: heldKeys,
     consoleInput,
     pointer({ mode }) {
       if (pointerMode !== (mode | 0)) {
         pointerMode = mode | 0;
-        postMessage({ type: "pointerMode", mode: pointerMode });
+        emitMessage({ type: "pointerMode", mode: pointerMode });
       }
       const transition = pointerTransitions.shift();
       const deltaX = transition?.deltaX ?? pointerDeltaX;
@@ -272,7 +283,7 @@ async function initialize(message) {
       };
     },
     syncDisplay({ width, height, x, y }) {
-      postMessage({ type: "display", width, height, x, y });
+      emitMessage({ type: "display", width, height, x, y });
     },
     monotonicMilliseconds: () => performance.now(),
     retrace(origin, width, height, memory) {
@@ -308,14 +319,14 @@ async function initialize(message) {
     if (y) program.machine.memory[y.value] = Math.round(bounds.y) | 0;
   }
   running = true;
-  postMessage({ type: "ready" });
+  emitMessage({ type: "ready" });
   queueRun();
 }
 
-addEventListener("message", (event) => {
-  const message = event.data ?? {};
+function handleMessage(message) {
+  message ??= {};
   if (message.type === "init") {
-    initialize(message).catch((error) => postMessage({ type: "error", message: error?.stack || String(error) }));
+    initialize(message).catch((error) => emitMessage({ type: "error", message: error?.stack || String(error) }));
   } else if (message.type === "key") {
     if (message.down) heldKeys[message.name] = 1;
     else delete heldKeys[message.name];
@@ -348,4 +359,26 @@ addEventListener("message", (event) => {
     if (x) program.machine.memory[x.value] = message.x | 0;
     if (y) program.machine.memory[y.value] = message.y | 0;
   }
-});
+}
+
+if (workerScope) addEventListener("message", (event) => handleMessage(event.data));
+
+export function createForegroundRuntime(onMessage) {
+  foregroundRuntime = true;
+  const target = new EventTarget();
+  emitMessage = (data) => {
+    const event = new MessageEvent("message", { data });
+    onMessage?.(event);
+    target.dispatchEvent(event);
+  };
+  return {
+    addEventListener: target.addEventListener.bind(target),
+    removeEventListener: target.removeEventListener.bind(target),
+    postMessage: (message) => handleMessage(message),
+    tick() {
+      if (!runQueued || delayedRun || !running) return;
+      runQueued = false;
+      runMachine();
+    },
+  };
+}

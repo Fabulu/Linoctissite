@@ -8017,15 +8017,119 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
   memory[p.VHGNDtilepolys] = 0;
   memory[p.PJfwbase] = p.fw;
 
-  for (let triangle = 0; triangle < 2; triangle += 1) {
+  memory[p.VHGNDvctri] = 0;
+  const facing0 = terrainFacingDirect(machine, p, 0);
+  memory[p.VHGNDvctri] = 1;
+  const facing1 = terrainFacingDirect(machine, p, 1);
+  const facingCount = (facing0 ? 1 : 0) + (facing1 ? 1 : 0);
+  memory[p.VHGNDtilepolys] = facingCount;
+  if (facingCount === 0) {
+    memory[done] = 1;
+    return;
+  }
+  memory[p.PGtexf] = 5;
+
+  const polygon = polymapAddresses(linked);
+  const x0 = memory[p.VHGNDx] << 14;
+  const z0 = memory[p.VHGNDz] << 14;
+  const step = memory[p.VHGNDlodstep] << 14;
+  const x1 = x0 + step;
+  const z1 = z0 + step;
+  const generation = memory[p.VHGNDvcgen] | 0;
+  const corner0 = h1;
+  const corner1 = h1 + 1;
+  const corner2 = h1 + 201;
+  const corner3 = h1 + 200;
+  const y0 = -(height0 << 11);
+  const y1 = -(height1 << 11);
+  const y2 = -(height2 << 11);
+  const y3 = -(height3 << 11);
+  const minimumY = Math.min(y0, y1, y2, y3);
+  const maximumY = Math.max(y0, y1, y2, y3);
+  const cameraX = directPolySlot(memory, polygon, polygon.FSCAMX);
+  const cameraY = directPolySlot(memory, polygon, polygon.FSCAMY);
+  const cameraZ = directPolySlot(memory, polygon, polygon.FSCAMZ);
+  const centerX = (x0 + x1) * 0.5;
+  const centerY = (minimumY + maximumY) * 0.5;
+  const centerZ = (z0 + z1) * 0.5;
+  const relativeX = centerX - cameraX;
+  const relativeY = centerY - cameraY;
+  const relativeZ = centerZ - cameraZ;
+  const betaSin = directPolySlot(memory, polygon, polygon.FSTSB);
+  const betaCos = directPolySlot(memory, polygon, polygon.FSTCB);
+  const alphaCos = directPolySlot(memory, polygon, polygon.FSTCA);
+  const alphaSin = directPolySlot(memory, polygon, polygon.FSTSA);
+  const centerRx = relativeX * betaCos + relativeZ * betaSin;
+  const centerZ2 = relativeZ * betaCos - relativeX * betaSin;
+  const centerRz = relativeY * alphaSin + centerZ2 * alphaCos;
+  const centerRy = relativeY * alphaCos - centerZ2 * alphaSin;
+  const halfHeight = (maximumY - minimumY) * 0.5;
+  const halfStep = step * 0.5;
+  const radiusSquared = halfStep * halfStep * 2 + halfHeight * halfHeight + 1048576;
+  const nearDistance = centerRz - directPolySlot(memory, polygon, polygon.FSUNEG);
+  let tileOnScreen = true;
+  if (nearDistance > 0 && nearDistance * nearDistance >= radiusSquared) {
+    const dpp = directPolySlot(memory, polygon, polygon.FSDPP);
+    const xc = directPolySlot(memory, polygon, polygon.FSXC);
+    const yc = directPolySlot(memory, polygon, polygon.FSYC);
+    const horizontal = dpp * centerRx;
+    const vertical = dpp * centerRy;
+    const left = horizontal + (xc - (polygon.PGLBX - 1)) * centerRz;
+    const right = horizontal + (xc - (polygon.PGUBX + 1)) * centerRz;
+    const top = vertical + (yc - (polygon.PGLBY - 1)) * centerRz;
+    const bottom = vertical + (yc - (polygon.PGUBY + 1)) * centerRz;
+    const leftNormSquared = dpp * dpp + (xc - (polygon.PGLBX - 1)) ** 2;
+    const rightNormSquared = dpp * dpp + (xc - (polygon.PGUBX + 1)) ** 2;
+    const topNormSquared = dpp * dpp + (yc - (polygon.PGLBY - 1)) ** 2;
+    const bottomNormSquared = dpp * dpp + (yc - (polygon.PGUBY + 1)) ** 2;
+    tileOnScreen = !(
+      (left < 0 && left * left > radiusSquared * leftNormSquared)
+      || (right > 0 && right * right > radiusSquared * rightNormSquared)
+      || (top < 0 && top * top > radiusSquared * topNormSquared)
+      || (bottom > 0 && bottom * bottom > radiusSquared * bottomNormSquared)
+    );
+  }
+  if (tileOnScreen) {
+    if ((memory[p.VHGNDvcstamp + corner0] | 0) !== generation) {
+      cacheTerrainWorldVertexDirect(machine, polygon, p, corner0, x0, y0, z0);
+    }
+    if ((memory[p.VHGNDvcstamp + corner1] | 0) !== generation) {
+      cacheTerrainWorldVertexDirect(machine, polygon, p, corner1, x1, y1, z0);
+    }
+    if ((memory[p.VHGNDvcstamp + corner2] | 0) !== generation) {
+      cacheTerrainWorldVertexDirect(machine, polygon, p, corner2, x1, y2, z1);
+    }
+    if ((memory[p.VHGNDvcstamp + corner3] | 0) !== generation) {
+      cacheTerrainWorldVertexDirect(machine, polygon, p, corner3, x0, y3, z1);
+    }
+    if ((memory[p.VHGNDvcvisible + corner0] | 0) !== 0
+        && (memory[p.VHGNDvcvisible + corner1] | 0) !== 0
+        && (memory[p.VHGNDvcvisible + corner2] | 0) !== 0
+        && (memory[p.VHGNDvcvisible + corner3] | 0) !== 0) {
+      projectTerrainCachedVertexDirect(machine, polygon, p, corner0);
+      projectTerrainCachedVertexDirect(machine, polygon, p, corner1);
+      projectTerrainCachedVertexDirect(machine, polygon, p, corner2);
+      projectTerrainCachedVertexDirect(machine, polygon, p, corner3);
+      const minX = Math.min(memory[p.VHGNDvcpx + corner0], memory[p.VHGNDvcpx + corner1],
+        memory[p.VHGNDvcpx + corner2], memory[p.VHGNDvcpx + corner3]);
+      const maxX = Math.max(memory[p.VHGNDvcpx + corner0], memory[p.VHGNDvcpx + corner1],
+        memory[p.VHGNDvcpx + corner2], memory[p.VHGNDvcpx + corner3]);
+      const minY = Math.min(memory[p.VHGNDvcpy + corner0], memory[p.VHGNDvcpy + corner1],
+        memory[p.VHGNDvcpy + corner2], memory[p.VHGNDvcpy + corner3]);
+      const maxY = Math.max(memory[p.VHGNDvcpy + corner0], memory[p.VHGNDvcpy + corner1],
+        memory[p.VHGNDvcpy + corner2], memory[p.VHGNDvcpy + corner3]);
+      tileOnScreen = minX <= polygon.PGUBX && maxX >= polygon.PGLBX
+        && minY <= polygon.PGUBY && maxY >= polygon.PGLBY;
+    }
+  }
+
+  if (tileOnScreen) for (let triangle = 0; triangle < 2; triangle += 1) {
+    if (triangle === 0 ? !facing0 : !facing1) continue;
     memory[p.VHGNDvctri] = triangle;
-    const facing = terrainFacingDirect(machine, p, triangle);
-    if (!facing) continue;
     landedTerrainTriangle(machine, linked);
-    memory[p.VHGNDtilepolys] = (memory[p.VHGNDtilepolys] + 1) | 0;
-    memory[p.PGtexf] = 5;
     terrainMapped(machine, linked);
   }
+  memory[p.VHGNDvctri] = 1;
   memory[done] = 1;
 }
 
@@ -8085,12 +8189,15 @@ function storeTerrainCachedFloat(memory, lowBase, highBase, index, number) {
   memory[highBase + index] = float64Scratch.getInt32(4, true);
 }
 
-function cacheTerrainMappedVertexDirect(machine, p, ground, index, vertex) {
+function terrainCachedFloat(memory, lowBase, highBase, index) {
+  float64Scratch.setInt32(0, memory[lowBase + index], true);
+  float64Scratch.setInt32(4, memory[highBase + index], true);
+  return float64Scratch.getFloat64(0, true);
+}
+
+function cacheTerrainWorldVertexDirect(machine, p, ground, index, xInput, yInput, zInput) {
   const memory = machine.memory;
   const control = floatingPoint(machine).control;
-  const xInput = directPolySlot(memory, p, p.FSINX + vertex);
-  const yInput = directPolySlot(memory, p, p.FSINY + vertex);
-  const zInput = directPolySlot(memory, p, p.FSINZ + vertex);
   const cameraX = directPolySlot(memory, p, p.FSCAMX);
   const cameraY = directPolySlot(memory, p, p.FSCAMY);
   const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
@@ -8113,16 +8220,33 @@ function cacheTerrainMappedVertexDirect(machine, p, ground, index, vertex) {
   storeTerrainCachedFloat(memory, ground.VHGNDvcrz0, ground.VHGNDvcrz1, index, rz);
   const visible = !Number.isNaN(rotatedZWide) && !Number.isNaN(near) && rotatedZWide >= near ? 1 : 0;
   memory[ground.VHGNDvcvisible + index] = visible;
-  if (visible !== 0) {
-    const factor = directPolySlot(memory, p, p.FSDPP) / rz;
-    memory[ground.VHGNDvcpx + index] = convertToInt32(
-      factor * rx + directPolySlot(memory, p, p.FSXC), control,
-    );
-    memory[ground.VHGNDvcpy + index] = convertToInt32(
-      factor * ry + directPolySlot(memory, p, p.FSYC), control,
-    );
-  }
   memory[ground.VHGNDvcstamp + index] = memory[ground.VHGNDvcgen];
+}
+
+function projectTerrainCachedVertexDirect(machine, p, ground, index) {
+  const memory = machine.memory;
+  if ((memory[ground.VHGNDvcvisible + index] | 0) === 0) return;
+  const control = floatingPoint(machine).control;
+  const rz = terrainCachedFloat(memory, ground.VHGNDvcrz0, ground.VHGNDvcrz1, index);
+  const rx = terrainCachedFloat(memory, ground.VHGNDvcrx0, ground.VHGNDvcrx1, index);
+  const ry = terrainCachedFloat(memory, ground.VHGNDvcry0, ground.VHGNDvcry1, index);
+  const factor = directPolySlot(memory, p, p.FSDPP) / rz;
+  memory[ground.VHGNDvcpx + index] = convertToInt32(
+    factor * rx + directPolySlot(memory, p, p.FSXC), control,
+  );
+  memory[ground.VHGNDvcpy + index] = convertToInt32(
+    factor * ry + directPolySlot(memory, p, p.FSYC), control,
+  );
+}
+
+function cacheTerrainMappedVertexDirect(machine, p, ground, index, vertex) {
+  const memory = machine.memory;
+  cacheTerrainWorldVertexDirect(
+    machine, p, ground, index,
+    directPolySlot(memory, p, p.FSINX + vertex),
+    directPolySlot(memory, p, p.FSINY + vertex),
+    directPolySlot(memory, p, p.FSINZ + vertex),
+  );
 }
 
 function terrainMapped(machine, linked) {
@@ -8160,6 +8284,7 @@ function terrainMapped(machine, linked) {
       genericTerrainMapped(machine, linked, p);
       return;
     }
+    projectTerrainCachedVertexDirect(machine, p, ground, index);
   }
 
   for (let vertex = 0; vertex < 3; vertex += 1) {
