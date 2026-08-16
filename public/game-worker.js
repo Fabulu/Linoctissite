@@ -302,7 +302,11 @@ async function initialize(message) {
     if (!response.ok) throw new Error(`Unable to load ${filename}`);
     return [name, new Uint8Array(await response.arrayBuffer())];
   })));
-  for (const [name, bytes] of message.files ?? []) namedFiles.set(canonical(name), new Uint8Array(bytes));
+  const packagedFiles = new Set(namedFiles.keys());
+  for (const [name, bytes] of message.files ?? []) {
+    const key = canonical(name);
+    if (!packagedFiles.has(key)) namedFiles.set(key, new Uint8Array(bytes));
+  }
   const globalK = new Map((message.globalK ?? []).map(([name, units]) => [String(name), new Int32Array(units)]));
   const resolvers = {
     resolveSource(specifier, importer) {
@@ -321,6 +325,12 @@ async function initialize(message) {
     directory: ".",
     files: namedFiles,
     globalK,
+    writeFile(name) {
+      return !packagedFiles.has(canonical(name));
+    },
+    destroyFile(name) {
+      return !packagedFiles.has(canonical(name));
+    },
     fileChanged(name, bytes) {
       const copy = bytes === null ? null : new Uint8Array(bytes);
       emitMessage({ type: "fileChanged", name, bytes: copy }, copy ? [copy.buffer] : []);

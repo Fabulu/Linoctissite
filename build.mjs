@@ -1,4 +1,5 @@
 import { access, copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -95,13 +96,13 @@ for (const module of project.modules) {
     stockfileManifest[canonical(specifier)] = relative(linoRoot, module.stockfiles[index]).replaceAll("\\", "/");
   });
 }
-await writeFile(
-  resolve(sourcePath, "manifest.json"),
-  JSON.stringify({ sources: sourceManifest, stockfiles: stockfileManifest, files: namedFileManifest }),
-);
-
 const linked = linkProject(project);
 const runnerSource = emitStaticRunnerModule(linked, createNoctisIntrinsics(), { regionSize: 1024 });
+const runtimeId = createHash("sha256").update(runnerSource).digest("hex").slice(0, 24);
+await writeFile(
+  resolve(sourcePath, "manifest.json"),
+  JSON.stringify({ runtimeId, sources: sourceManifest, stockfiles: stockfileManifest, files: namedFileManifest }),
+);
 await writeFile(resolve("public/noctis-runners.js"), runnerSource);
 
 console.log(`Prepared real Noctis project: ${project.modules.length} modules, ${project.stockfiles.length} stockfiles, ${Math.ceil(runnerSource.length / 1024)} KiB static runners`);

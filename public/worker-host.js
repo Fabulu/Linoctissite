@@ -12,6 +12,11 @@ const crashPanel = document.querySelector("#crash-panel");
 const crashReport = document.querySelector("#crash-report");
 const copyCrashButton = document.querySelector("#copy-crash");
 const sourceRoot = new URL("./lino-src/", location.href);
+const runtimeManifest = await fetch(new URL("manifest.json", sourceRoot)).then((response) => {
+  if (!response.ok) throw new Error("Unable to load the Lino runtime manifest");
+  return response.json();
+});
+const runtimeId = String(runtimeManifest.runtimeId ?? "unversioned");
 
 async function openPersistence() {
   if (!window.indexedDB) return null;
@@ -116,7 +121,9 @@ const persistence = await openPersistence();
 const savedFiles = (await readPersistenceStore(persistence, "files"))
   .map(([name, bytes]) => [String(name), new Uint8Array(bytes)]);
 const savedGlobalK = (await readPersistenceStore(persistence, "globalK"))
-  .map(([name, units]) => [String(name), units instanceof Int32Array ? units : new Int32Array(units)])
+  .filter(([, record]) => record && record.runtimeId === runtimeId && record.units)
+  .map(([name, record]) => [String(name), record.units instanceof Int32Array
+    ? record.units : new Int32Array(record.units)])
   .filter(([, units]) => units.length === 255);
 const pcmHost = createPcmHost();
 const worker = new URLSearchParams(location.search).get("runtime") === "foreground"
@@ -439,7 +446,9 @@ worker.addEventListener("message", (event) => {
     const key = String(message.name).replaceAll("\\", "/").toLowerCase();
     writePersistence(persistence, "files", key, message.bytes === null ? null : new Uint8Array(message.bytes));
   } else if (message.type === "globalKChanged") {
-    writePersistence(persistence, "globalK", String(message.name), message.units === null ? null : new Int32Array(message.units));
+    writePersistence(persistence, "globalK", String(message.name), message.units === null ? null : {
+      runtimeId, units: new Int32Array(message.units),
+    });
   } else if (message.type === "pcm") pcmHost.command(message);
   else if (message.type === "stopped") status.textContent = `Lino stopped: ${message.status}`;
   else if (message.type === "error") {
@@ -456,6 +465,7 @@ status.textContent = "Compiling the real 73-module Noctis project in JavaScript.
 const windowBounds = linoWindow.getBoundingClientRect();
 worker.postMessage({
   type: "init", sourceRoot: sourceRoot.href, files: savedFiles, globalK: savedGlobalK,
+  runtimeId,
   physicalWidth: Math.max(1, window.innerWidth), physicalHeight: Math.max(1, window.innerHeight),
   audioPlayback: pcmHost.supported, windowBounds: { x: windowBounds.left, y: windowBounds.top },
 });
