@@ -371,16 +371,19 @@ const TERRAIN_HUD_GLYPHS = Object.freeze({
 function address(linked, name) {
   let cache = symbolCaches.get(linked);
   if (!cache) {
-    cache = new Map();
+    cache = Object.create(null);
     symbolCaches.set(linked, cache);
   }
-  let symbol = cache.get(name);
-  if (!symbol) {
-    symbol = linked.symbols.get(canonicalName(name));
-    if (symbol) cache.set(name, symbol);
+  let result = cache[name];
+  if (result === undefined) {
+    const symbol = linked.symbols.get(canonicalName(name));
+    if (symbol) {
+      result = symbol.value >>> 0;
+      cache[name] = result;
+    }
   }
-  if (!symbol) throw new ReferenceError(`Missing Noctis Lino symbol ${name}`);
-  return symbol.value >>> 0;
+  if (result === undefined) throw new ReferenceError(`Missing Noctis Lino symbol ${name}`);
+  return result;
 }
 
 function floatingPoint(machine) {
@@ -6818,8 +6821,15 @@ function terrainTree(machine, linked) {
   machine.noctisTreeModels ??= new Map();
   const keyAddresses = machine.noctisDisableTreeWindCache
     ? tree.legacyModelKey : tree.modelKey;
-  const key = keyAddresses.map((source) => machine.memory[source] | 0).join(":");
-  const model = machine.noctisTreeModels.get(key);
+  const objectIdentity = machine.noctisTerrainTreeObjectKey;
+  const objectScope = objectIdentity === undefined || machine.noctisDisableTreeObjectScope
+    ? null : machine.noctisTreeModelScope;
+  const key = objectScope
+    ? `${objectIdentity}:${machine.memory[tree.modelKey[3]] | 0}`
+      + `:${machine.memory[tree.modelKey[tree.modelKey.length - 1]] | 0}`
+    : keyAddresses.map((source) => machine.memory[source] | 0).join(":");
+  const models = objectScope ?? machine.noctisTreeModels;
+  const model = models.get(key);
   if (model) {
     if (rockBoundsMayRender(machine, tree.p, currentTreeModelBounds(machine, tree, model), 10)) {
       const projection = machine.noctisDisableTreeProjectionCache
@@ -6860,7 +6870,7 @@ function terrainTree(machine, linked) {
   finalBasis[1] = machine.memory[tree.p.fw + tree.p.FSTX * 2 + 1];
   finalBasis[2] = machine.memory[tree.p.fw + tree.p.FSTY * 2];
   finalBasis[3] = machine.memory[tree.p.fw + tree.p.FSTY * 2 + 1];
-  machine.noctisTreeModels.set(key, {
+  models.set(key, {
     commands: recording.commands,
     bounds: mergeTreeCommandBounds(recording.commands),
     finalState: captureAddressValues(machine.memory, tree.finalState),
@@ -7187,7 +7197,11 @@ function renderTerrainTileObjects(machine, linked, p, handles, x, z) {
     else if (machine.A === 2) {
       machine.A = memory[p.VHGNDooy] | 0;
       machine.C = -15000;
-      if (machine.A <= machine.C) terrainTree(machine, linked);
+      if (machine.A <= machine.C) {
+        machine.noctisTerrainTreeObjectKey = memory[p.VHGNDobjcachep] | 0;
+        try { terrainTree(machine, linked); }
+        finally { machine.noctisTerrainTreeObjectKey = undefined; }
+      }
       else machine.callCode(handles.bush);
     }
 
@@ -7224,6 +7238,16 @@ function terrainTraverseFaithful(machine, linked) {
     prepareTerrainFaunaDispatch(machine, p);
   }
   machine.noctisTerrainBoundsContext = terrainBoundsContext(machine, polymapAddresses(linked));
+  const tree = landedTreeRenderAddresses(linked);
+  const treeScopeKey = tree.modelKey.slice(5, -1)
+    .map((source) => memory[source] | 0).join(":");
+  machine.noctisTreeModelScopes ??= new Map();
+  let treeModelScope = machine.noctisTreeModelScopes.get(treeScopeKey);
+  if (!treeModelScope) {
+    treeModelScope = new Map();
+    machine.noctisTreeModelScopes.set(treeScopeKey, treeModelScope);
+  }
+  machine.noctisTreeModelScope = treeModelScope;
   const fullTile = codeHandle(linked, "VHGND tile");
   const detailHandles = {
     capsule: codeHandle(linked, "VHGND capsule"),
