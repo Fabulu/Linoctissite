@@ -302,6 +302,7 @@ const SERVICE_IDS = Object.freeze({
 
 const symbolCaches = new WeakMap();
 const dataViewCaches = new WeakMap();
+const float64ViewCaches = new WeakMap();
 const rasterAddressCaches = new WeakMap();
 const poly3dAddressCaches = new WeakMap();
 const polymapAddressCaches = new WeakMap();
@@ -376,6 +377,15 @@ function dataView(memory) {
   if (!view) {
     view = new DataView(memory.buffer, memory.byteOffset, memory.byteLength);
     dataViewCaches.set(memory, view);
+  }
+  return view;
+}
+
+function float64View(memory) {
+  let view = float64ViewCaches.get(memory);
+  if (!view) {
+    view = new Float64Array(memory.buffer, memory.byteOffset, memory.byteLength >>> 3);
+    float64ViewCaches.set(memory, view);
   }
   return view;
 }
@@ -2880,25 +2890,27 @@ function prepareTerrainVectorsFast(machine, p, vertices) {
   let lastNarrowed = 0;
   const nearest = (control & 0x0c00) === 0;
 
-  if (vertices === 3 && nearest) {
-    const x0 = readFloat64View(view, floats + 64);
-    const x1 = readFloat64View(view, floats + 66);
-    const x2 = readFloat64View(view, floats + 68);
-    const y0 = readFloat64View(view, floats + 72);
-    const y1 = readFloat64View(view, floats + 74);
-    const y2 = readFloat64View(view, floats + 76);
-    const z0 = readFloat64View(view, floats + 80);
-    const z1 = readFloat64View(view, floats + 82);
-    const z2 = readFloat64View(view, floats + 84);
+  if (vertices === 3 && nearest && (floats & 1) === 0) {
+    const qwords = float64View(memory);
+    const base = floats >>> 1;
+    const x0 = qwords[base + 32];
+    const x1 = qwords[base + 33];
+    const x2 = qwords[base + 34];
+    const y0 = qwords[base + 36];
+    const y1 = qwords[base + 37];
+    const y2 = qwords[base + 38];
+    const z0 = qwords[base + 40];
+    const z1 = qwords[base + 41];
+    const z2 = qwords[base + 42];
     const centerX = Math.fround(((x0 + x1) + x2) * factor);
     const centerY = Math.fround(((y0 + y1) + y2) * factor);
     const centerZ = Math.fround(((z0 + z1) + z2) * factor);
-    writeFloat64View(view, floats + 408, centerX);
-    writeFloat64View(view, floats + 410, centerY);
-    writeFloat64View(view, floats + 412, centerZ);
-    const scaleX = readFloat64View(view, floats + 416);
-    const scaleY = readFloat64View(view, floats + 418);
-    const scaleZ = readFloat64View(view, floats + 420);
+    qwords[base + 204] = centerX;
+    qwords[base + 205] = centerY;
+    qwords[base + 206] = centerZ;
+    const scaleX = qwords[base + 208];
+    const scaleY = qwords[base + 209];
+    const scaleZ = qwords[base + 210];
     const tx0 = Math.fround((x0 - centerX) * scaleX + centerX);
     const tx1 = Math.fround((x1 - centerX) * scaleX + centerX);
     const tx2 = Math.fround((x2 - centerX) * scaleX + centerX);
@@ -2908,9 +2920,9 @@ function prepareTerrainVectorsFast(machine, p, vertices) {
     const tz0 = Math.fround((z0 - centerZ) * scaleZ + centerZ);
     const tz1 = Math.fround((z1 - centerZ) * scaleZ + centerZ);
     const tz2 = Math.fround((z2 - centerZ) * scaleZ + centerZ);
-    writeFloat64View(view, floats + 384, tx0); writeFloat64View(view, floats + 386, tx1); writeFloat64View(view, floats + 388, tx2);
-    writeFloat64View(view, floats + 392, ty0); writeFloat64View(view, floats + 394, ty1); writeFloat64View(view, floats + 396, ty2);
-    writeFloat64View(view, floats + 400, tz0); writeFloat64View(view, floats + 402, tz1); writeFloat64View(view, floats + 404, tz2);
+    qwords[base + 192] = tx0; qwords[base + 193] = tx1; qwords[base + 194] = tx2;
+    qwords[base + 196] = ty0; qwords[base + 197] = ty1; qwords[base + 198] = ty2;
+    qwords[base + 200] = tz0; qwords[base + 201] = tz1; qwords[base + 202] = tz2;
     memory[p.PJvr] = 3;
     memory[p.PJvv] = 2;
 
@@ -2920,27 +2932,28 @@ function prepareTerrainVectorsFast(machine, p, vertices) {
     const ex2 = Math.fround(tx0 - tx2);
     const ey2 = Math.fround(ty0 - ty2);
     const ez2 = Math.fround(tz0 - tz2);
-    writeFloat64View(view, floats + 458, ex1); writeFloat64View(view, floats + 460, ey1); writeFloat64View(view, floats + 462, ez1);
-    writeFloat64View(view, floats + 464, ex2); writeFloat64View(view, floats + 466, ey2); writeFloat64View(view, floats + 468, ez2);
-    writeFloat64View(view, floats + 470, tx0); writeFloat64View(view, floats + 472, ty0); writeFloat64View(view, floats + 474, tz0);
+    qwords[base + 229] = ex1; qwords[base + 230] = ey1; qwords[base + 231] = ez1;
+    qwords[base + 232] = ex2; qwords[base + 233] = ey2; qwords[base + 234] = ez2;
+    qwords[base + 235] = tx0; qwords[base + 236] = ty0; qwords[base + 237] = tz0;
 
-    const scale0 = readFloat64View(view, floats + 492);
-    const scale3 = readFloat64View(view, floats + 490);
-    const scale6 = readFloat64View(view, floats + 488);
+    const scale0 = qwords[base + 246];
+    const scale3 = qwords[base + 245];
+    const scale6 = qwords[base + 244];
     const g0 = Math.fround((tx0 * ez1 - tz0 * ex1) * scale0);
     const g1 = Math.fround((tx0 * ez2 - tz0 * ex2) * scale0);
-    const g2 = Math.fround((ex2 * ez1 - ez2 * ex1) * readFloat64View(view, floats + 52));
+    const g2 = Math.fround((ex2 * ez1 - ez2 * ex1) * qwords[base + 26]);
     const g3 = Math.fround((tz0 * ey1 - ty0 * ez1) * scale3);
     const g4 = Math.fround((tz0 * ey2 - ty0 * ez2) * scale3);
-    const g5 = Math.fround((ez2 * ey1 - ey2 * ez1) * readFloat64View(view, floats + 52));
+    const g5 = Math.fround((ez2 * ey1 - ey2 * ez1) * qwords[base + 26]);
     const g6 = Math.fround((ty0 * ex1 - tx0 * ey1) * scale6);
     const g7 = Math.fround((ty0 * ex2 - tx0 * ey2) * scale6);
-    const g8 = Math.fround((ey2 * ex1 - ex2 * ey1) * readFloat64View(view, floats + 36));
-    writeFloat64View(view, floats, g0); writeFloat64View(view, floats + 2, g1); writeFloat64View(view, floats + 4, g2);
-    writeFloat64View(view, floats + 6, g3); writeFloat64View(view, floats + 8, g4); writeFloat64View(view, floats + 10, g5);
-    writeFloat64View(view, floats + 12, g6); writeFloat64View(view, floats + 14, g7); writeFloat64View(view, floats + 16, g8);
+    const g8 = Math.fround((ey2 * ex1 - ex2 * ey1) * qwords[base + 18]);
+    qwords[base] = g0; qwords[base + 1] = g1; qwords[base + 2] = g2;
+    qwords[base + 3] = g3; qwords[base + 4] = g4; qwords[base + 5] = g5;
+    qwords[base + 6] = g6; qwords[base + 7] = g7; qwords[base + 8] = g8;
     memory[p.FS0] = float32Bits(g8);
-    writeFloat64View(view, p.FA0, g8);
+    if ((p.FA0 & 1) === 0) qwords[p.FA0 >>> 1] = g8;
+    else writeFloat64View(view, p.FA0, g8);
     return;
   }
 
@@ -3003,6 +3016,32 @@ function prepareMappedBlockSteps(machine, linked, p) {
   const control = floatingPoint(machine).control;
   const view = dataView(memory);
   const nearest = (control & 0x0c00) === 0;
+  if (nearest && (p.fw & 1) === 0) {
+    const qwords = float64View(memory);
+    const base = p.fw >>> 1;
+    const scale = qwords[base + p.FS16];
+    for (let axis = 0; axis < 3; axis += 1) {
+      const source = axis === 0 ? p.FSVX : axis === 1 ? p.FSVY : p.FSVZ;
+      const destination = axis === 0 ? p.FSK1 : axis === 1 ? p.FSK2 : p.FSK3;
+      const wide = qwords[base + source] * scale;
+      if ((p.FA0 & 1) === 0) qwords[p.FA0 >>> 1] = wide;
+      else writeFloat64View(view, p.FA0, wide);
+      const result = Math.fround(wide);
+      memory[p.FS0] = float32Bits(result);
+      qwords[base + destination] = result;
+    }
+    if ((memory[p.SPcull] | 0) !== 0) {
+      for (const slot of [p.FSK1, p.FSK2, p.FSK3]) {
+        const wide = qwords[base + slot] + qwords[base + slot];
+        if ((p.FA0 & 1) === 0) qwords[p.FA0 >>> 1] = wide;
+        else writeFloat64View(view, p.FA0, wide);
+        const result = Math.fround(wide);
+        memory[p.FS0] = float32Bits(result);
+        qwords[base + slot] = result;
+      }
+    }
+    return;
+  }
   const scale = readFloat64View(view, p.fw + p.FS16 * 2);
   for (let axis = 0; axis < 3; axis += 1) {
     const source = axis === 0 ? p.FSVX : axis === 1 ? p.FSVY : p.FSVZ;
@@ -3752,6 +3791,81 @@ function polygonCrossGradient(machine, linked) {
   );
 }
 
+function terrainTraceRowAligned(memory, p, qwords, base, row, ipart, control) {
+  const fa = p.FA0 >>> 1;
+    let factor = memory[ipart + row] | 0;
+    qwords[fa] = factor;
+    factor -= qwords[base + 19];
+    qwords[fa] = factor;
+    factor += qwords[base + 18];
+    qwords[base + 251] = factor;
+
+    let z = factor * qwords[base + 5];
+    qwords[base + 248] = z;
+    let vertical = row;
+    qwords[fa] = vertical;
+    vertical -= qwords[base + 20];
+    qwords[fa] = vertical;
+    vertical *= qwords[base + 2];
+    qwords[fa] = vertical;
+    z = vertical + z;
+    qwords[fa] = z;
+    z += qwords[base + 8];
+    qwords[base + 249] = z;
+    const narrowed = Math.fround(z);
+    memory[p.FS0] = float32Bits(narrowed);
+    qwords[base + 15] = narrowed;
+
+    let reciprocal = qwords[base + 18] / z;
+    qwords[fa] = reciprocal;
+    reciprocal = Math.fround(reciprocal);
+    memory[p.FS0] = float32Bits(reciprocal);
+    qwords[base + 12] = reciprocal;
+
+    let x = factor * qwords[base + 3];
+    qwords[base + 248] = x;
+    let rowPart = row;
+    qwords[fa] = rowPart;
+    rowPart -= qwords[base + 20];
+    qwords[fa] = rowPart;
+    rowPart *= qwords[base];
+    qwords[fa] = rowPart;
+    x = rowPart + x;
+    qwords[fa] = x;
+    x += qwords[base + 6];
+    qwords[fa] = x;
+    x = Math.fround(x);
+    memory[p.FS0] = float32Bits(x);
+    qwords[base + 13] = x;
+
+    let y = factor * qwords[base + 4];
+    qwords[base + 248] = y;
+    rowPart = row;
+    qwords[fa] = rowPart;
+    rowPart -= qwords[base + 20];
+    qwords[fa] = rowPart;
+    rowPart *= qwords[base + 1];
+    qwords[fa] = rowPart;
+    y = rowPart + y;
+    qwords[fa] = y;
+    y += qwords[base + 7];
+    qwords[fa] = y;
+    y = Math.fround(y);
+    memory[p.FS0] = float32Bits(y);
+    qwords[base + 14] = y;
+
+    let texture = x * qwords[base + 16];
+    qwords[fa] = texture;
+    texture *= reciprocal;
+    qwords[fa] = texture;
+    memory[p.SPu] = convertToInt32(texture, control);
+    texture = y * qwords[base + 17];
+    qwords[fa] = texture;
+    texture *= reciprocal;
+    qwords[fa] = texture;
+    memory[p.SPv] = convertToInt32(texture, control);
+}
+
 function terrainTraceRow(machine, linked, p = null) {
   const memory = machine.memory;
   p ??= polymapAddresses(linked);
@@ -3761,6 +3875,15 @@ function terrainTraceRow(machine, linked, p = null) {
   const view = dataView(memory);
   const row = memory[p.SPi] | 0;
   const ipart = memory[p.PJipartbase] >>> 0;
+
+  // Ordinary Noctis rendering uses the nearest x87 mode and an aligned
+  // qword workspace. Keep every source-visible wide spill and float32
+  // narrowing, but keep that hot path in its own JIT-sized function.
+  if (nearest && (floats & 1) === 0 && (p.FA0 & 1) === 0) {
+    terrainTraceRowAligned(memory, p, float64View(memory), floats >>> 1, row, ipart, control);
+    return;
+  }
+
   let factor = memory[ipart + row] | 0;
   writeFloat64View(view, p.FA0, factor);
   factor -= readFloat64View(view, floats + 38);
@@ -9621,9 +9744,15 @@ function landedTerrainTriangle(machine, linked) {
 function landedVertexLoad(machine, linked) {
   const memory = machine.memory;
   const p = landedTerrainAddresses(linked);
-  const input = memory[p.FI] | 0;
+  // VHGND vload's source prologue copies the caller-owned world coordinate
+  // into FI and restores the fixed polygon workspace before its native body.
+  // The earlier service replacement skipped both statements, so every caller
+  // could project a stale conversion result through a stale PJfwbase.
+  const input = memory[p.VHGNDvv] | 0;
+  memory[p.FI] = input;
+  memory[p.PJfwbase] = p.fw;
   writeFloat64(memory, p.FA0, input);
-  const floats = memory[p.PJfwbase] >>> 0;
+  const floats = p.fw;
   const slot = (memory[p.VHGNDvslot] + memory[p.VHGNDvi]) | 0;
   memory[p.PGFi] = slot;
   writeFloat64(memory, floats + slot * 2, input);
