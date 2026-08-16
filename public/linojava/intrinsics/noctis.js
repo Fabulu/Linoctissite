@@ -8391,7 +8391,7 @@ function glassBubble(machine, linked) {
       "nw", "rgt", "GBbubble", "GBmag", "GBcx", "GBcy", "GBdstreg", "SAr",
       "SArs", "SAtcx", "SAtcy", "SAdif", "SAx1", "SAy1", "SAx2", "SAy2",
       "SApx", "SApy", "SAcp", "SAp0", "SAp1", "SAp2", "SAp3", "SAavg",
-      "SFMAG", "SFRX", "SFRY", "SFRZ", "SFZ2",
+      "GBt", "SFMAG", "SFRX", "SFRY", "SFRZ", "SFZ2",
     ];
     p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
     glassBubbleAddressCaches.set(linked, p);
@@ -8448,35 +8448,49 @@ function glassBubble(machine, linked) {
         x1 = 0;
       }
       let cp = (Math.imul(y, 320) + x1) & 0xffff;
-      for (let x = x1; x <= x2; x += 1, px += 1, cp = (cp + 1) & 0xffff) {
-        if (Math.imul(px, px) + Math.imul(py, py) >= radiusSquared) continue;
-        const a0 = page + ((cp + 4) & 0xffff);
-        const a1 = page + ((cp + 5) & 0xffff);
-        const a2 = page + ((cp + 324) & 0xffff);
-        const a3 = page + ((cp + 325) & 0xffff);
-        const v0 = memory[a0] & 255;
-        const v1 = memory[a1] & 255;
-        const v2 = memory[a2] & 255;
-        const v3 = memory[a3] & 255;
-        const average = ((v0 & 63) + (v1 & 63) + (v2 & 63) + (v3 & 63)) >>> 2;
-        memory[a0] = (v0 & 192) | average;
-        memory[a1] = (v1 & 192) | average;
-        memory[a2] = (v2 & 192) | average;
-        memory[a3] = (v3 & 192) | average;
-        memory[p.SAcp] = cp;
-        memory[p.SAp0] = v0;
-        memory[p.SAp1] = v1;
-        memory[p.SAp2] = v2;
-        memory[p.SAp3] = v3;
-        memory[p.SAavg] = average;
-      }
       memory[p.SApx] = px;
+      memory[p.SAx1] = x1;
+      memory[p.SAcp] = cp;
+      for (let x = x1; x <= x2; x += 1) {
+        const pxSquared = Math.imul(px, px);
+        memory[p.GBt] = pxSquared;
+        if (pxSquared + Math.imul(py, py) < radiusSquared) {
+          const a0 = page + ((cp + 4) & 0xffff);
+          const a1 = page + ((cp + 5) & 0xffff);
+          const a2 = page + ((cp + 324) & 0xffff);
+          const a3 = page + ((cp + 325) & 0xffff);
+          const v0 = memory[a0] & 255;
+          const v1 = memory[a1] & 255;
+          const v2 = memory[a2] & 255;
+          const v3 = memory[a3] & 255;
+          const average = ((v0 & 63) + (v1 & 63) + (v2 & 63) + (v3 & 63)) >>> 2;
+          memory[a0] = (v0 & 192) | average;
+          memory[a1] = (v1 & 192) | average;
+          memory[a2] = (v2 & 192) | average;
+          memory[a3] = (v3 & 192) | average;
+          memory[p.SAcp] = cp;
+          memory[p.SAp0] = v0;
+          memory[p.SAp1] = v1;
+          memory[p.SAp2] = v2;
+          memory[p.SAp3] = v3;
+          memory[p.SAavg] = average;
+        }
+        cp = (cp + 1) & 0xffff;
+        px += 1;
+        memory[p.SAcp] = cp;
+        memory[p.SApx] = px;
+        memory[p.SAx1] = x + 1;
+      }
       memory[p.SApy] = py + 1;
+      memory[p.SAy1] = y + 1;
     }
   };
   while (angle < Math.PI * 2) {
-    const centerX = Math.trunc(memory[p.GBcx] + rx * Math.cos(angle)) | 0;
-    const centerY = Math.trunc(memory[p.GBcy] + z2 * Math.sin(angle)) | 0;
+    // The original casts each trigonometric displacement to long before it
+    // adds the integer centre.  Truncating the final sum is one pixel lower
+    // whenever the displacement is a negative fraction.
+    const centerX = (memory[p.GBcx] + Math.trunc(rx * Math.cos(angle))) | 0;
+    const centerY = (memory[p.GBcy] + Math.trunc(z2 * Math.sin(angle))) | 0;
     smooth(centerX, centerY);
     angle += step;
   }
@@ -8507,14 +8521,27 @@ function bodyVector(machine, linked) {
   const index = memory[p.VHGNDvecindex] | 0;
   const secondsLow = memory[p.SUsec0] | 0;
   const secondsHigh = memory[p.SUsec0 + 1] | 0;
+  const owner = memory[p.nspowner + index] | 0;
+  const massAddress = owner < 0 ? p.nsstarray : p.nspray + owner * 2;
+  const orbitAddress = p.nsporbray + index * 2;
+  const tiltAddress = p.nsporbtlt + index * 2;
+  const eccentricityAddress = p.nsporbecc + index * 2;
+  const orientationAddress = p.nspororient + index * 2;
+  const signature = [
+    secondsLow, secondsHigh, owner,
+    memory[massAddress] | 0, owner < 0 ? 0 : memory[massAddress + 1] | 0,
+    memory[orbitAddress] | 0, memory[orbitAddress + 1] | 0,
+    memory[tiltAddress] | 0, memory[tiltAddress + 1] | 0,
+    memory[eccentricityAddress] | 0, memory[eccentricityAddress + 1] | 0,
+    memory[orientationAddress] | 0, memory[orientationAddress + 1] | 0,
+  ];
   let cache = bodyVectorValueCaches.get(linked);
-  if (!cache || cache.secondsLow !== secondsLow || cache.secondsHigh !== secondsHigh) {
-    cache = { secondsLow, secondsHigh, values: new Map() };
+  if (!cache) {
+    cache = new Map();
     bodyVectorValueCaches.set(linked, cache);
   }
-  let result = cache.values.get(index);
-  if (!result) {
-    const owner = memory[p.nspowner + index] | 0;
+  let result = cache.get(index);
+  if (!result || signature.some((word, position) => word !== result.signature[position])) {
     const baseMass = owner < 0
       ? float32FromBits(memory[p.nsstarray] | 0)
       : readFloat64(memory, p.nspray + owner * 2);
@@ -8523,7 +8550,7 @@ function bodyVector(machine, linked) {
     mass *= owner < 0
       ? float64FromWords(0xa01627ee, 0x3e31fd9f)
       : float64FromWords(0x1735c01d, 0x3f28284f);
-    const orbit = readFloat64(memory, p.nsporbray + index * 2);
+    const orbit = readFloat64(memory, orbitAddress);
     const seconds = float64FromWords(secondsLow, secondsHigh);
     let angle = Math.sqrt(mass / (orbit * orbit));
     angle *= seconds;
@@ -8531,23 +8558,24 @@ function bodyVector(machine, linked) {
     angle /= 180;
     const sine = Math.sin(angle);
     const cosine = Math.cos(angle);
-    const tiltRadians = readFloat64(memory, p.nsporbtlt + index * 2) * (Math.PI / 180);
+    const tiltRadians = readFloat64(memory, tiltAddress) * (Math.PI / 180);
     const tiltSine = Math.sin(tiltRadians);
     const y = tiltSine * orbit;
     const tiltCosine = Math.cos(tiltRadians);
     const xx = -(sine * orbit * tiltCosine);
-    const eccentricity = readFloat64(memory, p.nsporbecc + index * 2);
+    const eccentricity = readFloat64(memory, eccentricityAddress);
     const zz = cosine * orbit * tiltCosine * eccentricity;
-    const orientation = readFloat64(memory, p.nspororient + index * 2);
+    const orientation = readFloat64(memory, orientationAddress);
     const orientationSine = Math.sin(orientation);
     const orientationCosine = Math.cos(orientation);
     const x = xx * orientationCosine + zz * orientationSine;
     const z = zz * orientationCosine - xx * orientationSine;
     result = {
+      signature,
       owner, mass, orbit, angle, sine, cosine, tiltCosine, xx, zz,
       orientationSine, orientationCosine, x, y, z,
     };
-    cache.values.set(index, result);
+    cache.set(index, result);
   }
   memory[p.VHGNDvecowner] = result.owner;
   writeFloat64(memory, p.VHGNDmass0, result.mass);
@@ -8923,7 +8951,9 @@ function loadTgaPicture(machine, linked) {
     const first = h0 >>> 24;
     if (paletteSize > 256 || first + paletteSize > 256 || (h1 >>> 24) !== 24) return;
     for (let index = 0; index < paletteSize; index += 1) {
-      memory[palette + first + index] = getPackedBits(memory, data, bit, 24);
+      const color = getPackedBits(memory, data, bit, 24);
+      memory[p.bitfieldcontent] = color;
+      memory[palette + first + index] = color;
       bit += 24;
     }
   } else if ((h0 & 0x100) !== 0) return;
@@ -8951,37 +8981,50 @@ function loadTgaPicture(machine, linked) {
   const effect = memory[p.tgaeffect] | 0;
   let rowPointer = (target + top * alignment + left) >>> 0;
   let rowBit = bit;
+  memory[p.bitstreampointer] = data;
+  memory[p.startingbitnumber] = rowBit;
+  memory[p.bitfieldsize] = depth;
+  memory[p.ltppixels] = pixels;
+  memory[p.ltpscanlines] = scanlines;
+  memory[p.ltpcurrentpixelpointer] = rowPointer;
+  memory[p.ltpcurrentpixel] = left;
+  memory[p.ltpcurrentscanline] = top;
   for (let row = 0; row < scanlines; row += 1) {
     const y = top + row;
+    if (y >= displayHeight) break;
     if (y >= 0 && y < displayHeight) {
       let pixelBit = rowBit;
       let pointer = rowPointer;
+      let currentPixel = left;
+      memory[p.ltpcurrentpixel] = currentPixel;
       for (let column = 0; column < pixels; column += 1) {
         const x = left + column;
         if (x >= displayWidth || x >= alignment) break;
         if (x >= 0) {
           let color = getPackedBits(memory, data, pixelBit, depth);
+          memory[p.bitfieldcontent] = color;
           if (depth <= 8) color = memory[palette + color] | 0;
           applyPixelEffect(memory, linked, effects, effect, pointer, color);
         }
         pixelBit += deltaX;
         pointer += 1;
+        currentPixel += 1;
+        memory[p.ltpcurrentpixel] = currentPixel;
       }
     }
     rowBit += deltaY;
     rowPointer += alignment;
+    memory[p.startingbitnumber] = rowBit;
+    memory[p.ltpcurrentpixelpointer] = rowPointer;
+    memory[p.ltpcurrentscanline] = y + 1;
   }
-  memory[p.bitstreampointer] = data;
   memory[p.startingbitnumber] = rowBit;
-  memory[p.bitfieldsize] = depth;
-  memory[p.ltppixels] = 0;
-  memory[p.ltpscanlines] = 0;
   memory[p.ltpreversehoriz] = reverse;
   memory[p.ltpforwardvert] = forward;
   memory[p.ltpbitfielddeltax] = deltaX;
   memory[p.ltpbitfielddeltay] = deltaY;
   memory[p.ltpidblocksize] = idBytes;
-  memory[p.ltpcolormapsize] = paletteSize;
+  memory[p.ltpcolormapsize] = type === 1 ? paletteSize * 3 : 0;
   machine.X = LINO_DONE;
 }
 
@@ -9129,9 +9172,15 @@ function standardText(machine, linked) {
         let shape = fontShape + Math.trunc(glyph / fontAlignment) * fontAlignment * fontBody
           + (glyph % fontAlignment);
         let dotY = y;
+        memory[p.stdcurrentshapeunit] = shape;
+        memory[p.stddoty] = dotY;
+        memory[p.stdstopy] = y + fontBody;
         for (let row = 0; row < fontBody; row += 1, dotY += 1, shape += fontAlignment) {
+          memory[p.stddotx] = x;
+          memory[p.stdstopx] = x + fontWidth;
           let mask = rotateLeft32(0x80000000, fontWidth);
           mask = rotateLeft32(mask, fontWidth);
+          memory[p.stddotmask] = mask;
           for (let column = 0; column < fontWidth; column += 1) {
             const dotX = x + column;
             const inside = within(dotX, dotY);
@@ -9140,7 +9189,11 @@ function standardText(machine, linked) {
             }
             if (inside && highlighted) memory[origin + dotY * displayWidth + dotX] = ~memory[origin + dotY * displayWidth + dotX];
             mask = rotateRight32(mask, 2);
+            memory[p.stddotmask] = mask;
+            memory[p.stddotx] = dotX + 1;
           }
+          memory[p.stdcurrentshapeunit] = shape + fontAlignment;
+          memory[p.stddoty] = dotY + 1;
         }
       }
     }
