@@ -329,6 +329,19 @@ function releasePointer(event, target) {
   activePointerTarget = null;
 }
 
+function cancelActivePointer() {
+  if (pointerButtons === 0 && activePointerTarget === null) return;
+  // Browsers may cancel or lose pointer capture when focus changes, the page
+  // is hidden, or canvas geometry changes during an iGUI redraw. Native Lino
+  // would still observe the OS button-up edge, so publish it explicitly.
+  pointerButtons = 0;
+  sendPointer(0, 0, true);
+  linoFullscreenPress = false;
+  linoWindowDrag = null;
+  linoWindowResize = null;
+  activePointerTarget = null;
+}
+
 for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("pointermove", (event) => movePointer(event, target));
   target.addEventListener("pointerdown", (event) => {
@@ -353,6 +366,10 @@ for (const target of [canvas, fullscreenCanvas]) {
     target.setPointerCapture(event.pointerId);
   });
   target.addEventListener("pointerup", (event) => releasePointer(event, target));
+  target.addEventListener("pointercancel", cancelActivePointer);
+  target.addEventListener("lostpointercapture", () => {
+    if (activePointerTarget === target) cancelActivePointer();
+  });
   target.addEventListener("contextmenu", (event) => event.preventDefault());
 }
 
@@ -411,7 +428,13 @@ for (const target of [canvas, fullscreenCanvas]) {
   });
 }
 
-window.addEventListener("blur", () => worker.postMessage({ type: "clearKeys" }));
+window.addEventListener("blur", () => {
+  cancelActivePointer();
+  worker.postMessage({ type: "clearKeys" });
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) cancelActivePointer();
+});
 window.addEventListener("resize", () => worker.postMessage({
   type: "physical", width: Math.max(1, window.innerWidth), height: Math.max(1, window.innerHeight),
 }));

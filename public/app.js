@@ -586,6 +586,22 @@ function releasePointer(event, target) {
   activePointerTarget = null;
 }
 
+function cancelActivePointer() {
+  if (pointerButtons === 0 && activePointerTarget === null) return;
+  // Match the button-up edge an OS host supplies when capture or focus is
+  // interrupted. Without it, a legacy hotspot can remain pressed forever.
+  pointerButtons = 0;
+  pointerDeltaX = 0;
+  pointerDeltaY = 0;
+  pointerTransitions.push({
+    buttons: 0, x: pointerX, y: pointerY, deltaX: 0, deltaY: 0,
+  });
+  linoFullscreenPress = false;
+  linoWindowDrag = null;
+  linoWindowResize = null;
+  activePointerTarget = null;
+}
+
 for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("pointermove", (event) => movePointer(event, target));
   target.addEventListener("pointerdown", (event) => {
@@ -625,6 +641,10 @@ for (const target of [canvas, fullscreenCanvas]) {
     target.setPointerCapture(event.pointerId);
   });
   target.addEventListener("pointerup", (event) => releasePointer(event, target));
+  target.addEventListener("pointercancel", cancelActivePointer);
+  target.addEventListener("lostpointercapture", () => {
+    if (activePointerTarget === target) cancelActivePointer();
+  });
   target.addEventListener("contextmenu", (event) => event.preventDefault());
 }
 
@@ -679,7 +699,11 @@ for (const target of [canvas, fullscreenCanvas]) {
   });
 }
 window.addEventListener("blur", () => {
+  cancelActivePointer();
   for (const key of Object.keys(heldKeys)) delete heldKeys[key];
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) cancelActivePointer();
 });
 
 exitFullscreenButton.addEventListener("click", () => document.exitFullscreen());
