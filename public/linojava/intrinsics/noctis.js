@@ -5204,12 +5204,7 @@ function groundPostSurface(machine, linked) {
   machine.X = LINO_DONE;
 }
 
-function landedFastRandom(machine, linked, mask, direct = null) {
-  const memory = machine.memory;
-  const seedAddress = direct?.SUfseed ?? address(linked, "SUfseed");
-  const eaxAddress = direct?.SUfeax ?? address(linked, "SUfeax");
-  const valueAddress = direct?.SUfval ?? address(linked, "SUfval");
-  const seed = memory[seedAddress] >>> 0;
+function landedFastRandomRaw(seed) {
   const lowHalf = seed & 0xffff;
   const highHalf = seed >>> 16;
   const lowProduct = lowHalf * lowHalf;
@@ -5218,7 +5213,26 @@ function landedFastRandom(machine, linked, mask, direct = null) {
   const low = lowerWide | 0;
   const high = (highHalf * highHalf + Math.floor(middle / 0x10000)
     + Math.floor(lowerWide / 0x100000000)) | 0;
-  const raw = (low & 0xffffff00) | (((low & 0xff) + (high & 0xff)) & 0xff);
+  return (low & 0xffffff00) | (((low & 0xff) + (high & 0xff)) & 0xff);
+}
+
+function landedFastRandomHigh(seed) {
+  const lowHalf = seed & 0xffff;
+  const highHalf = seed >>> 16;
+  const lowProduct = lowHalf * lowHalf;
+  const middle = 2 * lowHalf * highHalf;
+  const lowerWide = lowProduct + (middle & 0xffff) * 0x10000;
+  return (highHalf * highHalf + Math.floor(middle / 0x10000)
+    + Math.floor(lowerWide / 0x100000000)) | 0;
+}
+
+function landedFastRandom(machine, linked, mask, direct = null) {
+  const memory = machine.memory;
+  const seedAddress = direct?.SUfseed ?? address(linked, "SUfseed");
+  const eaxAddress = direct?.SUfeax ?? address(linked, "SUfeax");
+  const valueAddress = direct?.SUfval ?? address(linked, "SUfval");
+  const seed = memory[seedAddress] >>> 0;
+  const raw = landedFastRandomRaw(seed);
   const nextSeed = (seed + (raw >>> 0)) | 0;
   const result = raw & mask;
   memory[eaxAddress] = raw;
@@ -5227,7 +5241,7 @@ function landedFastRandom(machine, linked, mask, direct = null) {
   machine.A = raw;
   machine.B = nextSeed;
   machine.C = result;
-  machine.D = high;
+  machine.D = landedFastRandomHigh(seed);
   return result;
 }
 
@@ -5303,7 +5317,7 @@ function landedDenseAverage(machine, linked) {
 
 function landedMushroomPixels(machine, linked, direct = null) {
   const memory = machine.memory;
-  const page = noctisBuffer(linked, "RADPT");
+  const page = direct?.page ?? noctisBuffer(linked, "RADPT");
   const innerAddress = direct?.mushinner ?? address(linked, "VHGNDmushinner");
   const colorMaskAddress = direct?.mushroomState?.[7] ?? address(linked, "VHGNDmushcolmask");
   const baseAddress = direct?.mushroomState?.[6] ?? address(linked, "VHGNDmushbase");
@@ -5314,6 +5328,45 @@ function landedMushroomPixels(machine, linked, direct = null) {
   let remaining = memory[innerAddress] >>> 0;
   const colorMask = memory[colorMaskAddress] | 0;
   memory[maskAddress] = colorMask;
+  if (direct) {
+    let seed = memory[direct.SUfseed] >>> 0;
+    let finalInputSeed = seed;
+    let raw = 0;
+    let result = 0;
+    while (remaining !== 0) {
+      finalInputSeed = seed;
+      raw = landedFastRandomRaw(seed);
+      seed = (seed + (raw >>> 0)) >>> 0;
+      const y = (memory[yAddress] | 0) + (raw & 7);
+      finalInputSeed = seed;
+      raw = landedFastRandomRaw(seed);
+      seed = (seed + (raw >>> 0)) >>> 0;
+      const x = (memory[xAddress] | 0) + (raw & 7);
+      const offset = Math.imul(y, 320) + x;
+      memory[offsetAddress] = offset;
+      finalInputSeed = seed;
+      raw = landedFastRandomRaw(seed);
+      seed = (seed + (raw >>> 0)) >>> 0;
+      result = raw & colorMask;
+      const color = result + (memory[baseAddress] | 0);
+      memory[page + offset] = color;
+      memory[page + offset + 1] = color;
+      memory[page + offset - 1] = color;
+      memory[page + offset + 320] = color;
+      memory[page + offset - 320] = color;
+      memory[page + offset - 640] = color;
+      remaining -= 1;
+    }
+    memory[direct.SUfeax] = raw;
+    memory[direct.SUfseed] = seed;
+    memory[direct.SUfval] = result;
+    memory[innerAddress] = 0;
+    machine.A = 0;
+    machine.B = seed | 0;
+    machine.C = result;
+    machine.D = landedFastRandomHigh(finalInputSeed);
+    return;
+  }
   while (remaining !== 0) {
     const y = (memory[yAddress] | 0) + landedFastRandom(machine, linked, 7, direct);
     const x = (memory[xAddress] | 0) + landedFastRandom(machine, linked, 7, direct);
@@ -6143,6 +6196,7 @@ function landedTreeRenderAddresses(linked) {
     SUfeax: address(linked, "SUfeax"),
     SUfval: address(linked, "SUfval"),
     SUfmask: address(linked, "SUfmask"),
+    page: noctisBuffer(linked, "RADPT"),
     PGFt: address(linked, "PGFt"),
     GRcwc: address(linked, "GRcwc"),
     GRcwn: address(linked, "GRcwn"),
