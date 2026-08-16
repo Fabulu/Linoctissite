@@ -178,19 +178,19 @@ if (runChannel) {
   runChannel.port1.start();
 }
 
-function queueRun(delay = 0) {
+function queueRun(delay = 0, yieldToHost = false) {
   if (!running || runQueued) return;
   runQueued = true;
   if (foregroundRuntime) {
     if (delay > 0) delayedRun = setTimeout(() => { delayedRun = 0; }, delay);
     return;
   }
-  if (delay > 0) {
+  if (delay > 0 || yieldToHost) {
     delayedRun = setTimeout(() => {
       delayedRun = 0;
       runQueued = false;
       runMachine();
-    }, delay);
+    }, Math.max(0, delay));
   } else runChannel.port2.postMessage(0);
 }
 
@@ -232,7 +232,10 @@ function runMachine() {
   if (!running || !program || program.machine.halted) return;
   try {
     const started = performance.now();
-    const result = program.run(250_000);
+    // Keep host input responsive while source-level GUI redraws run. Normal
+    // Noctis frames usually yield below this bound; complex iGUI transactions
+    // are split so a pointer release cannot wait behind a giant Lino slice.
+    const result = program.run(10_000);
     const runnerMilliseconds = performance.now() - started;
     const producedFrame = completedFrame;
     completedFrame = false;
@@ -248,7 +251,11 @@ function runMachine() {
       nextFrameAt = Math.max(nextFrameAt + 1000 / 60, now);
       delay = Math.max(delay, nextFrameAt - now);
     }
-    queueRun(delay);
+    // Long Lino redraws can consume several runner budgets without reaching a
+    // presentation. Yield through the worker event loop between those slices
+    // so pointer releases and other host messages cannot be starved by our
+    // private MessageChannel queue.
+    queueRun(delay, !producedFrame && result.status === "budget");
   } catch (error) {
     running = false;
     emitMessage({ type: "error", message: error?.stack || error?.message || String(error) });
@@ -306,9 +313,12 @@ async function initialize(message) {
       const deltaY = transition?.deltaY ?? pointerDeltaY;
       if (!transition) pointerDeltaX = pointerDeltaY = 0;
       return {
-        status: 3 | (transition?.buttons ?? pointerButtons),
-        x: transition?.x ?? pointerX,
-        y: transition?.y ?? pointerY,
+        // Lino's host samples the device's current state. A delayed queued
+        // movement must never resurrect an already released button while a
+        // slow redraw is catching up.
+        status: 3 | pointerButtons,
+        x: pointerX,
+        y: pointerY,
         deltaX,
         deltaY,
       };

@@ -326,6 +326,13 @@ window.addEventListener("pointerup", (event) => {
   if (!activePointerTarget || event.target === canvas || event.target === fullscreenCanvas) return;
   releasePointer(event, activePointerTarget);
 });
+window.addEventListener("mouseup", (event) => {
+  // Chromium can drop the canvas pointerup after pointer capture changes
+  // during a Lino redraw. Mouseup still reaches the window; use it as the
+  // final release authority so iGUI buttons cannot remain permanently down.
+  if (pointerButtons === 0 || !activePointerTarget) return;
+  releasePointer(event, activePointerTarget);
+});
 
 function linoKey(code) {
   if (/^Key[A-Z]$/.test(code)) return `key${code.slice(3).toLowerCase()}`;
