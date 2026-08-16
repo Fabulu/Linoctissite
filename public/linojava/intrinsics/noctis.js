@@ -277,6 +277,7 @@ const SERVICE_IDS = Object.freeze({
   paletteShade: "service:palshade",
   paletteTavola: "service:paltavola",
   groundRoundHill: "service:grroundhill",
+  groundStdCrater: "service:grstdcrater",
   groundTextureDarkline: "service:vhgndtexturedarklinecommon",
   groundPostSurface: "service:vhgndpostsurfacecommon",
   spaceFade: "service:vhsfade",
@@ -322,6 +323,7 @@ const surfaceBulkAddressCaches = new WeakMap();
 const paletteShadeAddressCaches = new WeakMap();
 const paletteTavolaAddressCaches = new WeakMap();
 const groundRoundHillAddressCaches = new WeakMap();
+const groundStdCraterAddressCaches = new WeakMap();
 const groundTextureDarklineAddressCaches = new WeakMap();
 const groundPostSurfaceAddressCaches = new WeakMap();
 const spaceFadeAddressCaches = new WeakMap();
@@ -4807,6 +4809,119 @@ function groundRoundHill(machine, linked) {
 
   memory[p.GRfrx] = x;
   machine.A = x;
+  machine.X = LINO_DONE;
+}
+
+function groundStdCrater(machine, linked) {
+  const memory = machine.memory;
+  let p = groundStdCraterAddressCaches.get(linked);
+  if (!p) {
+    p = Object.fromEntries([
+      "nw", "SUia", "SUcxi", "SUcyi", "GRfht", "GRfhmt", "GRfscl", "GRfsca",
+      "GRscmap", "GRcraterid", "GRfr2", "GRfscr", "GRfrlo", "GRfrhi",
+      "GRsczlo", "GRsczhi", "GRfrx", "GRfrz", "GRdxi", "GRdzi", "GRfd2",
+      "GRfd2delta", "GRscaddr", "GRfy", "GRscache", "GRsstamp", "GRsval",
+      "GRfs0", "GRfs1", "GRfti",
+    ].map((name) => [name, address(linked, name)]));
+    groundStdCraterAddressCaches.set(linked, p);
+  }
+
+  const craterId = (memory[p.GRcraterid] + 1) | 0;
+  memory[p.GRcraterid] = craterId;
+  groundCraterHeight(machine, linked);
+  let radius = memory[p.SUia] | 0;
+  if (radius < 0) radius = (-radius) | 0;
+  memory[p.SUia] = radius;
+  const radiusSquared = Math.imul(radius, radius) | 0;
+  memory[p.GRfr2] = radiusSquared;
+  groundCraterRadius(machine, linked);
+
+  const centerX = memory[p.SUcxi] | 0;
+  const centerZ = memory[p.SUcyi] | 0;
+  const alignment = memory[p.GRfsca] | 0;
+  const rawFirstX = (centerX - radius) | 0;
+  const rawLastX = (centerX + radius) | 0;
+  const rawFirstZ = (centerZ - radius) | 0;
+  const rawLastZ = (centerZ + radius) | 0;
+  const firstX = rawFirstX >= 0 ? rawFirstX : 0;
+  const lastX = (rawLastX >>> 0) <= (alignment >>> 0) ? rawLastX : alignment;
+  const firstZ = rawFirstZ >= 0 ? rawFirstZ : 0;
+  const lastZ = (rawLastZ >>> 0) <= (alignment >>> 0) ? rawLastZ : alignment;
+  machine.B = centerZ;
+  machine.C = rawLastZ;
+  memory[p.GRfrlo] = firstX;
+  memory[p.GRfrhi] = lastX;
+  memory[p.GRsczlo] = firstZ;
+  memory[p.GRsczhi] = lastZ;
+  memory[p.GRfrx] = firstX;
+  if (firstX >= lastX || firstZ >= lastZ) {
+    machine.A = firstX >= lastX ? firstX : firstZ;
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  const base = p.nw + (memory[p.GRscmap] | 0);
+  let lastB = machine.B | 0;
+  let lastC = machine.C | 0;
+  let lastD = machine.D | 0;
+  for (let x = firstX; x < lastX; x += 1) {
+    memory[p.GRfrx] = x;
+    const dx = (x - centerX) | 0;
+    memory[p.GRdxi] = dx;
+    let z = firstZ;
+    let dz = (z - centerZ) | 0;
+    let distanceSquared = (Math.imul(dx, dx) + Math.imul(dz, dz)) | 0;
+    lastB = dx;
+    lastC = dz;
+    lastD = distanceSquared;
+    let delta = (dz + dz + 1) | 0;
+    let relativeAddress = (Math.imul(z, alignment) + x + (memory[p.GRscmap] | 0)) | 0;
+    memory[p.GRfrz] = z;
+    memory[p.GRdzi] = dz;
+    memory[p.GRfd2] = distanceSquared;
+    memory[p.GRfd2delta] = delta;
+    memory[p.GRscaddr] = relativeAddress;
+    for (; z < lastZ; z += 1) {
+      if (distanceSquared <= radiusSquared) {
+        if ((memory[p.GRsstamp + distanceSquared] | 0) === craterId) {
+          memory[p.GRfy] = memory[p.GRscache + distanceSquared];
+        } else {
+          memory[p.GRfd2] = distanceSquared;
+          groundCraterProfile(machine, linked);
+          if ((memory[p.GRfhmt] >>> 0) !== 0x3f800000
+              && (memory[p.GRfy] & 0x7fffffff) !== 0) groundCraterPower(machine, linked);
+          memory[p.GRscache + distanceSquared] = memory[p.GRfy];
+          memory[p.GRsstamp + distanceSquared] = craterId;
+        }
+
+        const byteAddress = base + Math.imul(z, alignment) + x;
+        const oldValue = memory[byteAddress] & 0xff;
+        memory[p.GRsval] = oldValue;
+        groundAddSurfaceValue(machine, linked);
+        if ((memory[p.GRfy] & 0x80000000) !== 0) memory[p.GRfy] = 0;
+        groundSubtractToScratch(machine, linked, "GRfscl", true);
+        if ((memory[p.GRfs1] & 0x80000000) === 0) groundLimitFloat(machine, linked);
+        groundChopHeight(machine, linked);
+        lastC = memory[p.GRfti] & 0xff;
+        memory[byteAddress] = lastC;
+      }
+
+      distanceSquared = (distanceSquared + delta) | 0;
+      delta = (delta + 2) | 0;
+      relativeAddress = (relativeAddress + alignment) | 0;
+      dz = (dz + 1) | 0;
+      memory[p.GRfd2] = distanceSquared;
+      memory[p.GRfd2delta] = delta;
+      memory[p.GRscaddr] = relativeAddress;
+      memory[p.GRdzi] = dz;
+      memory[p.GRfrz] = z + 1;
+    }
+  }
+  memory[p.GRfrx] = lastX;
+  machine.A = lastX;
+  machine.B = lastB;
+  machine.C = lastC;
+  machine.D = lastD;
   machine.X = LINO_DONE;
 }
 
@@ -11610,6 +11725,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.paletteShade]: paletteShade,
     [SERVICE_IDS.paletteTavola]: paletteTavola,
     [SERVICE_IDS.groundRoundHill]: groundRoundHill,
+    [SERVICE_IDS.groundStdCrater]: groundStdCrater,
     [SERVICE_IDS.groundTextureDarkline]: groundTextureDarkline,
     [SERVICE_IDS.groundPostSurface]: groundPostSurface,
     [SERVICE_IDS.spaceFade]: spaceFade,

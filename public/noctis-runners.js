@@ -29820,12 +29820,12 @@ case 28181: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.s
 case 28182: { if(executed!==0&&executed+3>maxInstructions){pc=28182;return save("budget",executed);}executed+=3; m[(3345) >>> 0] = (C) | 0; pc = 28183; }
 case 28183: {  C = (200) | 0; pc = 28184; }
 case 28184: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28186) | 0; pc = (15329) - 1; continue runner; }
-case 28185: { if(executed!==0&&executed+5>maxInstructions){pc=28185;return save("budget",executed);}executed+=5; m[(3344) >>> 0] = (C) | 0; pc = 28186; }
+case 28185: { if(executed!==0&&executed+7>maxInstructions){pc=28185;return save("budget",executed);}executed+=7; m[(3344) >>> 0] = (C) | 0; pc = 28186; }
 case 28186: {  m[(3451) >>> 0] = (127) | 0; pc = 28187; }
 case 28187: {  m[(3450) >>> 0] = (200) | 0; pc = 28188; }
 case 28188: {  m[(3452) >>> 0] = (170556) | 0; pc = 28189; }
-case 28189: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28191) | 0; pc = (17897) - 1; continue runner; }
-case 28190: { if(executed!==0&&executed+2>maxInstructions){pc=28190;return save("budget",executed);}executed+=2; q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28191; }
+case 28189: {  pc=28189; sync(); native("service:grstdcrater", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=28190; }
+case 28190: {  q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28191; }
 case 28191: {  pc = (28154) - 1; continue runner; }
 case 28192: { if(executed!==0&&executed+2>maxInstructions){pc=28192;return save("budget",executed);}executed+=2; C = (48) | 0; pc = 28193; }
 case 28193: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28195) | 0; pc = (15329) - 1; continue runner; }
@@ -29845,7 +29845,7 @@ case 28206: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.s
 case 28207: { if(executed!==0&&executed+3>maxInstructions){pc=28207;return save("budget",executed);}executed+=3; m[(3345) >>> 0] = (C) | 0; pc = 28208; }
 case 28208: {  C = (32) | 0; pc = 28209; }
 case 28209: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28211) | 0; pc = (15329) - 1; continue runner; }
-case 28210: { if(executed!==0&&executed+9>maxInstructions){pc=28210;return save("budget",executed);}executed+=9; C = (((C) + (10))) | 0; pc = 28211; }
+case 28210: { if(executed!==0&&executed+12>maxInstructions){pc=28210;return save("budget",executed);}executed+=12; C = (((C) + (10))) | 0; pc = 28211; }
 case 28211: {  m[(6220) >>> 0] = (C) | 0; pc = 28212; }
 case 28212: {  m[(3337) >>> 0] = (C) | 0; pc = 28213; }
 case 28213: {  m[(3446) >>> 0] = (1051931443) | 0; pc = 28214; }
@@ -29853,8 +29853,8 @@ case 28214: {  m[(3447) >>> 0] = (1065353216) | 0; pc = 28215; }
 case 28215: {  m[(3451) >>> 0] = (31) | 0; pc = 28216; }
 case 28216: {  m[(3450) >>> 0] = (256) | 0; pc = 28217; }
 case 28217: {  m[(3452) >>> 0] = ((m[(6576) >>> 0] | 0)) | 0; pc = 28218; }
-case 28218: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28220) | 0; pc = (17897) - 1; continue runner; }
-case 28219: { if(executed!==0&&executed+3>maxInstructions){pc=28219;return save("budget",executed);}executed+=3; A = ((m[(6220) >>> 0] | 0)) | 0; pc = 28220; }
+case 28218: {  pc=28218; sync(); native("service:grstdcrater", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=28219; }
+case 28219: {  A = ((m[(6220) >>> 0] | 0)) | 0; pc = 28220; }
 case 28220: {  A = (((A) & (1))) | 0; pc = 28221; }
 case 28221: {  if ((((A) | 0) === ((0) | 0))) { pc = ((28235) - 1); continue runner; } pc = 28222; }
 case 28222: { if(executed!==0&&executed+12>maxInstructions){pc=28222;return save("budget",executed);}executed+=12; A = ((m[(6220) >>> 0] | 0)) | 0; pc = 28223; }
@@ -29868,7 +29868,7 @@ case 28229: {  m[(3345) >>> 0] = (C) | 0; pc = 28230; }
 case 28230: {  A = (0) | 0; pc = 28231; }
 case 28231: {  A = (((A) - ((m[(6220) >>> 0] | 0)))) | 0; pc = 28232; }
 case 28232: {  m[(3337) >>> 0] = (A) | 0; pc = 28233; }
-case 28233: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28235) | 0; pc = (17897) - 1; continue runner; }
+case 28233: {  pc=28233; sync(); native("service:grstdcrater", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=28234; }
 case 28234: { if(executed!==0&&executed+2>maxInstructions){pc=28234;return save("budget",executed);}executed+=2; q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28235; }
 case 28235: {  pc = (28201) - 1; continue runner; }
 case 28236: { if(executed!==0&&executed+2>maxInstructions){pc=28236;return save("budget",executed);}executed+=2; C = (100) | 0; pc = 28237; }
@@ -30034,13 +30034,13 @@ case 28395: {  if ((((C) | 0) === ((0) | 0))) { pc = ((28400) - 1); continue run
 case 28396: { if(executed!==0&&executed+3>maxInstructions){pc=28396;return save("budget",executed);}executed+=3; C = (0) | 0; pc = 28397; }
 case 28397: {  C = (((C) - (A))) | 0; pc = 28398; }
 case 28398: {  A = (C) | 0; pc = 28399; }
-case 28399: { if(executed!==0&&executed+6>maxInstructions){pc=28399;return save("budget",executed);}executed+=6; m[(3337) >>> 0] = (A) | 0; pc = 28400; }
+case 28399: { if(executed!==0&&executed+8>maxInstructions){pc=28399;return save("budget",executed);}executed+=8; m[(3337) >>> 0] = (A) | 0; pc = 28400; }
 case 28400: {  m[(3447) >>> 0] = (1065353216) | 0; pc = 28401; }
 case 28401: {  m[(3451) >>> 0] = (31) | 0; pc = 28402; }
 case 28402: {  m[(3450) >>> 0] = (256) | 0; pc = 28403; }
 case 28403: {  m[(3452) >>> 0] = ((m[(6576) >>> 0] | 0)) | 0; pc = 28404; }
-case 28404: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28406) | 0; pc = (17897) - 1; continue runner; }
-case 28405: { if(executed!==0&&executed+2>maxInstructions){pc=28405;return save("budget",executed);}executed+=2; q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28406; }
+case 28404: {  pc=28404; sync(); native("service:grstdcrater", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=28405; }
+case 28405: {  q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28406; }
 case 28406: {  pc = (28381) - 1; continue runner; }
 case 28407: { if(executed!==0&&executed+1>maxInstructions){pc=28407;return save("budget",executed);}executed+=1; pc = (28426) - 1; continue runner; }
 case 28408: { if(executed!==0&&executed+2>maxInstructions){pc=28408;return save("budget",executed);}executed+=2; C = (500) | 0; pc = 28409; }
@@ -30516,7 +30516,7 @@ case 28849: { if(executed!==0&&executed+4>maxInstructions){pc=28849;return save(
 case 28850: {  m[(3345) >>> 0] = (C) | 0; pc = 28851; }
 case 28851: {  C = (10) | 0; pc = 28852; }
 case 28852: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28854) | 0; pc = (15329) - 1; continue runner; }
-case 28853: { if(executed!==0&&executed+10>maxInstructions){pc=28853;return save("budget",executed);}executed+=10; C = (((C) + (15))) | 0; pc = 28854; }
+case 28853: { if(executed!==0&&executed+13>maxInstructions){pc=28853;return save("budget",executed);}executed+=13; C = (((C) + (15))) | 0; pc = 28854; }
 case 28854: {  A = (0) | 0; pc = 28855; }
 case 28855: {  A = (((A) - (C))) | 0; pc = 28856; }
 case 28856: {  m[(3337) >>> 0] = (A) | 0; pc = 28857; }
@@ -30525,8 +30525,8 @@ case 28858: {  m[(3447) >>> 0] = (1065353216) | 0; pc = 28859; }
 case 28859: {  m[(3451) >>> 0] = (31) | 0; pc = 28860; }
 case 28860: {  m[(3450) >>> 0] = (256) | 0; pc = 28861; }
 case 28861: {  m[(3452) >>> 0] = ((m[(6576) >>> 0] | 0)) | 0; pc = 28862; }
-case 28862: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28864) | 0; pc = (17897) - 1; continue runner; }
-case 28863: { if(executed!==0&&executed+3>maxInstructions){pc=28863;return save("budget",executed);}executed+=3; q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28864; }
+case 28862: {  pc=28862; sync(); native("service:grstdcrater", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=28863; }
+case 28863: {  q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28864; }
 case 28864: {  A = ((m[(6221) >>> 0] | 0)) | 0; pc = 28865; }
 case 28865: {  if ((((A) | 0) != ((0) | 0))) { pc = ((28844) - 1); continue runner; } pc = 28866; }
 case 28866: { if(executed!==0&&executed+2>maxInstructions){pc=28866;return save("budget",executed);}executed+=2; C = (200) | 0; pc = 28867; }
@@ -30607,12 +30607,12 @@ case 28940: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.s
 case 28941: { if(executed!==0&&executed+3>maxInstructions){pc=28941;return save("budget",executed);}executed+=3; m[(3345) >>> 0] = (C) | 0; pc = 28942; }
 case 28942: {  C = (200) | 0; pc = 28943; }
 case 28943: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28945) | 0; pc = (15329) - 1; continue runner; }
-case 28944: { if(executed!==0&&executed+5>maxInstructions){pc=28944;return save("budget",executed);}executed+=5; m[(3344) >>> 0] = (C) | 0; pc = 28945; }
+case 28944: { if(executed!==0&&executed+8>maxInstructions){pc=28944;return save("budget",executed);}executed+=8; m[(3344) >>> 0] = (C) | 0; pc = 28945; }
 case 28945: {  m[(3451) >>> 0] = (127) | 0; pc = 28946; }
 case 28946: {  m[(3450) >>> 0] = (200) | 0; pc = 28947; }
 case 28947: {  m[(3452) >>> 0] = (170556) | 0; pc = 28948; }
-case 28948: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (28950) | 0; pc = (17897) - 1; continue runner; }
-case 28949: { if(executed!==0&&executed+3>maxInstructions){pc=28949;return save("budget",executed);}executed+=3; q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28950; }
+case 28948: {  pc=28948; sync(); native("service:grstdcrater", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=28949; }
+case 28949: {  q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 28950; }
 case 28950: {  A = ((m[(6221) >>> 0] | 0)) | 0; pc = 28951; }
 case 28951: {  if ((((A) | 0) != ((0) | 0))) { pc = ((28915) - 1); continue runner; } pc = 28952; }
 case 28952: { if(executed!==0&&executed+2>maxInstructions){pc=28952;return save("budget",executed);}executed+=2; C = (400) | 0; pc = 28953; }
@@ -30696,7 +30696,7 @@ case 29029: { if(executed!==0&&executed+4>maxInstructions){pc=29029;return save(
 case 29030: {  m[(3345) >>> 0] = (C) | 0; pc = 29031; }
 case 29031: {  C = (16) | 0; pc = 29032; }
 case 29032: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (29034) | 0; pc = (15329) - 1; continue runner; }
-case 29033: { if(executed!==0&&executed+10>maxInstructions){pc=29033;return save("budget",executed);}executed+=10; C = (((C) + (16))) | 0; pc = 29034; }
+case 29033: { if(executed!==0&&executed+12>maxInstructions){pc=29033;return save("budget",executed);}executed+=12; C = (((C) + (16))) | 0; pc = 29034; }
 case 29034: {  A = (0) | 0; pc = 29035; }
 case 29035: {  A = (((A) - (C))) | 0; pc = 29036; }
 case 29036: {  m[(3337) >>> 0] = (A) | 0; pc = 29037; }
@@ -30705,8 +30705,8 @@ case 29038: {  m[(3447) >>> 0] = (1065353216) | 0; pc = 29039; }
 case 29039: {  m[(3451) >>> 0] = (31) | 0; pc = 29040; }
 case 29040: {  m[(3450) >>> 0] = (256) | 0; pc = 29041; }
 case 29041: {  m[(3452) >>> 0] = ((m[(6576) >>> 0] | 0)) | 0; pc = 29042; }
-case 29042: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (29044) | 0; pc = (17897) - 1; continue runner; }
-case 29043: { if(executed!==0&&executed+2>maxInstructions){pc=29043;return save("budget",executed);}executed+=2; q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 29044; }
+case 29042: {  pc=29042; sync(); native("service:grstdcrater", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=29043; }
+case 29043: {  q = (6221) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 29044; }
 case 29044: {  pc = (29022) - 1; continue runner; }
 case 29045: { if(executed!==0&&executed+2>maxInstructions){pc=29045;return save("budget",executed);}executed+=2; C = (100) | 0; pc = 29046; }
 case 29046: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (29048) | 0; pc = (15329) - 1; continue runner; }
