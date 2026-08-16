@@ -343,8 +343,14 @@ const glassBubbleAddressCaches = new WeakMap();
 const bodyVectorAddressCaches = new WeakMap();
 const bodyVectorValueCaches = new WeakMap();
 const starFieldAddressCaches = new WeakMap();
-const float32Scratch = new DataView(new ArrayBuffer(4));
-const float64Scratch = new DataView(new ArrayBuffer(8));
+const float32ScratchBuffer = new ArrayBuffer(4);
+const float32ScratchI32 = new Int32Array(float32ScratchBuffer);
+const float32ScratchF32 = new Float32Array(float32ScratchBuffer);
+const float64ScratchBuffer = new ArrayBuffer(8);
+const float64Scratch = new DataView(float64ScratchBuffer);
+const float64ScratchI32 = new Int32Array(float64ScratchBuffer);
+const float64ScratchF64 = new Float64Array(float64ScratchBuffer);
+const float64ScratchU64 = new BigUint64Array(float64ScratchBuffer);
 
 const TERRAIN_HUD_GLYPHS = Object.freeze({
   38: 128, 40: 17556, 41: 5265, 42: 9664, 43: 1488, 44: 5120,
@@ -433,13 +439,13 @@ function writeFloat64View(view, unit, number) {
 }
 
 function float32Bits(number) {
-  float32Scratch.setFloat32(0, number, true);
-  return float32Scratch.getInt32(0, true);
+  float32ScratchF32[0] = number;
+  return float32ScratchI32[0];
 }
 
 function float32FromBits(bits) {
-  float32Scratch.setInt32(0, bits, true);
-  return float32Scratch.getFloat32(0, true);
+  float32ScratchI32[0] = bits;
+  return float32ScratchF32[0];
 }
 
 function adjacentFloat32(number, upward) {
@@ -483,7 +489,22 @@ function convertToInt32(number, control) {
 }
 
 function bitLength(number) {
-  return number === 0n ? 0 : (number < 0n ? -number : number).toString(2).length;
+  let magnitude = number < 0n ? -number : number;
+  if (magnitude === 0n) return 0;
+  // Extended-precision operations call this for nearly every rounded result.
+  // Converting a BigInt to a base-2 string asks the engine to allocate and
+  // format the complete value. Staged exact shifts keep the same integer bit
+  // length while leaving only an exactly representable 32-bit tail for clz32.
+  let bits = 0;
+  while (magnitude >= 0x1_0000_0000_0000_0000n) {
+    magnitude >>= 64n;
+    bits += 64;
+  }
+  if (magnitude >= 0x1_0000_0000n) {
+    magnitude >>= 32n;
+    bits += 32;
+  }
+  return bits + 32 - Math.clz32(Number(magnitude));
 }
 
 function roundBinary(integer, exponent, precision, control, sticky = false) {
@@ -522,8 +543,8 @@ function extendedFromInteger(number) {
 function extendedFromNumber(number) {
   if (!Number.isFinite(number)) return { integer: 0n, exponent: 0, special: number };
   if (number === 0) return { integer: 0n, exponent: 0, special: Object.is(number, -0) ? -0 : null };
-  float64Scratch.setFloat64(0, number, true);
-  const bits = float64Scratch.getBigUint64(0, true);
+  float64ScratchF64[0] = number;
+  const bits = float64ScratchU64[0];
   const negative = (bits >> 63n) !== 0n;
   const encodedExponent = Number((bits >> 52n) & 0x7ffn);
   const fraction = bits & 0xfffffffffffffn;
@@ -5157,9 +5178,12 @@ function groundPostSurface(machine, linked) {
   machine.X = LINO_DONE;
 }
 
-function landedFastRandom(machine, linked, mask) {
+function landedFastRandom(machine, linked, mask, direct = null) {
   const memory = machine.memory;
-  const seed = value(memory, linked, "SUfseed") >>> 0;
+  const seedAddress = direct?.SUfseed ?? address(linked, "SUfseed");
+  const eaxAddress = direct?.SUfeax ?? address(linked, "SUfeax");
+  const valueAddress = direct?.SUfval ?? address(linked, "SUfval");
+  const seed = memory[seedAddress] >>> 0;
   const lowHalf = seed & 0xffff;
   const highHalf = seed >>> 16;
   const lowProduct = lowHalf * lowHalf;
@@ -5171,9 +5195,9 @@ function landedFastRandom(machine, linked, mask) {
   const raw = (low & 0xffffff00) | (((low & 0xff) + (high & 0xff)) & 0xff);
   const nextSeed = (seed + (raw >>> 0)) | 0;
   const result = raw & mask;
-  memory[address(linked, "SUfeax")] = raw;
-  memory[address(linked, "SUfseed")] = nextSeed;
-  memory[address(linked, "SUfval")] = result;
+  memory[eaxAddress] = raw;
+  memory[seedAddress] = nextSeed;
+  memory[valueAddress] = result;
   machine.A = raw;
   machine.B = nextSeed;
   machine.C = result;
@@ -5251,24 +5275,31 @@ function landedDenseAverage(machine, linked) {
   memory[base + index] = total >>> 4;
 }
 
-function landedMushroomPixels(machine, linked) {
+function landedMushroomPixels(machine, linked, direct = null) {
   const memory = machine.memory;
   const page = noctisBuffer(linked, "RADPT");
-  let remaining = value(memory, linked, "VHGNDmushinner") >>> 0;
-  const colorMask = value(memory, linked, "VHGNDmushcolmask");
-  memory[address(linked, "SUfmask")] = colorMask;
+  const innerAddress = direct?.mushinner ?? address(linked, "VHGNDmushinner");
+  const colorMaskAddress = direct?.mushroomState?.[7] ?? address(linked, "VHGNDmushcolmask");
+  const baseAddress = direct?.mushroomState?.[6] ?? address(linked, "VHGNDmushbase");
+  const offsetAddress = direct?.mushoff ?? address(linked, "VHGNDmushoff");
+  const xAddress = direct?.GCx ?? address(linked, "GCx");
+  const yAddress = direct?.GCy ?? address(linked, "GCy");
+  const maskAddress = direct?.SUfmask ?? address(linked, "SUfmask");
+  let remaining = memory[innerAddress] >>> 0;
+  const colorMask = memory[colorMaskAddress] | 0;
+  memory[maskAddress] = colorMask;
   while (remaining !== 0) {
-    const y = value(memory, linked, "GCy") + landedFastRandom(machine, linked, 7);
-    const x = value(memory, linked, "GCx") + landedFastRandom(machine, linked, 7);
+    const y = (memory[yAddress] | 0) + landedFastRandom(machine, linked, 7, direct);
+    const x = (memory[xAddress] | 0) + landedFastRandom(machine, linked, 7, direct);
     const offset = Math.imul(y, 320) + x;
-    memory[address(linked, "VHGNDmushoff")] = offset;
-    const color = landedFastRandom(machine, linked, colorMask) + value(memory, linked, "VHGNDmushbase");
+    memory[offsetAddress] = offset;
+    const color = landedFastRandom(machine, linked, colorMask, direct) + (memory[baseAddress] | 0);
     for (const displacement of [0, 1, -1, 320, -320, -640]) {
       memory[page + offset + displacement] = color;
     }
     remaining -= 1;
   }
-  memory[address(linked, "VHGNDmushinner")] = 0;
+  memory[innerAddress] = 0;
   machine.A = 0;
 }
 
@@ -6075,6 +6106,16 @@ function landedTreeRenderAddresses(linked) {
     GCy: address(linked, "GCy"),
     mushouter: address(linked, "VHGNDmushouter"),
     mushinner: address(linked, "VHGNDmushinner"),
+    mushoff: address(linked, "VHGNDmushoff"),
+    VHGNDtmp: address(linked, "VHGNDtmp"),
+    VHGNDvi: address(linked, "VHGNDvi"),
+    mushpx: address(linked, "VHGNDmushpx"),
+    mushpy: address(linked, "VHGNDmushpy"),
+    mushpz: address(linked, "VHGNDmushpz"),
+    SUfseed: address(linked, "SUfseed"),
+    SUfeax: address(linked, "SUfeax"),
+    SUfval: address(linked, "SUfval"),
+    SUfmask: address(linked, "SUfmask"),
     leafx: address(linked, "VHGNDtreeleafx"),
     leafz: address(linked, "VHGNDtreeleafz"),
     rangef: address(linked, "VHGNDtreerangef"),
@@ -6112,6 +6153,23 @@ function mergeTreeCommandBounds(commands) {
     }
   }
   return bounds;
+}
+
+function currentTreeModelBounds(machine, tree, model) {
+  if (!model.dynamicWind) return model.bounds;
+  // Only leaf tips and their floating mushroom particles move with the global
+  // tree-wind vector. The recorded model bounds contain their positions at
+  // creation time. Widening both horizontal sides by the absolute displacement
+  // is conservative for those moving points and for every static limb, while
+  // allowing the ordinary whole-model screen test to reject off-screen trees.
+  const windX = float32FromBits(machine.memory[tree.windx]);
+  const windZ = float32FromBits(machine.memory[tree.windz]);
+  const dx = Math.abs(windX - model.initialWindX);
+  const dz = Math.abs(windZ - model.initialWindZ);
+  return [
+    model.bounds[0] - dx, model.bounds[1], model.bounds[2] - dz,
+    model.bounds[3] + dx, model.bounds[4], model.bounds[5] + dz,
+  ];
 }
 
 function indexTreeModelVertices(commands) {
@@ -6397,47 +6455,46 @@ function projectGreenmushPoint(machine, linked, tree) {
 
 function renderGreenmushDirect(machine, linked, tree) {
   const memory = machine.memory;
-  const get = (name) => value(memory, linked, name);
-  const set = (name, next) => { memory[address(linked, name)] = next; };
-  const scale = get("VHGNDmushscale");
+  const state = tree.mushroomState;
+  const scale = memory[state[5]] | 0;
   const halfScale = scale >> 1;
-  set("VHGNDtmp", halfScale);
-  const floating = get("VHGNDmushfloat") !== 0;
+  memory[tree.VHGNDtmp] = halfScale;
+  const floating = (memory[state[8]] | 0) !== 0;
   if (floating) landedMushroomSetup(machine, linked);
   else {
-    set("VHGNDmushx", (get("VHGNDmushx") + halfScale) | 0);
-    set("VHGNDmushy", (get("VHGNDmushy") + halfScale) | 0);
-    set("VHGNDmushz", (get("VHGNDmushz") + halfScale) | 0);
+    memory[state[0]] = ((memory[state[0]] | 0) + halfScale) | 0;
+    memory[state[1]] = ((memory[state[1]] | 0) + halfScale) | 0;
+    memory[state[2]] = ((memory[state[2]] | 0) + halfScale) | 0;
   }
-  const seed = ((get("VHGNDmushx") >> 14) + (get("VHGNDmushy") >> 14)
-    + (get("VHGNDmushz") >> 14)) | 3;
-  set("SUfseed", seed);
-  const outerMask = get("VHGNDmushmask1");
-  set("SUfmask", outerMask);
-  let outer = landedFastRandom(machine, linked, outerMask) + 1;
+  const seed = (((memory[state[0]] | 0) >> 14) + ((memory[state[1]] | 0) >> 14)
+    + ((memory[state[2]] | 0) >> 14)) | 3;
+  memory[tree.SUfseed] = seed;
+  const outerMask = memory[state[3]] | 0;
+  memory[tree.SUfmask] = outerMask;
+  let outer = landedFastRandom(machine, linked, outerMask, tree) + 1;
   memory[tree.mushouter] = outer;
   while (outer > 0) {
-    set("SUfmask", scale);
+    memory[tree.SUfmask] = scale;
     if (floating) {
       landedMushroomPoint(machine, linked);
-      set("VHGNDvi", 0);
+      memory[tree.VHGNDvi] = 0;
     }
     else {
-      const z = (get("VHGNDmushz") - landedFastRandom(machine, linked, scale)) | 0;
-      const y = (get("VHGNDmushy") - landedFastRandom(machine, linked, scale)) | 0;
-      const x = (get("VHGNDmushx") - landedFastRandom(machine, linked, scale)) | 0;
-      set("VHGNDmushpz", z); set("VHGNDmushpy", y); set("VHGNDmushpx", x);
+      const z = ((memory[state[2]] | 0) - landedFastRandom(machine, linked, scale, tree)) | 0;
+      const y = ((memory[state[1]] | 0) - landedFastRandom(machine, linked, scale, tree)) | 0;
+      const x = ((memory[state[0]] | 0) - landedFastRandom(machine, linked, scale, tree)) | 0;
+      memory[tree.mushpz] = z; memory[tree.mushpy] = y; memory[tree.mushpx] = x;
       writeFloat64(memory, tree.p.fw + tree.p.FSINX * 2, Math.fround(x));
       writeFloat64(memory, tree.p.fw + tree.p.FSINY * 2, Math.fround(y));
       writeFloat64(memory, tree.p.fw + tree.p.FSINZ * 2, Math.fround(z));
-      set("VHGNDvi", 3);
+      memory[tree.VHGNDvi] = 3;
     }
     if (projectGreenmushPoint(machine, linked, tree)) {
-      const innerMask = get("VHGNDmushmask2");
-      set("SUfmask", innerMask);
-      const inner = landedFastRandom(machine, linked, innerMask) + 1;
+      const innerMask = memory[state[4]] | 0;
+      memory[tree.SUfmask] = innerMask;
+      const inner = landedFastRandom(machine, linked, innerMask, tree) + 1;
       memory[tree.mushinner] = inner;
-      landedMushroomPixels(machine, linked);
+      landedMushroomPixels(machine, linked, tree);
     }
     outer -= 1;
     memory[tree.mushouter] = outer;
@@ -6481,7 +6538,7 @@ function terrainTree(machine, linked) {
   const key = keyAddresses.map((source) => machine.memory[source] | 0).join(":");
   const model = machine.noctisTreeModels.get(key);
   if (model) {
-    if (model.dynamicWind || rockBoundsMayRender(machine, tree.p, model.bounds, 10)) {
+    if (rockBoundsMayRender(machine, tree.p, currentTreeModelBounds(machine, tree, model), 10)) {
       const projection = machine.noctisDisableTreeProjectionCache
         ? null : projectTreeModelVertices(machine, tree, model);
       for (const command of model.commands) {
@@ -6526,6 +6583,8 @@ function terrainTree(machine, linked) {
     finalState: captureAddressValues(machine.memory, tree.finalState),
     finalBasis,
     dynamicWind,
+    initialWindX: float32FromBits(machine.memory[tree.windx]),
+    initialWindZ: float32FromBits(machine.memory[tree.windz]),
     ...indexTreeModelVertices(recording.commands),
   });
   machine.X = LINO_DONE;
@@ -8823,9 +8882,9 @@ function flareDraw(machine, linked) {
   writeFloat64(memory, p.VHFu0, 1.5);
   memory[p.VHFang] = 0;
   if ((memory[p.VHFtrigready] | 0) === 0) {
-    float64Scratch.setUint32(0, 2723323193, true);
-    float64Scratch.setUint32(4, 1066524486, true);
-    const degreeStep = float64Scratch.getFloat64(0, true);
+  float64ScratchI32[0] = 2723323193 | 0;
+  float64ScratchI32[1] = 1066524486 | 0;
+  const degreeStep = float64ScratchF64[0];
     let radians = 0;
     memory[p.VHFtrigi] = 0;
     writeFloat64(memory, p.VHFtriga0, 0);
@@ -9282,9 +9341,9 @@ function glassBubble(machine, linked) {
 }
 
 function float64FromWords(low, high) {
-  float64Scratch.setInt32(0, low | 0, true);
-  float64Scratch.setInt32(4, high | 0, true);
-  return float64Scratch.getFloat64(0, true);
+  float64ScratchI32[0] = low | 0;
+  float64ScratchI32[1] = high | 0;
+  return float64ScratchF64[0];
 }
 
 function bodyVector(machine, linked) {
@@ -10172,7 +10231,7 @@ function terrainFacingDirect(machine, ground, triangle) {
   const vertexX = memory[ground.VHGNDx] << 14;
   const vertexY = -(memory[ground.VHGNDs4] << 11);
   const vertexZ = (memory[ground.VHGNDz] << 14) + step;
-  const qwords = float64View(memory);
+  const qwords = machine.noctisFloat64Memory ??= float64View(memory);
   const base = floats >>> 1;
   let dot = (qwords[base + 224] - vertexX) * normalX;
   dot = (qwords[base + 225] - vertexY) * normalY + dot;
@@ -10437,15 +10496,15 @@ function genericTerrainMapped(machine, linked, p) {
 }
 
 function storeTerrainCachedFloat(memory, lowBase, highBase, index, number) {
-  float64Scratch.setFloat64(0, number, true);
-  memory[lowBase + index] = float64Scratch.getInt32(0, true);
-  memory[highBase + index] = float64Scratch.getInt32(4, true);
+  float64ScratchF64[0] = number;
+  memory[lowBase + index] = float64ScratchI32[0];
+  memory[highBase + index] = float64ScratchI32[1];
 }
 
 function terrainCachedFloat(memory, lowBase, highBase, index) {
-  float64Scratch.setInt32(0, memory[lowBase + index], true);
-  float64Scratch.setInt32(4, memory[highBase + index], true);
-  return float64Scratch.getFloat64(0, true);
+  float64ScratchI32[0] = memory[lowBase + index];
+  float64ScratchI32[1] = memory[highBase + index];
+  return float64ScratchF64[0];
 }
 
 function cacheTerrainWorldVertexDirect(machine, p, ground, index, xInput, yInput, zInput) {
