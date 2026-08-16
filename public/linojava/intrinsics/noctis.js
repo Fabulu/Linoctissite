@@ -269,6 +269,7 @@ const SERVICE_IDS = Object.freeze({
   surfaceNegate: "service:sunegate",
   surfaceRandomPattern: "service:surndpat",
   surfaceSda: "service:susda",
+  paletteShade: "service:palshade",
   groundRoundHill: "service:grroundhill",
   groundTextureDarkline: "service:vhgndtexturedarklinecommon",
   groundPostSurface: "service:vhgndpostsurfacecommon",
@@ -308,6 +309,7 @@ const tgaAddressCaches = new WeakMap();
 const textAddressCaches = new WeakMap();
 const ekeyAddressCaches = new WeakMap();
 const surfaceBulkAddressCaches = new WeakMap();
+const paletteShadeAddressCaches = new WeakMap();
 const groundRoundHillAddressCaches = new WeakMap();
 const groundTextureDarklineAddressCaches = new WeakMap();
 const groundPostSurfaceAddressCaches = new WeakMap();
@@ -5922,6 +5924,122 @@ function surfaceSda(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function paletteShade(machine, linked) {
+  const memory = machine.memory;
+  let p = paletteShadeAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "FBSHfirst", "FBSHn", "SHsr", "SHsg", "SHsb", "SHer", "SHeg", "SHeb",
+      "SHk", "SHdstb", "SHdst", "SHcurp", "SHdelp", "SHb", "SHz32", "SH6432",
+      "PFbits", "PFsa0", "PFnum", "PFden", "shcur", "shdel", "FA0", "FB0", "FS0",
+      "FI", "FSW", "FFLG", "FCWCSAV", "FCWCHOP",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    paletteShadeAddressCaches.set(linked, p);
+  }
+  const fpu = floatingPoint(machine);
+  const control = fpu.control;
+  const count = memory[p.FBSHn] >>> 0;
+  const starts = [memory[p.SHsr] | 0, memory[p.SHsg] | 0, memory[p.SHsb] | 0];
+  const finishes = [memory[p.SHer] | 0, memory[p.SHeg] | 0, memory[p.SHeb] | 0];
+
+  memory[p.PFnum] = 1;
+  memory[p.PFden] = count | 0;
+  const k = roundFloat32(1 / count, control);
+  const kBits = float32Bits(k);
+  memory[p.SHk] = kBits;
+  memory[p.PFbits] = kBits;
+  memory[p.FS0] = kBits;
+  writeFloat64(memory, p.FA0, 1 / count);
+  writeFloat64(memory, p.FB0, count | 0);
+  memory[p.FI] = 1;
+
+  for (let component = 0; component < 3; component += 1) {
+    const start = float32FromBits(starts[component]);
+    const finish = float32FromBits(finishes[component]);
+    const difference = finish - start;
+    const delta = roundFloat32(difference * k, control);
+    const deltaBits = float32Bits(delta);
+    memory[p.shcur + component] = starts[component];
+    memory[p.shdel + component] = deltaBits;
+    memory[p.PFbits] = deltaBits;
+    memory[p.FS0] = deltaBits;
+    writeFloat64(memory, p.PFsa0, difference);
+    writeFloat64(memory, p.FA0, delta);
+    writeFloat64(memory, p.FB0, k);
+  }
+
+  let destination = (memory[p.SHdstb] + Math.imul(memory[p.FBSHfirst] | 0, 3)) | 0;
+  memory[p.SHdst] = destination;
+  machine.A = destination;
+  machine.B = count | 0;
+  if (count === 0) {
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  const compare = (current, bound, boundBits) => {
+    memory[p.PFbits] = boundBits;
+    memory[p.FS0] = boundBits;
+    writeFloat64(memory, p.PFsa0, current);
+    writeFloat64(memory, p.FA0, current);
+    writeFloat64(memory, p.FB0, bound);
+    const status = Number.isNaN(current) || Number.isNaN(bound) ? 0x4500
+      : current < bound ? 0x0100
+        : current === bound ? 0x4000
+          : 0;
+    memory[p.FSW] = status;
+    fpu.status = status;
+    if ((status & 0x0400) !== 0) {
+      memory[p.FFLG] |= 1;
+      memory[p.FI] = 2;
+    } else if ((status & 0x4000) !== 0) memory[p.FI] = 0;
+    else if ((status & 0x0100) !== 0) memory[p.FI] = -1;
+    else memory[p.FI] = 1;
+    return memory[p.FI] | 0;
+  };
+
+  for (let colour = 0; colour < count; colour += 1) {
+    for (let component = 0; component < 3; component += 1) {
+      const currentBits = memory[p.shcur + component] | 0;
+      const current = float32FromBits(currentBits);
+      const deltaBits = memory[p.shdel + component] | 0;
+      const delta = float32FromBits(deltaBits);
+      memory[p.SHcurp] = p.shcur + component;
+      memory[p.SHdelp] = p.shdel + component;
+
+      let output;
+      if (compare(current, 0, memory[p.SHz32] | 0) < 0) output = 0;
+      else if (compare(current, 64, memory[p.SH6432] | 0) < 0) {
+        output = Math.trunc(current) | 0;
+        memory[p.FCWCSAV] = fpu.control & 0xffff;
+        memory[p.FCWCHOP] = (memory[p.FCWCSAV] & 0x0f3ff) | 0x0c00;
+        memory[p.FI] = output;
+        fpu.control = memory[p.FCWCSAV] & 0xffff;
+      } else output = 63;
+      memory[p.SHb] = output;
+      memory[destination] = output & 0xff;
+
+      memory[p.PFbits] = deltaBits;
+      memory[p.FS0] = deltaBits;
+      writeFloat64(memory, p.PFsa0, current);
+      writeFloat64(memory, p.FA0, current);
+      writeFloat64(memory, p.FB0, delta);
+      const next = roundFloat32(current + delta, fpu.control);
+      const nextBits = float32Bits(next);
+      memory[p.FS0] = nextBits;
+      writeFloat64(memory, p.FA0, next);
+      memory[p.shcur + component] = nextBits;
+      destination += 1;
+      memory[p.SHdst] = destination;
+      machine.C = nextBits;
+    }
+  }
+  machine.A = destination;
+  machine.B = 0;
+  machine.X = LINO_DONE;
+}
+
 function spaceFade(machine, linked) {
   const memory = machine.memory;
   let p = spaceFadeAddressCaches.get(linked);
@@ -10171,6 +10289,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.surfaceNegate]: surfaceNegate,
     [SERVICE_IDS.surfaceRandomPattern]: surfaceRandomPattern,
     [SERVICE_IDS.surfaceSda]: surfaceSda,
+    [SERVICE_IDS.paletteShade]: paletteShade,
     [SERVICE_IDS.groundRoundHill]: groundRoundHill,
     [SERVICE_IDS.groundTextureDarkline]: groundTextureDarkline,
     [SERVICE_IDS.groundPostSurface]: groundPostSurface,
