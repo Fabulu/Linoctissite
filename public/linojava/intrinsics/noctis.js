@@ -276,6 +276,7 @@ const SERVICE_IDS = Object.freeze({
   flareSourceStick: "service:vhfsourcestick",
   glowRaster: "service:spglowraster",
   globeRaster: "service:spgloberaster",
+  whiteRaster: "service:spwhite",
   drawMode2Cache: "service:vhdrawmode2cache",
   renderCupolaCache: "service:vhcrendercachecommon",
   drawCupolaPanel: "service:vhcdrawpanel",
@@ -313,6 +314,7 @@ const spaceFadeAddressCaches = new WeakMap();
 const flareSourceStickAddressCaches = new WeakMap();
 const glowRasterAddressCaches = new WeakMap();
 const globeRasterAddressCaches = new WeakMap();
+const whiteRasterAddressCaches = new WeakMap();
 const mode2CacheAddressCaches = new WeakMap();
 const renderCupolaCacheAddressCaches = new WeakMap();
 const drawCupolaPanelAddressCaches = new WeakMap();
@@ -6057,6 +6059,199 @@ function scaleSignedByteExact(byte, magnitudeBits) {
   return rounded > 32767 || rounded < -32768 ? -32768 : rounded;
 }
 
+function whiteRaster(machine, linked) {
+  const memory = machine.memory;
+  let p = whiteRasterAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "nw", "RADPT", "fw", "FA0", "FI", "PGFi", "GBt",
+      "WHmag", "WHfgm", "WHshape", "WHsun", "WHok", "WHxsunl", "WHxsunh",
+      "WHcxl", "WHcxh", "WHcyl", "WHcyh", "WHiy", "WHix", "WHptr",
+      "WHpix", "WHtex", "WHn", "WHclamp", "WHwrap", "WHrows", "WHcols",
+      "SFXX", "SFYY", "SFZZ", "FSPCB", "FSPSB", "FSTCB", "FSTSB",
+      "FSTCA", "FSTSA", "FSPCA", "FSPSA", "SFRX", "SFZ2", "SFRZ", "SFRY",
+      "SFMAG", "SFCX", "SFCY", "SFMG", "SFFGM", "SFSHE", "SFISE",
+      "SFMSQ", "SFFSQ", "SFYA", "SFYB", "SFYP", "SFXA", "SFXB", "SFXP",
+      "SFZW", "SFV0", "SFV1", "F32XC", "F32YC",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    whiteRasterAddressCaches.set(linked, p);
+  }
+
+  memory[p.WHok] = 0;
+  memory[p.WHn] = 0;
+  memory[p.WHclamp] = 0;
+  memory[p.WHwrap] = 0;
+  memory[p.WHrows] = 0;
+  memory[p.WHcols] = 0;
+  memory[p.WHxsunl] = 0;
+  memory[p.WHxsunh] = 0;
+
+  const slotAddress = (slot) => p.fw + slot * 2;
+  const load = (slot) => readFloat64(memory, slotAddress(slot));
+  const store = (slot, number) => writeFloat64(memory, slotAddress(slot), number);
+  const compare = (left, right) => Number.isNaN(left) || Number.isNaN(right) ? 2
+    : left < right ? -1 : left === right ? 0 : 1;
+  const signExtendByte = (number) => (number << 24) >> 24;
+  const control = floatingPoint(machine).control;
+
+  const xx = load(p.SFXX);
+  const yy = load(p.SFYY);
+  const zz = load(p.SFZZ);
+  const rx = xx * load(p.FSPCB) + zz * load(p.FSPSB);
+  const z2 = zz * load(p.FSTCB) - xx * load(p.FSTSB);
+  const rz = z2 * load(p.FSTCA) + yy * load(p.FSTSA);
+  const ry = yy * load(p.FSPCA) - z2 * load(p.FSPSA);
+  store(p.SFRX, rx);
+  store(p.SFZ2, z2);
+  store(p.SFRZ, rz);
+  store(p.SFRY, ry);
+
+  if (compare(rz, 0.001) < 0) {
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  let magnitude = roundFloat32(float32FromBits(memory[p.WHmag]) / rz, control);
+  if (compare(magnitude, 2.99) === 1) magnitude = float32FromBits(0x403f5c29);
+  if (compare(magnitude, 0.01) < 0) magnitude = float32FromBits(0x3c23d70a);
+  store(p.SFMAG, magnitude);
+
+  const projectedX = rx / rz;
+  const projectedY = ry / rz;
+  store(p.SFRX, projectedX);
+  store(p.SFRY, projectedY);
+  const centerOffsetX = float32FromBits(p.F32XC);
+  const centerOffsetY = float32FromBits(p.F32YC);
+  if ((memory[p.WHsun] | 0) !== 0) {
+    writeFloat64(memory, p.WHxsunl, projectedX + centerOffsetX);
+  }
+  if (compare(Math.abs(projectedX), 460) === 1
+      || compare(Math.abs(projectedY), 400) === 1) {
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  const centerX = projectedX + centerOffsetX + 0.5;
+  const centerY = projectedY + centerOffsetY + 0.5;
+  store(p.SFCX, centerX);
+  store(p.SFCY, centerY);
+  const mag = magnitude * 100 + 1.5;
+  const fgm = float32FromBits(memory[p.WHfgm]) * mag;
+  let shadeExtent = mag - fgm;
+  if (compare(shadeExtent, 1) < 0) shadeExtent = 1;
+  const intensityScale = 63 / shadeExtent;
+  const magSquared = mag * mag;
+  const fgmSquared = fgm * fgm;
+  store(p.SFMG, mag);
+  store(p.SFFGM, fgm);
+  store(p.SFSHE, shadeExtent);
+  store(p.SFISE, intensityScale);
+  store(p.SFMSQ, magSquared);
+  store(p.SFFSQ, fgmSquared);
+
+  let ya = -(mag * 1.2);
+  const yEnd = centerY + mag;
+  let sampleY = centerY - mag;
+  const shape = memory[p.WHshape] | 0;
+  const step = shape === 1 ? 1 : 2;
+  const yStep = shape === 1 ? 1.2 : 2.4;
+  store(p.SFYA, ya);
+  store(p.SFYB, yEnd);
+  store(p.SFYP, sampleY);
+  store(p.SFV0, step);
+  store(p.SFV1, yStep);
+
+  const page = p.nw + p.RADPT;
+  let rows = 0;
+  let columns = 0;
+  let stored = 0;
+  let clamps = 0;
+  let wraps = 0;
+  let ix = 0;
+  let iy = 0;
+  let pointer = 0;
+  let pixel = 0;
+  let texture = 0;
+  let rawSum = 0;
+  let xa = -mag;
+  let xEnd = centerX + mag;
+  let sampleX = centerX - mag;
+  let radial = 0;
+
+  while (compare(sampleY, yEnd) < 0) {
+    rows += 1;
+    xa = -mag;
+    xEnd = centerX + mag;
+    sampleX = centerX - mag;
+    while (compare(sampleX, xEnd) < 0) {
+      columns += 1;
+      iy = convertToInt32(sampleY, 0x0c00);
+      ix = convertToInt32(sampleX, 0x0c00);
+      if (iy >= 10 && iy <= 189 && ix >= 10 && ix <= 312) {
+        radial = xa * xa + ya * ya;
+        if (compare(radial, magSquared) < 0) {
+          if (compare(radial, fgmSquared) === 1) {
+            const intensity = 63 - (Math.sqrt(radial) - fgm) * intensityScale;
+            pixel = signExtendByte(convertToInt32(intensity, 0x0c00) & 255);
+          } else pixel = 63;
+          pointer = (Math.imul(iy, 320) + ix) & 0xffff;
+          texture = memory[page + pointer] | 0;
+          rawSum = (pixel + texture) | 0;
+          const wrapped = signExtendByte(rawSum & 255);
+          if (rawSum !== wrapped) wraps += 1;
+          pixel = wrapped;
+          if (pixel > 63) {
+            pixel = 63;
+            clamps += 1;
+          }
+          const output = pixel & 255;
+          const destination = page + pointer;
+          memory[destination] = output;
+          stored += 1;
+          if (shape !== 1) {
+            memory[destination + 1] = output;
+            memory[destination + 320] = output;
+            memory[destination + 321] = output;
+            stored += 3;
+          }
+          machine.C = output;
+          machine.D = destination;
+        }
+      }
+      xa += step;
+      sampleX += step;
+    }
+    ya += yStep;
+    sampleY += step;
+  }
+
+  store(p.SFYA, ya);
+  store(p.SFYP, sampleY);
+  store(p.SFXA, xa);
+  store(p.SFXB, xEnd);
+  store(p.SFXP, sampleX);
+  store(p.SFZW, radial);
+  memory[p.WHrows] = rows;
+  memory[p.WHcols] = columns;
+  memory[p.WHn] = stored;
+  memory[p.WHclamp] = clamps;
+  memory[p.WHwrap] = wraps;
+  memory[p.WHiy] = iy;
+  memory[p.WHix] = ix;
+  memory[p.WHptr] = pointer;
+  memory[p.WHpix] = pixel;
+  memory[p.WHtex] = texture;
+  memory[p.GBt] = rawSum;
+  writeFloat64(memory, p.WHcxl, centerX);
+  writeFloat64(memory, p.WHcyl, centerY);
+  writeFloat64(memory, p.FA0, centerY);
+  memory[p.PGFi] = p.SFCY;
+  memory[p.WHok] = 1;
+  machine.A = slotAddress(p.SFCY) | 0;
+  machine.X = LINO_DONE;
+}
+
 function glowRaster(machine, linked) {
   const memory = machine.memory;
   let p = glowRasterAddressCaches.get(linked);
@@ -9918,6 +10113,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.flareSourceStick]: flareSourceStick,
     [SERVICE_IDS.glowRaster]: glowRaster,
     [SERVICE_IDS.globeRaster]: globeRaster,
+    [SERVICE_IDS.whiteRaster]: whiteRaster,
     [SERVICE_IDS.drawMode2Cache]: drawMode2Cache,
     [SERVICE_IDS.renderCupolaCache]: renderCupolaCache,
     [SERVICE_IDS.drawCupolaPanel]: drawCupolaPanel,
