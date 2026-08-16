@@ -5930,6 +5930,58 @@ function terrainTileFauna(machine, linked) {
     machine.X = LINO_DONE;
     return;
   }
+  const dispatch = machine.noctisTerrainFaunaDispatch;
+  if (dispatch) {
+    memory[p.VHGNDanisingle] = 1;
+    const entries = dispatch.byCell.get(z * 200 + x)?.slice();
+    if (entries) {
+      for (const entry of entries) {
+        const worldX = memory[entry.record] | 0;
+        const worldZ = memory[entry.record + 1] | 0;
+        const cellX = Math.max(0, Math.min(199, (worldX / 16384) | 0));
+        const cellZ = Math.max(0, Math.min(199, (worldZ / 16384) | 0));
+        if (cellX !== x || cellZ !== z) {
+          moveTerrainFaunaEntry(dispatch, entry, cellX, cellZ);
+          continue;
+        }
+        memory[p.VHGNDmii] = entry.mammalBefore;
+        memory[p.VHGNDbii] = entry.birdBefore;
+        memory[p.VHGNDfaunamid] = entry.mammalId;
+        memory[p.VHGNDfaunabid] = entry.birdId;
+        memory[p.VHGNDanip] = entry.record;
+        memory[p.VHGNDanix] = worldX;
+        memory[p.VHGNDaniz] = worldZ;
+        memory[p.VHGNDviewrz] = 1;
+        memory[p.VHGNDanii] = entry.index;
+        machine.C = entry.record;
+        machine.callCode(entry.mammal ? animals : birds);
+        const nextX = memory[entry.record] | 0;
+        const nextZ = memory[entry.record + 1] | 0;
+        moveTerrainFaunaEntry(dispatch, entry,
+          Math.max(0, Math.min(199, (nextX / 16384) | 0)),
+          Math.max(0, Math.min(199, (nextZ / 16384) | 0)));
+      }
+    }
+    memory[p.VHGNDmii] = dispatch.animalCount;
+    memory[p.VHGNDbii] = dispatch.birdCount;
+    memory[p.VHGNDfaunamid] = 0x7fffffff;
+    memory[p.VHGNDfaunabid] = 0x7fffffff;
+    if (dispatch.last) {
+      const worldX = memory[dispatch.last.record] | 0;
+      const worldZ = memory[dispatch.last.record + 1] | 0;
+      memory[p.VHGNDanip] = dispatch.last.record;
+      memory[p.VHGNDanix] = worldX;
+      memory[p.VHGNDaniz] = worldZ;
+      memory[p.VHGNDviewrz] = Math.max(0, Math.min(199, (worldX / 16384) | 0)) === x
+        && Math.max(0, Math.min(199, (worldZ / 16384) | 0)) === z ? 1 : 0;
+      machine.C = dispatch.last.record;
+    }
+    memory[p.VHGNDanisingle] = 0;
+    memory[p.SPskipmid] = 0;
+    machine.A = 0x7fffffff;
+    machine.X = LINO_DONE;
+    return;
+  }
   let mammal = 0;
   let bird = 0;
   const animalCount = memory[p.VHGNDanimals] >>> 0;
@@ -5972,6 +6024,66 @@ function terrainTileFauna(machine, linked) {
   memory[p.SPskipmid] = 0;
   machine.A = 0x7fffffff;
   machine.X = LINO_DONE;
+}
+
+function moveTerrainFaunaEntry(dispatch, entry, cellX, cellZ) {
+  if (entry.cellX === cellX && entry.cellZ === cellZ) return;
+  const oldKey = entry.cellZ * 200 + entry.cellX;
+  const oldEntries = dispatch.byCell.get(oldKey);
+  const oldIndex = oldEntries?.indexOf(entry) ?? -1;
+  if (oldIndex >= 0) {
+    oldEntries.splice(oldIndex, 1);
+    if (oldEntries.length === 0) dispatch.byCell.delete(oldKey);
+  }
+  entry.cellX = cellX;
+  entry.cellZ = cellZ;
+  const key = cellZ * 200 + cellX;
+  const entries = dispatch.byCell.get(key);
+  if (!entries) dispatch.byCell.set(key, [entry]);
+  else {
+    let index = entries.length;
+    while (index > 0 && entries[index - 1].order > entry.order) index -= 1;
+    entries.splice(index, 0, entry);
+  }
+}
+
+function prepareTerrainFaunaDispatch(machine, p) {
+  const memory = machine.memory;
+  const animalCount = memory[p.VHGNDanimals] >>> 0;
+  const birdCount = memory[p.VHGNDbirds] >>> 0;
+  const byCell = new Map();
+  let mammal = 0;
+  let bird = 0;
+  let order = 0;
+  let last = null;
+  while (mammal < animalCount || bird < birdCount) {
+    const mammalRecord = p.VHGNDanidata + mammal * 10;
+    const birdRecord = p.VHGNDbirddata + bird * 12;
+    const mammalId = mammal < animalCount ? memory[mammalRecord + 9] >>> 0 : 0x7fffffff;
+    const birdId = bird < birdCount ? memory[birdRecord + 10] >>> 0 : 0x7fffffff;
+    const chooseMammal = mammalId < birdId;
+    const record = chooseMammal ? mammalRecord : birdRecord;
+    const worldX = memory[record] | 0;
+    const worldZ = memory[record + 1] | 0;
+    const cellX = Math.max(0, Math.min(199, (worldX / 16384) | 0));
+    const cellZ = Math.max(0, Math.min(199, (worldZ / 16384) | 0));
+    const entry = {
+      order,
+      mammal: chooseMammal,
+      index: chooseMammal ? mammal : bird,
+      record, worldX, worldZ, cellX, cellZ,
+      mammalBefore: mammal, birdBefore: bird, mammalId, birdId,
+    };
+    const key = cellZ * 200 + cellX;
+    const entries = byCell.get(key);
+    if (entries) entries.push(entry);
+    else byCell.set(key, [entry]);
+    last = entry;
+    order += 1;
+    if (chooseMammal) mammal += 1;
+    else bird += 1;
+  }
+  machine.noctisTerrainFaunaDispatch = { animalCount, birdCount, byCell, last };
 }
 
 function landedRockAddresses(linked) {
@@ -6964,6 +7076,10 @@ function renderTerrainTileDetails(machine, linked, p, handles, x, z) {
 function terrainTraverseFaithful(machine, linked) {
   const memory = machine.memory;
   const p = landedTerrainAddresses(linked);
+  machine.noctisTerrainFaunaDispatch = null;
+  if (!machine.noctisDisableTerrainFaunaBuckets && (memory[p.GRiptype] | 0) === 3) {
+    prepareTerrainFaunaDispatch(machine, p);
+  }
   machine.noctisTerrainBoundsContext = terrainBoundsContext(machine, polymapAddresses(linked));
   const fullTile = codeHandle(linked, "VHGND tile");
   const detailHandles = {
