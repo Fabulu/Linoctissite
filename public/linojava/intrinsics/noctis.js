@@ -5256,6 +5256,7 @@ function landedMushroomPixels(machine, linked) {
   const page = noctisBuffer(linked, "RADPT");
   let remaining = value(memory, linked, "VHGNDmushinner") >>> 0;
   const colorMask = value(memory, linked, "VHGNDmushcolmask");
+  memory[address(linked, "SUfmask")] = colorMask;
   while (remaining !== 0) {
     const y = value(memory, linked, "GCy") + landedFastRandom(machine, linked, 7);
     const x = value(memory, linked, "GCx") + landedFastRandom(machine, linked, 7);
@@ -6039,16 +6040,16 @@ const TREE_MUSHROOM_STATE_NAMES = Object.freeze([
   "VHGNDmushzf",
 ]);
 const TREE_MODEL_KEY_NAMES = Object.freeze([
-  "VHGNDoox", "VHGNDooy", "VHGNDooz", "VHGNDdepth", "SUfseed",
+  "VHGNDoox", "VHGNDooy", "VHGNDooz", "VHGNDdepth", "VHGNDh1",
   "VHGNDseed", "GRiptype", "VHGNDsctype", "GRtreescale",
   "GRtreespread", "GRbranchwidth", "GRtreepeak", "GRrootshade",
   "GRmushscale", "GRtreeflares", "GRleafflares", "GRtreescalef",
-  "GRtreespreadf", "GRbranchwidthf", "GRtreepeakf", "VHGNDtreewindx",
-  "VHGNDtreewindz", "VHGNDtscale",
+  "GRtreespreadf", "GRbranchwidthf", "GRtreepeakf", "VHGNDtscale",
 ]);
 const TREE_FINAL_STATE_NAMES = Object.freeze([
   ...TREE_POLYGON_STATE_NAMES,
-  "SUfseed", "SUfeax", "SUfval", "SUfmask", "VHGNDmushfloat",
+  "SUfseed", "SUfeax", "SUfval", "SUfmask", "VHGNDmushfloat", "VHGNDvi",
+  "VHGNDmushpx", "VHGNDmushpy", "VHGNDmushpz",
 ]);
 
 function landedTreeRenderAddresses(linked) {
@@ -6060,6 +6061,12 @@ function landedTreeRenderAddresses(linked) {
     polygonState: TREE_POLYGON_STATE_NAMES.map((name) => address(linked, name)),
     mushroomState: TREE_MUSHROOM_STATE_NAMES.map((name) => address(linked, name)),
     modelKey: TREE_MODEL_KEY_NAMES.map((name) => address(linked, name)),
+    legacyModelKey: ["VHGNDoox", "VHGNDooy", "VHGNDooz", "VHGNDdepth", "SUfseed",
+      "VHGNDseed", "GRiptype", "VHGNDsctype", "GRtreescale", "GRtreespread",
+      "GRbranchwidth", "GRtreepeak", "GRrootshade", "GRmushscale", "GRtreeflares",
+      "GRleafflares", "GRtreescalef", "GRtreespreadf", "GRbranchwidthf",
+      "GRtreepeakf", "VHGNDtreewindx", "VHGNDtreewindz", "VHGNDtscale"]
+      .map((name) => address(linked, name)),
     finalState: TREE_FINAL_STATE_NAMES.map((name) => address(linked, name)),
     tree: codeHandle(linked, "VHGND tree"),
     greenmush: codeHandle(linked, "VHGND greenmush"),
@@ -6068,6 +6075,15 @@ function landedTreeRenderAddresses(linked) {
     GCy: address(linked, "GCy"),
     mushouter: address(linked, "VHGNDmushouter"),
     mushinner: address(linked, "VHGNDmushinner"),
+    leafx: address(linked, "VHGNDtreeleafx"),
+    leafz: address(linked, "VHGNDtreeleafz"),
+    rangef: address(linked, "VHGNDtreerangef"),
+    windx: address(linked, "VHGNDtreewindx"),
+    windz: address(linked, "VHGNDtreewindz"),
+    treepx: address(linked, "VHGNDtreepx"),
+    treepz: address(linked, "VHGNDtreepz"),
+    sine: address(linked, "VHVsin"),
+    cosine: address(linked, "VHVcos"),
   };
   landedTreeRenderAddressCaches.set(linked, cached);
   return cached;
@@ -6101,6 +6117,8 @@ function mergeTreeCommandBounds(commands) {
 function indexTreeModelVertices(commands) {
   const unique = new Map();
   const vertices = [];
+  const windBaseX = [];
+  const windBaseZ = [];
   for (const command of commands) {
     if (command.kind === "greenmush") continue;
     const indices = new Int32Array(command.vertices);
@@ -6112,7 +6130,10 @@ function indexTreeModelVertices(commands) {
         const offset = (axis * command.vertices + vertex) * 2;
         words.push(command.coordinates[offset] | 0, command.coordinates[offset + 1] | 0);
       }
-      const key = words.join(":");
+      const dynamic = command.wind && vertex === 2;
+      const key = dynamic
+        ? `wind:${command.wind.baseX}:${words[2]}:${words[3]}:${command.wind.baseZ}`
+        : words.join(":");
       let index = unique.get(key);
       if (index === undefined) {
         index = vertices.length / 3;
@@ -6120,6 +6141,8 @@ function indexTreeModelVertices(commands) {
         for (let axis = 0; axis < 3; axis += 1) {
           vertices.push(view.getFloat64((axis * command.vertices + vertex) * 8, true));
         }
+        windBaseX[index] = dynamic ? command.wind.baseX : Number.NaN;
+        windBaseZ[index] = dynamic ? command.wind.baseZ : Number.NaN;
       }
       indices[vertex] = index;
     }
@@ -6127,6 +6150,8 @@ function indexTreeModelVertices(commands) {
   }
   return {
     vertices: Float64Array.from(vertices),
+    windBaseX: Float64Array.from(windBaseX),
+    windBaseZ: Float64Array.from(windBaseZ),
     projectionSignature: [],
     projection: null,
   };
@@ -6143,6 +6168,8 @@ function projectTreeModelVertices(machine, tree, model) {
     directPolySlot(memory, p, p.FSTCA), directPolySlot(memory, p, p.FSUNEG),
     directPolySlot(memory, p, p.FSDPP), directPolySlot(memory, p, p.FSXC),
     directPolySlot(memory, p, p.FSYC), control,
+    model.dynamicWind ? float32FromBits(memory[tree.windx]) : 0,
+    model.dynamicWind ? float32FromBits(memory[tree.windz]) : 0,
   ];
   let changed = signature.length !== model.projectionSignature.length;
   for (let index = 0; !changed && index < signature.length; index += 1) {
@@ -6167,10 +6194,16 @@ function projectTreeModelVertices(machine, tree, model) {
   const distance = signature[8];
   const centerX = signature[9];
   const centerY = signature[10];
+  const windX = signature[12];
+  const windZ = signature[13];
   for (let index = 0; index < count; index += 1) {
     const source = index * 3;
-    const z = roundFloat32(model.vertices[source + 2] - cameraZ, control);
-    const x = roundFloat32(model.vertices[source] - cameraX, control);
+    const worldX = Number.isNaN(model.windBaseX[index])
+      ? model.vertices[source] : roundFloat32(model.windBaseX[index] + windX, control);
+    const worldZ = Number.isNaN(model.windBaseZ[index])
+      ? model.vertices[source + 2] : roundFloat32(model.windBaseZ[index] + windZ, control);
+    const z = roundFloat32(worldZ - cameraZ, control);
+    const x = roundFloat32(worldX - cameraX, control);
     const y = roundFloat32(model.vertices[source + 1] - cameraY, control);
     const rx = roundFloat32(x * betaCos + z * betaSin, control);
     const z2 = roundFloat32(z * betaCos - x * betaSin, control);
@@ -6192,6 +6225,21 @@ function projectTreeModelVertices(machine, tree, model) {
   model.projectionSignature = signature;
   model.projection = projection;
   return projection;
+}
+
+function currentTreeLeafWind(machine, tree, base = null) {
+  const memory = machine.memory;
+  const control = floatingPoint(machine).control;
+  const baseX = base?.baseX ?? (float32FromBits(memory[tree.leafx])
+    + float32FromBits(memory[tree.cosine]) * float32FromBits(memory[tree.rangef]));
+  const baseZ = base?.baseZ ?? (float32FromBits(memory[tree.leafz])
+    + float32FromBits(memory[tree.sine]) * float32FromBits(memory[tree.rangef]));
+  return {
+    baseX,
+    baseZ,
+    x: roundFloat32(baseX + float32FromBits(memory[tree.windx]), control),
+    z: roundFloat32(baseZ + float32FromBits(memory[tree.windz]), control),
+  };
 }
 
 function captureTreePolygon(machine, linked, faced, forcedVertices = 0) {
@@ -6224,7 +6272,7 @@ function captureTreePolygon(machine, linked, faced, forcedVertices = 0) {
       if (number > bounds[axis + 3]) bounds[axis + 3] = number;
     }
   }
-  return {
+  const command = {
     kind: faced ? "faced-polygon" : "polygon",
     vertices,
     coordinates,
@@ -6232,6 +6280,11 @@ function captureTreePolygon(machine, linked, faced, forcedVertices = 0) {
     bounds,
     state: captureAddressValues(memory, tree.polygonState),
   };
+  if (!faced && vertices === 3 && (memory[p.SPtrifast] | 0) !== 0) {
+    command.wind = currentTreeLeafWind(machine, tree);
+    if (machine.noctisTreeRecording) machine.noctisTreeRecording.pendingLeafWind = command.wind;
+  }
+  return command;
 }
 
 function restoreTreePolygon(machine, linked, command, projection = null) {
@@ -6239,12 +6292,22 @@ function restoreTreePolygon(machine, linked, command, projection = null) {
   const tree = landedTreeRenderAddresses(linked);
   const p = tree.p;
   restoreAddressValues(memory, tree.polygonState, command.state);
+  const currentWind = command.wind ? currentTreeLeafWind(machine, tree, command.wind) : null;
+  if (currentWind) {
+    memory[tree.treepx] = float32Bits(currentWind.x);
+    memory[tree.treepz] = float32Bits(currentWind.z);
+  }
   let input = 0;
   for (const slot of [p.FSINX, p.FSINY, p.FSINZ]) {
     for (let vertex = 0; vertex < command.vertices; vertex += 1) {
       const destination = p.fw + (slot + vertex) * 2;
-      memory[destination] = command.coordinates[input++];
-      memory[destination + 1] = command.coordinates[input++];
+      if (currentWind && vertex === 2 && (slot === p.FSINX || slot === p.FSINZ)) {
+        writeFloat64(memory, destination, slot === p.FSINX ? currentWind.x : currentWind.z);
+        input += 2;
+      } else {
+        memory[destination] = command.coordinates[input++];
+        memory[destination + 1] = command.coordinates[input++];
+      }
     }
   }
   memory[p.fw + p.FSTX * 2] = command.basis[0];
@@ -6349,10 +6412,16 @@ function renderGreenmushDirect(machine, linked, tree) {
   const seed = ((get("VHGNDmushx") >> 14) + (get("VHGNDmushy") >> 14)
     + (get("VHGNDmushz") >> 14)) | 3;
   set("SUfseed", seed);
-  let outer = landedFastRandom(machine, linked, get("VHGNDmushmask1")) + 1;
+  const outerMask = get("VHGNDmushmask1");
+  set("SUfmask", outerMask);
+  let outer = landedFastRandom(machine, linked, outerMask) + 1;
   memory[tree.mushouter] = outer;
   while (outer > 0) {
-    if (floating) landedMushroomPoint(machine, linked);
+    set("SUfmask", scale);
+    if (floating) {
+      landedMushroomPoint(machine, linked);
+      set("VHGNDvi", 0);
+    }
     else {
       const z = (get("VHGNDmushz") - landedFastRandom(machine, linked, scale)) | 0;
       const y = (get("VHGNDmushy") - landedFastRandom(machine, linked, scale)) | 0;
@@ -6361,9 +6430,12 @@ function renderGreenmushDirect(machine, linked, tree) {
       writeFloat64(memory, tree.p.fw + tree.p.FSINX * 2, Math.fround(x));
       writeFloat64(memory, tree.p.fw + tree.p.FSINY * 2, Math.fround(y));
       writeFloat64(memory, tree.p.fw + tree.p.FSINZ * 2, Math.fround(z));
+      set("VHGNDvi", 3);
     }
     if (projectGreenmushPoint(machine, linked, tree)) {
-      const inner = landedFastRandom(machine, linked, get("VHGNDmushmask2")) + 1;
+      const innerMask = get("VHGNDmushmask2");
+      set("SUfmask", innerMask);
+      const inner = landedFastRandom(machine, linked, innerMask) + 1;
       memory[tree.mushinner] = inner;
       landedMushroomPixels(machine, linked);
     }
@@ -6383,12 +6455,17 @@ function terrainGreenmush(machine, linked) {
     const y = floating ? float32FromBits(state[10]) : state[1];
     const z = floating ? float32FromBits(state[11]) : state[2];
     const radius = Math.max(1, state[5] >>> 0);
-    recording.commands.push({
+    const command = {
       kind: "greenmush",
       state,
       bounds: [x - radius, y - radius, z - radius,
         x + radius, y + radius, z + radius],
-    });
+    };
+    if (floating && recording.pendingLeafWind) {
+      command.wind = recording.pendingLeafWind;
+      recording.pendingLeafWind = null;
+    }
+    recording.commands.push(command);
   }
   renderGreenmushDirect(machine, linked, tree);
 }
@@ -6399,34 +6476,56 @@ function terrainTree(machine, linked) {
     throw new Error("Source terrain tree path requires nested Lino dispatch");
   }
   machine.noctisTreeModels ??= new Map();
-  const key = tree.modelKey.map((source) => machine.memory[source] | 0).join(":");
+  const keyAddresses = machine.noctisDisableTreeWindCache
+    ? tree.legacyModelKey : tree.modelKey;
+  const key = keyAddresses.map((source) => machine.memory[source] | 0).join(":");
   const model = machine.noctisTreeModels.get(key);
   if (model) {
-    if (rockBoundsMayRender(machine, tree.p, model.bounds, 10)) {
+    if (model.dynamicWind || rockBoundsMayRender(machine, tree.p, model.bounds, 10)) {
       const projection = machine.noctisDisableTreeProjectionCache
         ? null : projectTreeModelVertices(machine, tree, model);
       for (const command of model.commands) {
         if (command.kind === "greenmush") {
           restoreAddressValues(machine.memory, tree.mushroomState, command.state);
+          if (command.wind) {
+            const current = currentTreeLeafWind(machine, tree, command.wind);
+            machine.memory[tree.mushroomState[9]] = float32Bits(current.x);
+            machine.memory[tree.mushroomState[11]] = float32Bits(current.z);
+          }
           renderGreenmushDirect(machine, linked, tree);
         } else restoreTreePolygon(machine, linked, command, projection);
       }
     }
-    restoreAddressValues(machine.memory, tree.finalState, model.finalState);
+    if (model.dynamicWind) {
+      restoreAddressValues(machine.memory, tree.polygonState, model.finalState);
+      machine.memory[tree.mushroomState[8]] = 0;
+    } else restoreAddressValues(machine.memory, tree.finalState, model.finalState);
+    machine.memory[tree.p.fw + tree.p.FSTX * 2] = model.finalBasis[0];
+    machine.memory[tree.p.fw + tree.p.FSTX * 2 + 1] = model.finalBasis[1];
+    machine.memory[tree.p.fw + tree.p.FSTY * 2] = model.finalBasis[2];
+    machine.memory[tree.p.fw + tree.p.FSTY * 2 + 1] = model.finalBasis[3];
     machine.X = LINO_DONE;
     return;
   }
-  const recording = { commands: [], skipNextPolymap: false };
+  const recording = { commands: [], skipNextPolymap: false, pendingLeafWind: null };
   machine.noctisTreeRecording = recording;
   try {
     machine.callCode(tree.tree);
   } finally {
     machine.noctisTreeRecording = null;
   }
+  const dynamicWind = recording.commands.some((command) => command.wind);
+  const finalBasis = new Int32Array(4);
+  finalBasis[0] = machine.memory[tree.p.fw + tree.p.FSTX * 2];
+  finalBasis[1] = machine.memory[tree.p.fw + tree.p.FSTX * 2 + 1];
+  finalBasis[2] = machine.memory[tree.p.fw + tree.p.FSTY * 2];
+  finalBasis[3] = machine.memory[tree.p.fw + tree.p.FSTY * 2 + 1];
   machine.noctisTreeModels.set(key, {
     commands: recording.commands,
     bounds: mergeTreeCommandBounds(recording.commands),
     finalState: captureAddressValues(machine.memory, tree.finalState),
+    finalBasis,
+    dynamicWind,
     ...indexTreeModelVertices(recording.commands),
   });
   machine.X = LINO_DONE;
