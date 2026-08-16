@@ -16,6 +16,7 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(app, /compileProject/);
   assert.match(app, /work\/vhgame\.txt/);
   assert.match(app, /createNoctisIntrinsics/);
+  assert.match(app, /precompiledRunners/);
   assert.match(app, /putImageData/);
   assert.match(app, /gameStage\.requestFullscreen\(\)/);
   assert.match(app, /insideLinoBounds\("fullbuttonhotspot"/);
@@ -32,6 +33,7 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(gameWorker, /globalK,/);
   assert.match(gameWorker, /compileProject/);
   assert.match(gameWorker, /createNoctisIntrinsics/);
+  assert.match(gameWorker, /precompiledRunners/);
   assert.match(gameWorker, /foregroundRuntime\) pixels = memory\.subarray\(origin, origin \+ count\)/);
   assert.match(gameWorker, /pixels\.set\(memory\.subarray\(origin, origin \+ count\)\)/);
   assert.match(workerHost, /if \(frame\.borrowed\) worker\.postMessage\(\{ type: "frameCredit" \}\)/);

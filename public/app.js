@@ -5,6 +5,11 @@ if (useWorkerRuntime) {
   await import("./worker-host.js");
 } else {
 const { compileProject, createNoctisIntrinsics } = await import("./linojava/compiler.js");
+const {
+  createRunners: createNoctisRunners,
+  instructionCount: noctisInstructionCount,
+  regionSize: noctisRegionSize,
+} = await import("./noctis-runners.js");
 
 const linoWindow = document.querySelector("#lino-window");
 const gameStage = document.querySelector("#game-stage");
@@ -320,7 +325,11 @@ const host = {
 const program = await compileProject(entry, resolvers, {
   host,
   intrinsics: createNoctisIntrinsics(),
-  regionSize: 1024,
+  precompiledRunners: {
+    create: createNoctisRunners,
+    instructionCount: noctisInstructionCount,
+    regionSize: noctisRegionSize,
+  },
   physicalWidth: Math.max(1, window.innerWidth),
   physicalHeight: Math.max(1, window.innerHeight),
   audioPlayback: pcmHost.supported,
