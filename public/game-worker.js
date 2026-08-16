@@ -355,12 +355,12 @@ async function initialize(message) {
       const deltaY = transition?.deltaY ?? pointerDeltaY;
       if (!transition) pointerDeltaX = pointerDeltaY = 0;
       return {
-        // Lino's host samples the device's current state. A delayed queued
-        // movement must never resurrect an already released button while a
-        // slow redraw is catching up.
-        status: 3 | pointerButtons,
-        x: pointerX,
-        y: pointerY,
+        // Preserve the browser event order across a Lino redraw. Submenu
+        // actions must observe their queued press before the queued release;
+        // substituting the latest state loses ordinary quick clicks.
+        status: 3 | (transition?.buttons ?? pointerButtons),
+        x: transition?.x ?? pointerX,
+        y: transition?.y ?? pointerY,
         deltaX,
         deltaY,
       };

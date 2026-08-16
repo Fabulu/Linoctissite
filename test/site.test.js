@@ -41,6 +41,8 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(gameWorker, /waitingForFrameCredit/);
   assert.match(app, /syncDisplay\(\{ width, height, x, y \}\)/);
   assert.match(app, /pointerTransitions/);
+  assert.match(gameWorker, /transition\?\.buttons \?\? pointerButtons/);
+  assert.match(gameWorker, /transition\?\.x \?\? pointerX/);
   assert.match(app, /physicalWidth: Math\.max\(1, window\.innerWidth\)/);
   assert.match(app, /displayphysicalwidth/);
   assert.match(app, /insideLinoBounds\("titlebarbounds"/);
