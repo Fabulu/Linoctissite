@@ -39464,7 +39464,7 @@ case 37543: {  C = (((C) - (15000))) | 0; pc = 37544; }
 case 37544: {  if ((((A) | 0) <= ((C) | 0))) { pc = ((37548) - 1); continue runner; } pc = 37545; }
 case 37545: { if(executed!==0&&executed+1>maxInstructions){pc=37545;return save("budget",executed);}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37547) | 0; pc = (38200) - 1; continue runner; }
 case 37546: { if(executed!==0&&executed+1>maxInstructions){pc=37546;return save("budget",executed);}executed+=1; pc = (37549) - 1; continue runner; }
-case 37547: { if(executed!==0&&executed+1>maxInstructions){pc=37547;return save("budget",executed);}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37549) | 0; pc = (37882) - 1; continue runner; }
+case 37547: { if(executed!==0&&executed+1>maxInstructions){pc=37547;return save("budget",executed);}executed+=1; pc=37547; sync(); native("service:vhgndtree", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37548; }
 case 37548: { if(executed!==0&&executed+3>maxInstructions){pc=37548;return save("budget",executed);}executed+=3; q = (6285) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37549; }
 case 37549: {  q = (6270) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37550; }
 case 37550: {  pc = (37508) - 1; continue runner; }
@@ -39489,7 +39489,7 @@ case 37568: {  A = ((m[(6185) >>> 0] | 0)) | 0; pc = 37569; }
 case 37569: {  if ((((A) | 0) === ((1) | 0))) { pc = ((37586) - 1); continue runner; } pc = 37570; }
 case 37570: { if(executed!==0&&executed+2>maxInstructions){pc=37570;return save("budget",executed);}executed+=2; m[(6355) >>> 0] = (6) | 0; pc = 37571; }
 case 37571: {  pc = (37586) - 1; continue runner; }
-case 37572: { if(executed!==0&&executed+12>maxInstructions){pc=37572;return save("budget",executed);}executed+=12; m[(6366) >>> 0] = ((m[(6273) >>> 0] | 0)) | 0; pc = 37573; }
+case 37572: { if(executed!==0&&executed+13>maxInstructions){pc=37572;return save("budget",executed);}executed+=13; m[(6366) >>> 0] = ((m[(6273) >>> 0] | 0)) | 0; pc = 37573; }
 case 37573: {  A = ((m[(6274) >>> 0] | 0)) | 0; pc = 37574; }
 case 37574: {  A = (((A) + (150))) | 0; pc = 37575; }
 case 37575: {  m[(6367) >>> 0] = (A) | 0; pc = 37576; }
@@ -39500,8 +39500,8 @@ case 37579: {  m[(6379) >>> 0] = (1023) | 0; pc = 37580; }
 case 37580: {  m[(6382) >>> 0] = (216) | 0; pc = 37581; }
 case 37581: {  m[(6383) >>> 0] = (31) | 0; pc = 37582; }
 case 37582: {  m[(6372) >>> 0] = (0) | 0; pc = 37583; }
-case 37583: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37585) | 0; pc = (37738) - 1; continue runner; }
-case 37584: { if(executed!==0&&executed+1>maxInstructions){pc=37584;return save("budget",executed);}executed+=1; pc = (37737) - 1; continue runner; }
+case 37583: {  pc=37583; sync(); native("service:vhgndgreenmush", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37584; }
+case 37584: {  pc = (37737) - 1; continue runner; }
 case 37585: { if(executed!==0&&executed+6>maxInstructions){pc=37585;return save("budget",executed);}executed+=6; A = ((m[(6354) >>> 0] | 0)) | 0; pc = 37586; }
 case 37586: {  A = (Math.imul(A, (m[(6355) >>> 0] | 0))) | 0; pc = 37587; }
 case 37587: {  m[(6356) >>> 0] = (A) | 0; pc = 37588; }
@@ -39877,7 +39877,7 @@ case 37928: {  A = (idiv(A, 10)) | 0; pc = 37929; }
 case 37929: {  m[(6219) >>> 0] = (A) | 0; pc = 37930; }
 case 37930: {  m[(6380) >>> 0] = (15) | 0; pc = 37931; }
 case 37931: {  m[(6381) >>> 0] = (31) | 0; pc = 37932; }
-case 37932: { if(executed!==0&&executed+10>maxInstructions){pc=37932;return save("budget",executed);}executed+=10; A = ((m[(6274) >>> 0] | 0)) | 0; pc = 37933; }
+case 37932: { if(executed!==0&&executed+11>maxInstructions){pc=37932;return save("budget",executed);}executed+=11; A = ((m[(6274) >>> 0] | 0)) | 0; pc = 37933; }
 case 37933: {  A = (((A) - ((m[(6219) >>> 0] | 0)))) | 0; pc = 37934; }
 case 37934: {  m[(6367) >>> 0] = (A) | 0; pc = 37935; }
 case 37935: {  m[(6366) >>> 0] = ((m[(6273) >>> 0] | 0)) | 0; pc = 37936; }
@@ -39886,8 +39886,8 @@ case 37937: {  m[(6379) >>> 0] = ((m[(3479) >>> 0] | 0)) | 0; pc = 37938; }
 case 37938: {  m[(6382) >>> 0] = (223) | 0; pc = 37939; }
 case 37939: {  m[(6383) >>> 0] = (31) | 0; pc = 37940; }
 case 37940: {  m[(6372) >>> 0] = (0) | 0; pc = 37941; }
-case 37941: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37943) | 0; pc = (37738) - 1; continue runner; }
-case 37942: { if(executed!==0&&executed+1>maxInstructions){pc=37942;return save("budget",executed);}executed+=1; pc = (38193) - 1; continue runner; }
+case 37941: {  pc=37941; sync(); native("service:vhgndgreenmush", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37942; }
+case 37942: {  pc = (38193) - 1; continue runner; }
 case 37943: { if(executed!==0&&executed+8>maxInstructions){pc=37943;return save("budget",executed);}executed+=8; m[(6325) >>> 0] = (3) | 0; pc = 37944; }
 case 37944: {  A = ((m[(3471) >>> 0] | 0)) | 0; pc = 37945; }
 case 37945: {  A = (Math.imul(A, 2)) | 0; pc = 37946; }
@@ -39935,7 +39935,7 @@ case 37986: { if(executed!==0&&executed+4>maxInstructions){pc=37986;return save(
 case 37987: {  m[(6325) >>> 0] = (3) | 0; pc = 37988; }
 case 37988: {  m[(6314) >>> 0] = (3) | 0; pc = 37989; }
 case 37989: {  pc = (38007) - 1; continue runner; }
-case 37990: { if(executed!==0&&executed+15>maxInstructions){pc=37990;return save("budget",executed);}executed+=15; A = ((m[(3472) >>> 0] | 0)) | 0; pc = 37991; }
+case 37990: { if(executed!==0&&executed+16>maxInstructions){pc=37990;return save("budget",executed);}executed+=16; A = ((m[(3472) >>> 0] | 0)) | 0; pc = 37991; }
 case 37991: {  A = (idiv(A, 2)) | 0; pc = 37992; }
 case 37992: {  m[(6219) >>> 0] = (A) | 0; pc = 37993; }
 case 37993: {  m[(6366) >>> 0] = ((m[(6273) >>> 0] | 0)) | 0; pc = 37994; }
@@ -39949,8 +39949,8 @@ case 38000: {  m[(6379) >>> 0] = ((m[(3479) >>> 0] | 0)) | 0; pc = 38001; }
 case 38001: {  m[(6382) >>> 0] = (223) | 0; pc = 38002; }
 case 38002: {  m[(6383) >>> 0] = (31) | 0; pc = 38003; }
 case 38003: {  m[(6372) >>> 0] = (0) | 0; pc = 38004; }
-case 38004: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (38006) | 0; pc = (37738) - 1; continue runner; }
-case 38005: { if(executed!==0&&executed+1>maxInstructions){pc=38005;return save("budget",executed);}executed+=1; pc = (38193) - 1; continue runner; }
+case 38004: {  pc=38004; sync(); native("service:vhgndgreenmush", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=38005; }
+case 38005: {  pc = (38193) - 1; continue runner; }
 case 38006: { if(executed!==0&&executed+5>maxInstructions){pc=38006;return save("budget",executed);}executed+=5; m[(2840) >>> 0] = (0) | 0; pc = 38007; }
 case 38007: {  m[(2797) >>> 0] = (0) | 0; pc = 38008; }
 case 38008: {  m[(6319) >>> 0] = (0) | 0; pc = 38009; }
@@ -40257,7 +40257,7 @@ case 38308: {  m[(6379) >>> 0] = ((m[(3479) >>> 0] | 0)) | 0; pc = 38309; }
 case 38309: {  m[(6382) >>> 0] = (209) | 0; pc = 38310; }
 case 38310: {  m[(6383) >>> 0] = (31) | 0; pc = 38311; }
 case 38311: {  m[(6372) >>> 0] = (0) | 0; pc = 38312; }
-case 38312: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (38314) | 0; pc = (37738) - 1; continue runner; }
+case 38312: {  pc=38312; sync(); native("service:vhgndgreenmush", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=38313; }
 case 38313: { if(executed!==0&&executed+1>maxInstructions){pc=38313;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 38313; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 38314: { if(executed!==0&&executed+2>maxInstructions){pc=38314;return save("budget",executed);}executed+=2; pc=38314; sync(); native("native:vhground.txt:19798700", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=38315; }
 case 38315: {  X = 1685024357; if (d === 0) { pc = 38315; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
@@ -40422,7 +40422,7 @@ case 38473: { if(executed!==0&&executed+4>maxInstructions){pc=38473;return save(
 case 38474: {  A = (((A) - (36))) | 0; pc = 38475; }
 case 38475: {  m[(6308) >>> 0] = (A) | 0; pc = 38476; }
 case 38476: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (38478) | 0; pc = (38499) - 1; continue runner; }
-case 38477: { if(executed!==0&&executed+12>maxInstructions){pc=38477;return save("budget",executed);}executed+=12; m[(2878) >>> 0] = (3) | 0; pc = 38478; }
+case 38477: { if(executed!==0&&executed+15>maxInstructions){pc=38477;return save("budget",executed);}executed+=15; m[(2878) >>> 0] = (3) | 0; pc = 38478; }
 case 38478: {  pc=38478; sync(); native("service:pgpolymap", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=38479; }
 case 38479: {  m[(6373) >>> 0] = ((m[(6305) >>> 0] | 0)) | 0; pc = 38480; }
 case 38480: {  m[(6374) >>> 0] = ((m[(6316) >>> 0] | 0)) | 0; pc = 38481; }
@@ -40433,8 +40433,8 @@ case 38484: {  m[(6381) >>> 0] = (3) | 0; pc = 38485; }
 case 38485: {  m[(6379) >>> 0] = (1023) | 0; pc = 38486; }
 case 38486: {  m[(6382) >>> 0] = (223) | 0; pc = 38487; }
 case 38487: {  m[(6383) >>> 0] = (31) | 0; pc = 38488; }
-case 38488: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (38490) | 0; pc = (37738) - 1; continue runner; }
-case 38489: { if(executed!==0&&executed+3>maxInstructions){pc=38489;return save("budget",executed);}executed+=3; m[(6372) >>> 0] = (0) | 0; pc = 38490; }
+case 38488: {  pc=38488; sync(); native("service:vhgndgreenmush", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=38489; }
+case 38489: {  m[(6372) >>> 0] = (0) | 0; pc = 38490; }
 case 38490: {  q = (6300) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 38491; }
 case 38491: {  pc = (38456) - 1; continue runner; }
 case 38492: { if(executed!==0&&executed+5>maxInstructions){pc=38492;return save("budget",executed);}executed+=5; m[(2853) >>> 0] = (0) | 0; pc = 38493; }

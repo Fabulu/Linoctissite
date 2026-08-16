@@ -251,6 +251,8 @@ const SERVICE_IDS = Object.freeze({
   terrainFacing: "service:vhgndterrainfacing",
   terrainTileFauna: "service:vhgndrendertilefauna",
   terrainRock: "service:vhgndrock",
+  terrainTree: "service:vhgndtree",
+  terrainGreenmush: "service:vhgndgreenmush",
   terrainTraverse: "service:vhgndtraversefaithful",
   waterBackdrop: "service:vhgndwaterbackdrop",
   denseAtmosphere: "service:vhgnddenseatmosphere",
@@ -309,6 +311,7 @@ const poly3dAddressCaches = new WeakMap();
 const polymapAddressCaches = new WeakMap();
 const landedTerrainAddressCaches = new WeakMap();
 const landedRockAddressCaches = new WeakMap();
+const landedTreeRenderAddressCaches = new WeakMap();
 const denseAtmosphereAddressCaches = new WeakMap();
 const rectangleAddressCaches = new WeakMap();
 const pixelEffectCaches = new WeakMap();
@@ -3122,6 +3125,11 @@ function drawConstantMergerPolygon(machine, linked, p) {
 function polymap(machine, linked, preRotated = false) {
   const memory = machine.memory;
   const p = polymapAddresses(linked);
+  const treeRecording = machine.noctisTreeRecording;
+  if (treeRecording) {
+    if (treeRecording.skipNextPolymap) treeRecording.skipNextPolymap = false;
+    else treeRecording.commands.push(captureTreePolygon(machine, linked, false));
+  }
   memory[p.PJgate] = 0;
   let originalVertices = memory[p.PJnrv] | 0;
   if (originalVertices === 3) {
@@ -3761,7 +3769,13 @@ function mappedFacing(machine, linked) {
     }
   }
   writeScalarScratch(machine, linked, sum);
-  memory[address(linked, "FCret")] = !Number.isNaN(sum) && sum >= 0 ? 1 : 0;
+  const visible = !Number.isNaN(sum) && sum >= 0 ? 1 : 0;
+  memory[address(linked, "FCret")] = visible;
+  const treeRecording = machine.noctisTreeRecording;
+  if (treeRecording) {
+    treeRecording.commands.push(captureTreePolygon(machine, linked, true, 4));
+    treeRecording.skipNextPolymap = visible !== 0;
+  }
 }
 
 function polygonGradient(machine, linked, xi, yi, xo, yo, scale, destination) {
@@ -5830,7 +5844,7 @@ function rockCommandBounds(commands) {
   return [minX, minY, minZ, maxX, maxY, maxZ];
 }
 
-function rockBoundsMayRender(machine, p, bounds) {
+function rockBoundsMayRender(machine, p, bounds, margin = 2) {
   const memory = machine.memory;
   const control = floatingPoint(machine).control;
   const cameraX = directPolySlot(memory, p, p.FSCAMX);
@@ -5871,11 +5885,273 @@ function rockBoundsMayRender(machine, p, bounds) {
   }
   if (visibleCorners === 0) return false;
   if (visibleCorners !== 8) return true;
-  const margin = 2;
   return maxScreenX >= p.PGLBX - margin
     && minScreenX <= p.PGUBX + margin
     && maxScreenY >= p.PGLBY - margin
     && minScreenY <= p.PGUBY + margin;
+}
+
+const TREE_POLYGON_STATE_NAMES = Object.freeze([
+  "PGtexf", "PGtexoff", "SPsrc", "SPflar", "SPtinta", "SPcull",
+  "SPhalf", "SPescr", "SPmapfast", "SPpixfast", "SPtrifast", "SPterrain",
+  "DBcol", "DBflar", "DBent",
+]);
+const TREE_MUSHROOM_STATE_NAMES = Object.freeze([
+  "VHGNDmushx", "VHGNDmushy", "VHGNDmushz", "VHGNDmushmask1",
+  "VHGNDmushmask2", "VHGNDmushscale", "VHGNDmushbase",
+  "VHGNDmushcolmask", "VHGNDmushfloat", "VHGNDmushxf", "VHGNDmushyf",
+  "VHGNDmushzf",
+]);
+const TREE_MODEL_KEY_NAMES = Object.freeze([
+  "VHGNDoox", "VHGNDooy", "VHGNDooz", "VHGNDdepth", "SUfseed",
+  "VHGNDseed", "GRiptype", "VHGNDsctype", "GRtreescale",
+  "GRtreespread", "GRbranchwidth", "GRtreepeak", "GRrootshade",
+  "GRmushscale", "GRtreeflares", "GRleafflares", "GRtreescalef",
+  "GRtreespreadf", "GRbranchwidthf", "GRtreepeakf", "VHGNDtreewindx",
+  "VHGNDtreewindz", "VHGNDtscale",
+]);
+const TREE_FINAL_STATE_NAMES = Object.freeze([
+  ...TREE_POLYGON_STATE_NAMES,
+  "SUfseed", "SUfeax", "SUfval", "SUfmask", "VHGNDmushfloat",
+]);
+
+function landedTreeRenderAddresses(linked) {
+  let cached = landedTreeRenderAddressCaches.get(linked);
+  if (cached) return cached;
+  const p = polymapAddresses(linked);
+  cached = {
+    p,
+    polygonState: TREE_POLYGON_STATE_NAMES.map((name) => address(linked, name)),
+    mushroomState: TREE_MUSHROOM_STATE_NAMES.map((name) => address(linked, name)),
+    modelKey: TREE_MODEL_KEY_NAMES.map((name) => address(linked, name)),
+    finalState: TREE_FINAL_STATE_NAMES.map((name) => address(linked, name)),
+    tree: codeHandle(linked, "VHGND tree"),
+    greenmush: codeHandle(linked, "VHGND greenmush"),
+    GCret: address(linked, "GCret"),
+    GCx: address(linked, "GCx"),
+    GCy: address(linked, "GCy"),
+    mushouter: address(linked, "VHGNDmushouter"),
+    mushinner: address(linked, "VHGNDmushinner"),
+  };
+  landedTreeRenderAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function captureAddressValues(memory, addresses) {
+  const result = new Int32Array(addresses.length);
+  for (let index = 0; index < addresses.length; index += 1) {
+    result[index] = memory[addresses[index]];
+  }
+  return result;
+}
+
+function restoreAddressValues(memory, addresses, values) {
+  for (let index = 0; index < addresses.length; index += 1) {
+    memory[addresses[index]] = values[index];
+  }
+}
+
+function mergeTreeCommandBounds(commands) {
+  const bounds = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (const command of commands) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      if (command.bounds[axis] < bounds[axis]) bounds[axis] = command.bounds[axis];
+      if (command.bounds[axis + 3] > bounds[axis + 3]) bounds[axis + 3] = command.bounds[axis + 3];
+    }
+  }
+  return bounds;
+}
+
+function captureTreePolygon(machine, linked, faced, forcedVertices = 0) {
+  const memory = machine.memory;
+  const tree = landedTreeRenderAddresses(linked);
+  const p = tree.p;
+  const vertices = forcedVertices || (memory[p.PJnrv] | 0);
+  const coordinates = new Int32Array(vertices * 6);
+  let output = 0;
+  for (const slot of [p.FSINX, p.FSINY, p.FSINZ]) {
+    for (let vertex = 0; vertex < vertices; vertex += 1) {
+      const source = p.fw + (slot + vertex) * 2;
+      coordinates[output++] = memory[source];
+      coordinates[output++] = memory[source + 1];
+    }
+  }
+  const basis = new Int32Array(4);
+  for (let index = 0; index < 2; index += 1) {
+    const x = p.fw + p.FSTX * 2 + index;
+    const y = p.fw + p.FSTY * 2 + index;
+    basis[index] = memory[x];
+    basis[index + 2] = memory[y];
+  }
+  const bounds = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  const coordinateView = new DataView(coordinates.buffer);
+  for (let axis = 0; axis < 3; axis += 1) {
+    for (let vertex = 0; vertex < vertices; vertex += 1) {
+      const number = coordinateView.getFloat64((axis * vertices + vertex) * 8, true);
+      if (number < bounds[axis]) bounds[axis] = number;
+      if (number > bounds[axis + 3]) bounds[axis + 3] = number;
+    }
+  }
+  return {
+    kind: faced ? "faced-polygon" : "polygon",
+    vertices,
+    coordinates,
+    basis,
+    bounds,
+    state: captureAddressValues(memory, tree.polygonState),
+  };
+}
+
+function restoreTreePolygon(machine, linked, command) {
+  const memory = machine.memory;
+  const tree = landedTreeRenderAddresses(linked);
+  const p = tree.p;
+  restoreAddressValues(memory, tree.polygonState, command.state);
+  let input = 0;
+  for (const slot of [p.FSINX, p.FSINY, p.FSINZ]) {
+    for (let vertex = 0; vertex < command.vertices; vertex += 1) {
+      const destination = p.fw + (slot + vertex) * 2;
+      memory[destination] = command.coordinates[input++];
+      memory[destination + 1] = command.coordinates[input++];
+    }
+  }
+  memory[p.fw + p.FSTX * 2] = command.basis[0];
+  memory[p.fw + p.FSTX * 2 + 1] = command.basis[1];
+  memory[p.fw + p.FSTY * 2] = command.basis[2];
+  memory[p.fw + p.FSTY * 2 + 1] = command.basis[3];
+  memory[p.PJnrv] = command.vertices;
+  if (command.kind === "faced-polygon") {
+    mappedFacing(machine, linked);
+    if ((memory[address(linked, "FCret")] | 0) === 0) return;
+  }
+  polymap(machine, linked);
+}
+
+function projectGreenmushPoint(machine, linked, tree) {
+  const memory = machine.memory;
+  const p = tree.p;
+  memory[p.PJnrv] = 1;
+  memory[p.PJmode] = 1;
+  polyRotateDirect(machine, linked, p);
+  memory[tree.GCret] = 0;
+  if ((memory[p.rwf] | 0) === 0) return false;
+  const control = floatingPoint(machine).control;
+  let factor = readFloat64(memory, p.fw + p.FSDPP * 2)
+    / readFloat64(memory, p.fw + p.FSRZF * 2);
+  writeFloat64(memory, p.fw + p.FSW3 * 2, factor);
+  let projected = factor * readFloat64(memory, p.fw + p.FSRXF * 2);
+  writeScalarScratch(machine, linked, projected);
+  projected += readFloat64(memory, p.fw + p.FSXC * 2);
+  writeScalarScratch(machine, linked, projected);
+  const x = convertToInt32(projected, control);
+  memory[tree.GCx] = x;
+  factor = readFloat64(memory, p.fw + p.FSW3 * 2);
+  projected = factor * readFloat64(memory, p.fw + p.FSRYF * 2);
+  writeScalarScratch(machine, linked, projected);
+  projected += readFloat64(memory, p.fw + p.FSYC * 2);
+  writeScalarScratch(machine, linked, projected);
+  const y = convertToInt32(projected, control);
+  memory[tree.GCy] = y;
+  if (x <= p.PGLBX || x >= p.PGUBX || y <= p.PGLBY || y >= p.PGUBY) return false;
+  memory[tree.GCret] = 1;
+  return true;
+}
+
+function renderGreenmushDirect(machine, linked, tree) {
+  const memory = machine.memory;
+  const get = (name) => value(memory, linked, name);
+  const set = (name, next) => { memory[address(linked, name)] = next; };
+  const scale = get("VHGNDmushscale");
+  const halfScale = scale >> 1;
+  set("VHGNDtmp", halfScale);
+  const floating = get("VHGNDmushfloat") !== 0;
+  if (floating) landedMushroomSetup(machine, linked);
+  else {
+    set("VHGNDmushx", (get("VHGNDmushx") + halfScale) | 0);
+    set("VHGNDmushy", (get("VHGNDmushy") + halfScale) | 0);
+    set("VHGNDmushz", (get("VHGNDmushz") + halfScale) | 0);
+  }
+  const seed = ((get("VHGNDmushx") >> 14) + (get("VHGNDmushy") >> 14)
+    + (get("VHGNDmushz") >> 14)) | 3;
+  set("SUfseed", seed);
+  let outer = landedFastRandom(machine, linked, get("VHGNDmushmask1")) + 1;
+  memory[tree.mushouter] = outer;
+  while (outer > 0) {
+    if (floating) landedMushroomPoint(machine, linked);
+    else {
+      const z = (get("VHGNDmushz") - landedFastRandom(machine, linked, scale)) | 0;
+      const y = (get("VHGNDmushy") - landedFastRandom(machine, linked, scale)) | 0;
+      const x = (get("VHGNDmushx") - landedFastRandom(machine, linked, scale)) | 0;
+      set("VHGNDmushpz", z); set("VHGNDmushpy", y); set("VHGNDmushpx", x);
+      writeFloat64(memory, tree.p.fw + tree.p.FSINX * 2, Math.fround(x));
+      writeFloat64(memory, tree.p.fw + tree.p.FSINY * 2, Math.fround(y));
+      writeFloat64(memory, tree.p.fw + tree.p.FSINZ * 2, Math.fround(z));
+    }
+    if (projectGreenmushPoint(machine, linked, tree)) {
+      const inner = landedFastRandom(machine, linked, get("VHGNDmushmask2")) + 1;
+      memory[tree.mushinner] = inner;
+      landedMushroomPixels(machine, linked);
+    }
+    outer -= 1;
+    memory[tree.mushouter] = outer;
+  }
+  machine.X = LINO_DONE;
+}
+
+function terrainGreenmush(machine, linked) {
+  const tree = landedTreeRenderAddresses(linked);
+  const recording = machine.noctisTreeRecording;
+  if (recording) {
+    const state = captureAddressValues(machine.memory, tree.mushroomState);
+    const floating = state[8] !== 0;
+    const x = floating ? float32FromBits(state[9]) : state[0];
+    const y = floating ? float32FromBits(state[10]) : state[1];
+    const z = floating ? float32FromBits(state[11]) : state[2];
+    const radius = Math.max(1, state[5] >>> 0);
+    recording.commands.push({
+      kind: "greenmush",
+      state,
+      bounds: [x - radius, y - radius, z - radius,
+        x + radius, y + radius, z + radius],
+    });
+  }
+  renderGreenmushDirect(machine, linked, tree);
+}
+
+function terrainTree(machine, linked) {
+  const tree = landedTreeRenderAddresses(linked);
+  if (typeof machine.callCode !== "function" || tree.tree < 1 || tree.greenmush < 1) {
+    throw new Error("Source terrain tree path requires nested Lino dispatch");
+  }
+  machine.noctisTreeModels ??= new Map();
+  const key = tree.modelKey.map((source) => machine.memory[source] | 0).join(":");
+  const model = machine.noctisTreeModels.get(key);
+  if (model) {
+    if (rockBoundsMayRender(machine, tree.p, model.bounds, 10)) {
+      for (const command of model.commands) {
+        if (command.kind === "greenmush") {
+          restoreAddressValues(machine.memory, tree.mushroomState, command.state);
+          renderGreenmushDirect(machine, linked, tree);
+        } else restoreTreePolygon(machine, linked, command);
+      }
+    }
+    restoreAddressValues(machine.memory, tree.finalState, model.finalState);
+    machine.X = LINO_DONE;
+    return;
+  }
+  const recording = { commands: [], skipNextPolymap: false };
+  machine.noctisTreeRecording = recording;
+  try {
+    machine.callCode(tree.tree);
+  } finally {
+    machine.noctisTreeRecording = null;
+  }
+  machine.noctisTreeModels.set(key, {
+    commands: recording.commands,
+    bounds: mergeTreeCommandBounds(recording.commands),
+    finalState: captureAddressValues(machine.memory, tree.finalState),
+  });
+  machine.X = LINO_DONE;
 }
 
 function terrainRock(machine, linked) {
@@ -10833,6 +11109,15 @@ function geometryAdd4112Chop(machine, linked) {
 }
 
 function scalarBinaryNumber(left, right, control, operation) {
+  // A binary32 add/subtract has at most 25 significant result bits and a
+  // binary32 multiply at most 48. JavaScript's binary64 therefore represents
+  // these results exactly, before the same later source spill/narrowing. Keep
+  // division and any genuinely wider operand on the full 64-bit x87 model.
+  if (operation !== "divide" && Math.fround(left) === left && Math.fround(right) === right) {
+    if (operation === "multiply") return left * right;
+    if (operation === "subtract") return left - right;
+    return left + right;
+  }
   const a = extendedFromNumber(left);
   const b = extendedFromNumber(right);
   const result = operation === "multiply" ? extendedMultiply(a, b, control)
@@ -11166,6 +11451,8 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.terrainFacing]: terrainFacing,
     [SERVICE_IDS.terrainTileFauna]: terrainTileFauna,
     [SERVICE_IDS.terrainRock]: terrainRock,
+    [SERVICE_IDS.terrainTree]: terrainTree,
+    [SERVICE_IDS.terrainGreenmush]: terrainGreenmush,
     [SERVICE_IDS.terrainTraverse]: terrainTraverseFaithful,
     [SERVICE_IDS.waterBackdrop]: waterBackdrop,
     [SERVICE_IDS.denseAtmosphere]: denseAtmosphere,
