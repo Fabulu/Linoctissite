@@ -252,9 +252,6 @@ const SERVICE_IDS = Object.freeze({
   terrainTileFauna: "service:vhgndrendertilefauna",
   terrainRock: "service:vhgndrock",
   terrainTraverse: "service:vhgndtraversefaithful",
-  terrainVegetation: "service:vhgndveget",
-  terrainBush: "service:vhgndbush",
-  terrainTree: "service:vhgndtree",
   waterBackdrop: "service:vhgndwaterbackdrop",
   denseAtmosphere: "service:vhgnddenseatmosphere",
   terrainRenderRandom: "service:vhgndrenderrandom",
@@ -2811,7 +2808,7 @@ function polymapAddresses(linked) {
     "SPtrifast", "SPcull", "SPhalf", "SPflar", "SPtinta", "SPescr", "SPsrc",
     "SPi", "SPsec", "SPdi", "SPcl", "SPu", "SPv", "SPun", "SPvn", "SPax",
     "SPdx", "SPbp", "SPsi", "SPch", "SPbx", "SPt", "SPn", "SPsave",
-    "PJfwbase", "PJipartbase", "PGfwbase", "PGnwbase", "PGfpartbase", "PGipartbase", "PGtexf", "PGtexoff",
+    "PJfwbase", "PJmpbase", "PJipartbase", "PGfwbase", "PGnwbase", "PGfpartbase", "PGipartbase", "PGtexf", "PGtexoff",
     "PGtexi", "PGtexv", "PGtmp", "PGdi", "PGval", "PGi", "PGj", "CSpix",
     "EWvr22", "EWminy", "EWmaxy", "EWsi", "EWx1", "EWy1", "EWx2", "EWy2",
     "EWity", "EWjty", "EWax", "EWcx", "EWh", "FS16", "FSVX", "FSVY",
@@ -3101,7 +3098,15 @@ function polymap(machine, linked, preRotated = false) {
     memory[p.PJgate] = 2;
     if ((memory[p.PJvr2] | 0) < 3) return;
   }
-  if ((memory[p.PJpreproject] | 0) === 0) projectMappedPolygon(machine, linked);
+  if ((memory[p.PJpreproject] | 0) === 0) {
+    // The standalone mapped-projector intrinsic mirrors the native source
+    // fragment, whose caller publishes these two bases immediately before
+    // entering it.  PG polymap's fused path bypasses that source wrapper, so
+    // preserve the same contract explicitly here.
+    memory[p.PJfwbase] = p.fw;
+    memory[p.PJmpbase] = p.mp;
+    projectMappedPolygon(machine, linked);
+  }
   memory[p.PJpreproject] = 0;
   memory[p.PJgate] = 7;
   if ((memory[p.PJminx] | 0) > p.PGUBX || (memory[p.PJmaxx] | 0) < p.PGLBX
@@ -5566,15 +5571,6 @@ function terrainTileFauna(machine, linked) {
   machine.X = LINO_DONE;
 }
 
-function callTerrainSourceModel(machine, linked, label) {
-  const source = codeHandle(linked, label);
-  if (typeof machine.callCode !== "function" || source < 1) {
-    throw new Error(`Source terrain model ${label} requires nested Lino dispatch`);
-  }
-  machine.callCode(source);
-  machine.X = LINO_DONE;
-}
-
 function landedRockAddresses(linked) {
   let cached = landedRockAddressCaches.get(linked);
   if (cached) return cached;
@@ -5734,10 +5730,10 @@ function rockBoundsMayRender(machine, p, bounds) {
   if (visibleCorners === 0) return false;
   if (visibleCorners !== 8) return true;
   const margin = 2;
-  return maxScreenX >= (memory[p.PGLBX] | 0) - margin
-    && minScreenX <= (memory[p.PGUBX] | 0) + margin
-    && maxScreenY >= (memory[p.PGLBY] | 0) - margin
-    && minScreenY <= (memory[p.PGUBY] | 0) + margin;
+  return maxScreenX >= p.PGLBX - margin
+    && minScreenX <= p.PGUBX + margin
+    && maxScreenY >= p.PGLBY - margin
+    && minScreenY <= p.PGUBY + margin;
 }
 
 function terrainRock(machine, linked) {
@@ -6664,7 +6660,7 @@ function flareSourceStick(machine, linked) {
   const a = x1 - x0;
   const signedB = y1 - y0;
   const b = Math.abs(signedB);
-  const length = Math.min(a, b) + 1;
+  const length = Math.max(a, b) + 1;
   let gx = Math.imul(x0, 65536) | 0;
   let gy = Math.imul(y0, 65536) | 0;
   const end = Math.imul(x1, 65536) | 0;
@@ -7208,11 +7204,13 @@ function drawMode2Cache(machine, linked) {
       VHRcachecount: address(linked, "VHRcachecount"),
       VHRcachep: address(linked, "VHRcachep"),
       VHRptr: address(linked, "VHRptr"),
+      VHRi: address(linked, "VHRi"),
       VHRdrawn: address(linked, "VHRdrawn"),
       vhrcache: address(linked, "vhrcache"),
       DBcol: address(linked, "DBcol"),
       DBflar: address(linked, "DBflar"),
       DBent: address(linked, "DBent"),
+      PGFt: address(linked, "PGFt"),
     };
     mode2CacheAddressCaches.set(linked, p);
   }
@@ -7222,6 +7220,7 @@ function drawMode2Cache(machine, linked) {
     return;
   }
   const count = memory[p.VHRcachecount] >>> 0;
+  const view = dataView(memory);
   const projectionKey = [
     p.FSCAMX, p.FSCAMY, p.FSCAMZ, p.FSPSB, p.FSPCB, p.FSTCB, p.FSTSB,
     p.FSPCA, p.FSPSA, p.FSTCA, p.FSTSA, p.FSUNEG, p.FSUNO, p.FSXC, p.FSYC,
@@ -7323,6 +7322,19 @@ function drawMode2Cache(machine, linked) {
     const record = p.vhrcache + leaf * 10;
     memory[p.VHRcachep] = leaf;
     memory[p.VHRptr] = record;
+    for (let vertex = 0; vertex < 3; vertex += 1) {
+      const source = record + vertex * 3;
+      const slots = [p.FSINX + vertex, p.FSINY + vertex, p.FSINZ + vertex];
+      for (let axis = 0; axis < 3; axis += 1) {
+        const bits = memory[source + axis] | 0;
+        const slot = slots[axis];
+        memory[p.PGFi] = slot;
+        memory[p.PGFt] = bits;
+        memory[p.FS0] = bits;
+        view.setFloat64((p.fw + slot * 2) * 4, float32FromBits(bits), true);
+      }
+      memory[p.VHRi] = vertex + 1;
+    }
     memory[p.PJnrv] = 3;
     memory[p.DBcol] = memory[record + 9];
     memory[p.DBflar] = 0;
@@ -7335,92 +7347,25 @@ function drawMode2Cache(machine, linked) {
     memory[p.PJdoflag] = visibleCount;
     memory[p.PJgate] = 1;
     if (visibleCount === 3) {
-      let whollyInside = true;
       for (let vertex = 0; vertex < 3; vertex += 1) {
         const id = vertex === 0 ? id0 : vertex === 1 ? id1 : id2;
-        const projectedX = p.topology.ix[id];
-        const projectedY = p.topology.iy[id];
-        p.topology.xs[vertex] = projectedX;
-        p.topology.ys[vertex] = projectedY;
-        if (projectedX < p.PGLBX || projectedX > p.PGUBX
-            || projectedY < p.PGLBY || projectedY > p.PGUBY) whollyInside = false;
+        writeFloat64(memory, p.fw + (p.FSRXF + vertex) * 2, p.topology.rx[id]);
+        writeFloat64(memory, p.fw + (p.FSRYF + vertex) * 2, p.topology.ry[id]);
+        writeFloat64(memory, p.fw + (p.FSRZF + vertex) * 2, p.topology.rz[id]);
+        writeFloat64(memory, p.fw + (p.FSUX + vertex) * 2, p.topology.rx[id]);
+        writeFloat64(memory, p.fw + (p.FSUY + vertex) * 2, p.topology.ry[id]);
+        writeFloat64(memory, p.fw + (p.FSUZ + vertex) * 2, p.topology.rz[id]);
+        writeFloat64(memory, p.fw + (p.FSVX0 + vertex) * 2, p.topology.screenX[id]);
+        writeFloat64(memory, p.fw + (p.FSVY0 + vertex) * 2, p.topology.screenY[id]);
+        memory[p.rwf + vertex] = 1;
         memory[p.mp + vertex * 2] = p.topology.ix[id];
         memory[p.mp + vertex * 2 + 1] = p.topology.iy[id];
       }
       memory[p.PJvr] = 3;
       memory[p.PJvr2] = 3;
       memory[p.PJvr22] = 6;
-      if (whollyInside) {
-        memory[p.DBn] = 3;
-        drawSolidConvexFast(
-          machine, p, p.topology.xs, p.topology.ys, 3, memory[p.DBcol],
-          p.topology.leftEdges, p.topology.rightEdges,
-        );
-      } else {
-        p.topology.screenClipX0[0] = p.topology.screenX[id0];
-        p.topology.screenClipY0[0] = p.topology.screenY[id0];
-        p.topology.screenClipX0[1] = p.topology.screenX[id1];
-        p.topology.screenClipY0[1] = p.topology.screenY[id1];
-        p.topology.screenClipX0[2] = p.topology.screenX[id2];
-        p.topology.screenClipY0[2] = p.topology.screenY[id2];
-        clipSolidPolygonAndDraw(machine, p, p.topology, 3, memory[p.DBcol], control);
-      }
-    } else if (visibleCount !== 0) {
-      const sourceIds = [id0, id1, id2];
-      let clippedCount = 0;
-      for (let vertex = 0; vertex < 3; vertex += 1) {
-        const currentId = sourceIds[vertex];
-        const previousId = sourceIds[(vertex + 2) % 3];
-        const currentVisible = p.topology.visible[currentId] !== 0;
-        const previousVisible = p.topology.visible[previousId] !== 0;
-        const emitIntersection = (outsideId, visibleId) => {
-          const visibleZ = p.topology.rz[visibleId];
-          const ratioWide = (near - visibleZ) / (p.topology.rz[outsideId] - visibleZ);
-          const ratioNarrow = roundFloat32(ratioWide, control);
-          p.topology.clipX[clippedCount] = roundFloat32(
-            (p.topology.rx[outsideId] - p.topology.rx[visibleId]) * ratioWide
-              + p.topology.rx[visibleId],
-            control,
-          );
-          p.topology.clipY[clippedCount] = roundFloat32(
-            (p.topology.ry[outsideId] - p.topology.ry[visibleId]) * ratioNarrow
-              + p.topology.ry[visibleId],
-            control,
-          );
-          p.topology.clipZ[clippedCount] = near;
-          clippedCount += 1;
-        };
-        if (currentVisible) {
-          if (!previousVisible) emitIntersection(previousId, currentId);
-          p.topology.clipX[clippedCount] = p.topology.rx[currentId];
-          p.topology.clipY[clippedCount] = p.topology.ry[currentId];
-          p.topology.clipZ[clippedCount] = p.topology.rz[currentId];
-          clippedCount += 1;
-        } else if (previousVisible) emitIntersection(currentId, previousId);
-      }
-      let whollyInside = clippedCount >= 3;
-      for (let vertex = 0; vertex < clippedCount; vertex += 1) {
-        const factor = numerator / p.topology.clipZ[vertex];
-        const projectedXWide = factor * p.topology.clipX[vertex] + centerX;
-        const projectedYWide = factor * p.topology.clipY[vertex] + centerY;
-        const projectedX = convertToInt32(projectedXWide, control);
-        const projectedY = convertToInt32(projectedYWide, control);
-        p.topology.xs[vertex] = projectedX;
-        p.topology.ys[vertex] = projectedY;
-        p.topology.screenClipX0[vertex] = roundFloat32(projectedXWide, control);
-        p.topology.screenClipY0[vertex] = roundFloat32(projectedYWide, control);
-        if (projectedX < p.PGLBX || projectedX > p.PGUBX
-            || projectedY < p.PGLBY || projectedY > p.PGUBY) whollyInside = false;
-      }
-      if (whollyInside) {
-        drawSolidConvexFast(
-          machine, p, p.topology.xs, p.topology.ys, clippedCount, memory[p.DBcol],
-          p.topology.leftEdges, p.topology.rightEdges,
-        );
-      } else clipSolidPolygonAndDraw(
-        machine, p, p.topology, clippedCount, memory[p.DBcol], control,
-      );
-    }
+      polyProjectedTail(machine, linked, p);
+    } else if (visibleCount !== 0) poly3d(machine, linked);
     memory[p.VHRdrawn] = (memory[p.VHRdrawn] + 1) | 0;
   }
   machine.noctisSolidTouched = null;
@@ -8006,7 +7951,9 @@ function flareDrawAddresses(linked) {
     "VHFghost", "VHFdx", "VHFdy", "VHFx0", "VHFy0", "VHFx1", "VHFy1",
     "VHFclipbound", "VHFlineleft", "VHFlinetop", "VHFgdx", "VHFgdy",
     "VHFgr", "VHFgfx", "VHFgfy", "VHFsintab", "VHFcostab", "VHVsin",
-    "VHVcos",
+    "VHVcos", "VHFtrigready", "VHFtrigi", "VHFtriga0", "VHFtriga1",
+    "fw", "FSW0", "FA0", "FB0", "FS0", "FI", "PGFi", "PGFt", "PGFu",
+    "FCWCSAV", "FCWCHOP",
   ];
   p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
   flareDrawAddressCaches.set(linked, p);
@@ -8023,34 +7970,36 @@ function flareSourceLine(machine, linked) {
   let y1 = memory[p.VHFy1] | 0;
   const left = -150;
   const top = -90;
+  const chop = (number) => Number.isFinite(number) && number >= -2147483648 && number <= 2147483647
+    ? Math.trunc(number) | 0 : -2147483648;
   memory[p.VHFlineleft] = left;
   memory[p.VHFlinetop] = top;
   const clipX0 = (bound) => {
     memory[p.VHFclipbound] = bound;
     const diff = roundFloat32(x0 - x1, control);
     const k = roundFloat32((bound - x1) / diff, control);
-    y0 = convertToInt32((y0 - y1) * k + y1, control);
+    y0 = chop((y0 - y1) * k + y1);
     x0 = bound;
   };
   const clipX1 = (bound) => {
     memory[p.VHFclipbound] = bound;
     const diff = roundFloat32(x1 - x0, control);
     const k = roundFloat32((bound - x0) / diff, control);
-    y1 = convertToInt32((y1 - y0) * k + y0, control);
+    y1 = chop((y1 - y0) * k + y0);
     x1 = bound;
   };
   const clipY0 = (bound) => {
     memory[p.VHFclipbound] = bound;
     const diff = roundFloat32(y0 - y1, control);
     const k = roundFloat32((bound - y1) / diff, control);
-    x0 = convertToInt32((x0 - x1) * k + x1, control);
+    x0 = chop((x0 - x1) * k + x1);
     y0 = bound;
   };
   const clipY1 = (bound) => {
     memory[p.VHFclipbound] = bound;
     const diff = roundFloat32(y1 - y0, control);
     const k = roundFloat32((bound - y0) / diff, control);
-    x1 = convertToInt32((x1 - x0) * k + x0, control);
+    x1 = chop((x1 - x0) * k + x0);
     y1 = bound;
   };
   if (x0 < left && x0 !== x1) clipX0(left);
@@ -8081,7 +8030,53 @@ function flareSourceLine(machine, linked) {
 function flareDraw(machine, linked) {
   const memory = machine.memory;
   const p = flareDrawAddresses(linked);
-  const k = readFloat64(memory, p.VHFk0);
+  const control = floatingPoint(machine).control;
+  memory[p.FI] = 1;
+  writeFloat64(memory, p.FA0, 1);
+  writeFloat64(memory, p.VHFl0, 1);
+  memory[p.PGFt] = 1069547520;
+  memory[p.FS0] = 1069547520;
+  writeFloat64(memory, p.FA0, 1.5);
+  writeFloat64(memory, p.VHFu0, 1.5);
+  memory[p.VHFang] = 0;
+  if ((memory[p.VHFtrigready] | 0) === 0) {
+    float64Scratch.setUint32(0, 2723323193, true);
+    float64Scratch.setUint32(4, 1066524486, true);
+    const degreeStep = float64Scratch.getFloat64(0, true);
+    let radians = 0;
+    memory[p.VHFtrigi] = 0;
+    writeFloat64(memory, p.VHFtriga0, 0);
+    for (let index = 0; index <= 360; index += 1) {
+      memory[p.VHFtrigi] = index;
+      memory[p.PGFt] = memory[p.VHFtriga0];
+      memory[p.PGFu] = memory[p.VHFtriga1];
+      writeFloat64(memory, p.FA0, radians);
+      memory[p.PGFi] = p.FSW0;
+      writeFloat64(memory, p.fw + p.FSW0 * 2, radians);
+
+      let narrowed = roundFloat32(Math.cos(radians), control);
+      const cosineBits = float32Bits(narrowed);
+      memory[p.FS0] = cosineBits;
+      memory[p.PGFt] = cosineBits;
+      writeFloat64(memory, p.FA0, narrowed);
+      memory[p.VHFcostab + index] = cosineBits;
+
+      writeFloat64(memory, p.FA0, radians);
+      narrowed = roundFloat32(Math.sin(radians), control);
+      const sineBits = float32Bits(narrowed);
+      memory[p.FS0] = sineBits;
+      memory[p.PGFt] = sineBits;
+      writeFloat64(memory, p.FA0, narrowed);
+      memory[p.VHFsintab + index] = sineBits;
+
+      writeFloat64(memory, p.FA0, radians);
+      writeFloat64(memory, p.FB0, degreeStep);
+      radians += degreeStep;
+      writeFloat64(memory, p.FA0, radians);
+      writeFloat64(memory, p.VHFtriga0, radians);
+    }
+    memory[p.VHFtrigready] = 1;
+  }
   let length = 1;
   let scale = float32FromBits(1069547520);
   let angle = 0;
@@ -8096,10 +8091,11 @@ function flareDraw(machine, linked) {
     const sineBits = memory[p.VHFsintab + angle] | 0;
     memory[p.VHVcos] = cosineBits;
     memory[p.VHVsin] = sineBits;
-    const dx = chop(float32FromBits(cosineBits) * k * length);
-    const dy = chop(float32FromBits(sineBits) * k * length);
-    memory[p.VHFdx] = dx;
-    memory[p.VHFdy] = dy;
+    flareSaveControl(machine, linked);
+    memory[p.FCWCHOP] = (memory[p.FCWCSAV] & 0x0f3ff) | 0x0c00;
+    flareSpokeDelta(machine, linked);
+    const dx = memory[p.VHFdx] | 0;
+    const dy = memory[p.VHFdy] | 0;
     memory[p.VHFx0] = centerX - 160 - dx;
     memory[p.VHFy0] = centerY - 100 - dy;
     memory[p.VHFx1] = centerX - 160 + dx;
@@ -8133,7 +8129,11 @@ function flareDraw(machine, linked) {
       memory[p.VHFgr] = 3;
     }
     length *= scale;
-    if (length > 3 || length < 1) scale = 1 / scale;
+    writeFloat64(memory, p.VHFl0, length);
+    if (length > 3 || length < 1) {
+      scale = 1 / scale;
+      writeFloat64(memory, p.VHFu0, scale);
+    }
     angle += add;
     memory[p.VHFang] = angle;
   }
@@ -8736,16 +8736,6 @@ function rectanglePixelWriter(memory, p, effect) {
     alphaDim(pointer - 1, amount); alphaDim(pointer + 1, amount);
     alphaDim(pointer - width, amount); alphaDim(pointer + width, amount);
   };
-  const addPackedAmounts = (left, right) => (
-    Math.min((left & 0xff) + (right & 0xff), 0xff)
-    | Math.min((left & 0xff00) + (right & 0xff00), 0xff00)
-    | Math.min((left & 0xff0000) + (right & 0xff0000), 0xff0000)
-  );
-  const doublePackedAmount = (amount) => (
-    Math.min((amount & 0xff) * 2, 0xff)
-    | Math.min((amount & 0xff00) * 2, 0xff00)
-    | Math.min((amount & 0xff0000) * 2, 0xff0000)
-  );
   let write;
   switch (effect.kind) {
     case "null": write = () => {}; break;
@@ -8784,34 +8774,16 @@ function rectanglePixelWriter(memory, p, effect) {
     case "doubleAaLight": write = (pointer, color) => {
       const quarter = (color & 0xfcfcfc) >>> 2;
       const half = (color & 0xfefefe) >>> 1;
-      const quarterEdge = (quarter & 0xf0f0f0) >>> 4;
-      const halfEdge = (half & 0xf0f0f0) >>> 4;
-      const doubleEdge = doublePackedAmount(halfEdge);
-      const axis = addPackedAmounts(half, quarterEdge);
-      const center = addPackedAmounts(quarter, doublePackedAmount(doubleEdge));
-      alphaLight(pointer, center);
-      alphaLight(pointer - 1, axis); alphaLight(pointer + 1, axis);
-      alphaLight(pointer - width, axis); alphaLight(pointer + width, axis);
-      alphaLight(pointer - 2, halfEdge); alphaLight(pointer + 2, halfEdge);
-      alphaLight(pointer - width * 2, halfEdge); alphaLight(pointer + width * 2, halfEdge);
-      alphaLight(pointer - width - 1, doubleEdge); alphaLight(pointer - width + 1, doubleEdge);
-      alphaLight(pointer + width - 1, doubleEdge); alphaLight(pointer + width + 1, doubleEdge);
+      antialiasLight(pointer, quarter);
+      antialiasLight(pointer - 1, half); antialiasLight(pointer + 1, half);
+      antialiasLight(pointer - width, half); antialiasLight(pointer + width, half);
     }; break;
     case "doubleAaDim": write = (pointer, color) => {
       const quarter = (color & 0xfcfcfc) >>> 2;
       const half = (color & 0xfefefe) >>> 1;
-      const quarterEdge = (quarter & 0xf0f0f0) >>> 4;
-      const halfEdge = (half & 0xf0f0f0) >>> 4;
-      const doubleEdge = doublePackedAmount(halfEdge);
-      const axis = addPackedAmounts(half, quarterEdge);
-      const center = addPackedAmounts(quarter, doublePackedAmount(doubleEdge));
-      alphaDim(pointer, center);
-      alphaDim(pointer - 1, axis); alphaDim(pointer + 1, axis);
-      alphaDim(pointer - width, axis); alphaDim(pointer + width, axis);
-      alphaDim(pointer - 2, halfEdge); alphaDim(pointer + 2, halfEdge);
-      alphaDim(pointer - width * 2, halfEdge); alphaDim(pointer + width * 2, halfEdge);
-      alphaDim(pointer - width - 1, doubleEdge); alphaDim(pointer - width + 1, doubleEdge);
-      alphaDim(pointer + width - 1, doubleEdge); alphaDim(pointer + width + 1, doubleEdge);
+      antialiasDim(pointer, quarter);
+      antialiasDim(pointer - 1, half); antialiasDim(pointer + 1, half);
+      antialiasDim(pointer - width, half); antialiasDim(pointer + width, half);
     }; break;
     default: throw new RangeError(`Unsupported Rectangle pixel effect ${effect.kind}`);
   }
@@ -10871,9 +10843,6 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.terrainTileFauna]: terrainTileFauna,
     [SERVICE_IDS.terrainRock]: terrainRock,
     [SERVICE_IDS.terrainTraverse]: terrainTraverseFaithful,
-    [SERVICE_IDS.terrainVegetation]: (machine, linked) => callTerrainSourceModel(machine, linked, "VHGND veget"),
-    [SERVICE_IDS.terrainBush]: (machine, linked) => callTerrainSourceModel(machine, linked, "VHGND bush"),
-    [SERVICE_IDS.terrainTree]: (machine, linked) => callTerrainSourceModel(machine, linked, "VHGND tree"),
     [SERVICE_IDS.waterBackdrop]: waterBackdrop,
     [SERVICE_IDS.denseAtmosphere]: denseAtmosphere,
     [SERVICE_IDS.terrainRenderRandom]: terrainRenderRandom,
