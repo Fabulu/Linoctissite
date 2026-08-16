@@ -270,6 +270,7 @@ const SERVICE_IDS = Object.freeze({
   surfaceRandomPattern: "service:surndpat",
   surfaceSda: "service:susda",
   paletteShade: "service:palshade",
+  paletteTavola: "service:paltavola",
   groundRoundHill: "service:grroundhill",
   groundTextureDarkline: "service:vhgndtexturedarklinecommon",
   groundPostSurface: "service:vhgndpostsurfacecommon",
@@ -310,6 +311,7 @@ const textAddressCaches = new WeakMap();
 const ekeyAddressCaches = new WeakMap();
 const surfaceBulkAddressCaches = new WeakMap();
 const paletteShadeAddressCaches = new WeakMap();
+const paletteTavolaAddressCaches = new WeakMap();
 const groundRoundHillAddressCaches = new WeakMap();
 const groundTextureDarklineAddressCaches = new WeakMap();
 const groundPostSurfaceAddressCaches = new WeakMap();
@@ -5924,6 +5926,79 @@ function surfaceSda(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function paletteTavola(machine, linked) {
+  const memory = machine.memory;
+  let p = paletteTavolaAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "PVsrc", "PVself", "PVfirst", "PVn", "PVfr", "PVfg", "PVfb", "PVrange",
+      "PUn", "PLfirst", "PLn", "pal6", "curpal6", "pal",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    paletteTavolaAddressCaches.set(linked, p);
+  }
+
+  let range = memory[p.PVrange] | 0;
+  const filterAddresses = [p.PVfr, p.PVfg, p.PVfb];
+  const filters = new Int32Array(3);
+  for (let component = 0; component < 3; component += 1) {
+    const byte = memory[filterAddresses[component]] & 0xff;
+    const signed = (byte & 0x80) !== 0 ? byte - 0x100 : byte;
+    if (signed < 0 || signed > 127) range |= 1 << component;
+    filters[component] = signed & 0xffff;
+    memory[filterAddresses[component]] = filters[component];
+  }
+  memory[p.PVrange] = range;
+
+  const first = memory[p.PVfirst] | 0;
+  const count = memory[p.PVn] >>> 0;
+  const firstComponent = Math.imul(first, 3);
+  if ((memory[p.PVself] | 0) === 0) {
+    let source = memory[p.PVsrc] | 0;
+    for (let index = 0; index < count * 3; index += 1) {
+      memory[p.pal6 + firstComponent + index] = memory[source + index] & 0xff;
+    }
+  }
+
+  let filtered = 0;
+  for (let colour = 0; colour < count; colour += 1) {
+    const base = p.pal6 + firstComponent + colour * 3;
+    for (let component = 0; component < 3; component += 1) {
+      const product = Math.imul(memory[base + component] & 0xff, filters[component]);
+      filtered = ((product & 0xffff) / 63) | 0;
+      if ((filtered >>> 0) >= 64) filtered = 63;
+      memory[base + component] = filtered;
+    }
+  }
+
+  const uploadedColours = (first + count) | 0;
+  memory[p.PUn] = uploadedColours;
+  const uploadedComponents = Math.imul(uploadedColours, 3);
+  for (let index = 0; index < uploadedComponents; index += 1) {
+    memory[p.curpal6 + index] = memory[p.pal6 + index];
+  }
+  memory[p.PLfirst] = 0;
+  memory[p.PLn] = uploadedColours;
+
+  let packed = filtered;
+  let blue = machine.A | 0;
+  for (let colour = 0; colour < (uploadedColours >>> 0); colour += 1) {
+    const component = p.curpal6 + colour * 3;
+    packed = ((memory[component] & 63) * 4) << 16;
+    packed = (packed + (((memory[component + 1] & 63) * 4) << 8)) | 0;
+    blue = (memory[component + 2] & 63) * 4;
+    packed = (packed + blue) | 0;
+    memory[p.pal + colour] = packed;
+  }
+
+  machine.A = uploadedColours === 0 ? p.pal6 : blue;
+  machine.B = 0;
+  machine.C = uploadedColours === 0 ? filtered : packed;
+  machine.D = p.curpal6 + uploadedComponents;
+  if (uploadedColours !== 0) machine.E = p.pal + uploadedColours;
+  machine.X = LINO_DONE;
+}
+
 function paletteShade(machine, linked) {
   const memory = machine.memory;
   let p = paletteShadeAddressCaches.get(linked);
@@ -10290,6 +10365,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.surfaceRandomPattern]: surfaceRandomPattern,
     [SERVICE_IDS.surfaceSda]: surfaceSda,
     [SERVICE_IDS.paletteShade]: paletteShade,
+    [SERVICE_IDS.paletteTavola]: paletteTavola,
     [SERVICE_IDS.groundRoundHill]: groundRoundHill,
     [SERVICE_IDS.groundTextureDarkline]: groundTextureDarkline,
     [SERVICE_IDS.groundPostSurface]: groundPostSurface,

@@ -6898,7 +6898,7 @@ case 6493: { if(executed!==0&&executed+1>maxInstructions){pc=6493;return save("b
 case 6494: { if(executed!==0&&executed+1>maxInstructions){pc=6494;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 6494; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 6495: { if(executed!==0&&executed+1>maxInstructions){pc=6495;return save("budget",executed);}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6497) | 0; pc = (5369) - 1; continue runner; }
 case 6496: { if(executed!==0&&executed+1>maxInstructions){pc=6496;return save("budget",executed);}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6498) | 0; pc = (5397) - 1; continue runner; }
-case 6497: { if(executed!==0&&executed+9>maxInstructions){pc=6497;return save("budget",executed);}executed+=9; A = (1946781) | 0; pc = 6498; }
+case 6497: { if(executed!==0&&executed+20>maxInstructions){pc=6497;return save("budget",executed);}executed+=20; A = (1946781) | 0; pc = 6498; }
 case 6498: {  m[(2570) >>> 0] = (A) | 0; pc = 6499; }
 case 6499: {  m[(2571) >>> 0] = (0) | 0; pc = 6500; }
 case 6500: {  m[(2572) >>> 0] = (0) | 0; pc = 6501; }
@@ -6906,8 +6906,8 @@ case 6501: {  m[(2573) >>> 0] = (64) | 0; pc = 6502; }
 case 6502: {  m[(2574) >>> 0] = (16) | 0; pc = 6503; }
 case 6503: {  m[(2575) >>> 0] = (32) | 0; pc = 6504; }
 case 6504: {  m[(2576) >>> 0] = (63) | 0; pc = 6505; }
-case 6505: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6507) | 0; pc = (5408) - 1; continue runner; }
-case 6506: { if(executed!==0&&executed+11>maxInstructions){pc=6506;return save("budget",executed);}executed+=11; A = (1943453) | 0; pc = 6507; }
+case 6505: {  pc=6505; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=6506; }
+case 6506: {  A = (1943453) | 0; pc = 6507; }
 case 6507: {  m[(2590) >>> 0] = (A) | 0; pc = 6508; }
 case 6508: {  m[(2581) >>> 0] = (0) | 0; pc = 6509; }
 case 6509: {  m[(2582) >>> 0] = (64) | 0; pc = 6510; }
@@ -6918,14 +6918,14 @@ case 6513: {  m[(2675) >>> 0] = (63) | 0; pc = 6514; }
 case 6514: {  m[(2676) >>> 0] = (63) | 0; pc = 6515; }
 case 6515: {  m[(2677) >>> 0] = (63) | 0; pc = 6516; }
 case 6516: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6518) | 0; pc = (6575) - 1; continue runner; }
-case 6517: { if(executed!==0&&executed+7>maxInstructions){pc=6517;return save("budget",executed);}executed+=7; m[(2571) >>> 0] = (1) | 0; pc = 6518; }
+case 6517: { if(executed!==0&&executed+23>maxInstructions){pc=6517;return save("budget",executed);}executed+=23; m[(2571) >>> 0] = (1) | 0; pc = 6518; }
 case 6518: {  m[(2572) >>> 0] = (192) | 0; pc = 6519; }
 case 6519: {  m[(2573) >>> 0] = (64) | 0; pc = 6520; }
 case 6520: {  m[(2574) >>> 0] = (50) | 0; pc = 6521; }
 case 6521: {  m[(2575) >>> 0] = (50) | 0; pc = 6522; }
 case 6522: {  m[(2576) >>> 0] = (50) | 0; pc = 6523; }
-case 6523: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6525) | 0; pc = (5408) - 1; continue runner; }
-case 6524: { if(executed!==0&&executed+9>maxInstructions){pc=6524;return save("budget",executed);}executed+=9; A = (1946781) | 0; pc = 6525; }
+case 6523: {  pc=6523; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=6524; }
+case 6524: {  A = (1946781) | 0; pc = 6525; }
 case 6525: {  m[(2570) >>> 0] = (A) | 0; pc = 6526; }
 case 6526: {  m[(2571) >>> 0] = (0) | 0; pc = 6527; }
 case 6527: {  m[(2572) >>> 0] = (64) | 0; pc = 6528; }
@@ -6933,8 +6933,8 @@ case 6528: {  m[(2573) >>> 0] = (64) | 0; pc = 6529; }
 case 6529: {  m[(2574) >>> 0] = (60) | 0; pc = 6530; }
 case 6530: {  m[(2575) >>> 0] = (55) | 0; pc = 6531; }
 case 6531: {  m[(2576) >>> 0] = (50) | 0; pc = 6532; }
-case 6532: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6534) | 0; pc = (5408) - 1; continue runner; }
-case 6533: { if(executed!==0&&executed+7>maxInstructions){pc=6533;return save("budget",executed);}executed+=7; A = (1943453) | 0; pc = 6534; }
+case 6532: {  pc=6532; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=6533; }
+case 6533: {  A = (1943453) | 0; pc = 6534; }
 case 6534: {  m[(2590) >>> 0] = (A) | 0; pc = 6535; }
 case 6535: {  m[(2581) >>> 0] = (160) | 0; pc = 6536; }
 case 6536: {  m[(2582) >>> 0] = (16) | 0; pc = 6537; }
@@ -6962,7 +6962,7 @@ case 6557: { if(executed!==0&&executed+4>maxInstructions){pc=6557;return save("b
 case 6558: {  m[(2600) >>> 0] = (385) | 0; pc = 6559; }
 case 6559: {  m[(2601) >>> 0] = (8) | 0; pc = 6560; }
 case 6560: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6562) | 0; pc = (5351) - 1; continue runner; }
-case 6561: { if(executed!==0&&executed+9>maxInstructions){pc=6561;return save("budget",executed);}executed+=9; m[(2588) >>> 0] = ((m[(2597) >>> 0] | 0)) | 0; pc = 6562; }
+case 6561: { if(executed!==0&&executed+12>maxInstructions){pc=6561;return save("budget",executed);}executed+=12; m[(2588) >>> 0] = ((m[(2597) >>> 0] | 0)) | 0; pc = 6562; }
 case 6562: {  pc=6562; sync(); native("service:palshade", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=6563; }
 case 6563: {  m[(2571) >>> 0] = (1) | 0; pc = 6564; }
 case 6564: {  m[(2572) >>> 0] = (0) | 0; pc = 6565; }
@@ -6970,8 +6970,8 @@ case 6565: {  m[(2573) >>> 0] = (256) | 0; pc = 6566; }
 case 6566: {  m[(2574) >>> 0] = (200) | 0; pc = 6567; }
 case 6567: {  m[(2575) >>> 0] = (64) | 0; pc = 6568; }
 case 6568: {  m[(2576) >>> 0] = (64) | 0; pc = 6569; }
-case 6569: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6571) | 0; pc = (5408) - 1; continue runner; }
-case 6570: { if(executed!==0&&executed+3>maxInstructions){pc=6570;return save("budget",executed);}executed+=3; m[(2579) >>> 0] = (0) | 0; pc = 6571; }
+case 6569: {  pc=6569; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=6570; }
+case 6570: {  m[(2579) >>> 0] = (0) | 0; pc = 6571; }
 case 6571: {  m[(2580) >>> 0] = (256) | 0; pc = 6572; }
 case 6572: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6574) | 0; pc = (5513) - 1; continue runner; }
 case 6573: { if(executed!==0&&executed+1>maxInstructions){pc=6573;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 6573; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
@@ -32449,28 +32449,28 @@ function createRegion30720(dispatch, native) {
       const f64w=(a,v)=>md.setFloat64((a>>>0)*4,v,true);
       if(halted)return save("halted",0);
       runner: while(true){ switch(pc){
-        case 30720: { if(executed!==0&&executed+5>maxInstructions){pc=30720;return save("budget",executed);}executed+=5; m[(2573) >>> 0] = (64) | 0; pc = 30721; }
+        case 30720: { if(executed!==0&&executed+22>maxInstructions){pc=30720;return save("budget",executed);}executed+=22; m[(2573) >>> 0] = (64) | 0; pc = 30721; }
 case 30721: {  m[(2574) >>> 0] = (38) | 0; pc = 30722; }
 case 30722: {  m[(2575) >>> 0] = (42) | 0; pc = 30723; }
 case 30723: {  m[(2576) >>> 0] = (48) | 0; pc = 30724; }
-case 30724: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (30726) | 0; pc = (5408) - 1; continue runner; }
-case 30725: { if(executed!==0&&executed+8>maxInstructions){pc=30725;return save("budget",executed);}executed+=8; m[(2570) >>> 0] = (1946781) | 0; pc = 30726; }
+case 30724: {  pc=30724; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=30725; }
+case 30725: {  m[(2570) >>> 0] = (1946781) | 0; pc = 30726; }
 case 30726: {  m[(2571) >>> 0] = (0) | 0; pc = 30727; }
 case 30727: {  m[(2572) >>> 0] = (64) | 0; pc = 30728; }
 case 30728: {  m[(2573) >>> 0] = (64) | 0; pc = 30729; }
 case 30729: {  m[(2574) >>> 0] = (22) | 0; pc = 30730; }
 case 30730: {  m[(2575) >>> 0] = (34) | 0; pc = 30731; }
 case 30731: {  m[(2576) >>> 0] = (54) | 0; pc = 30732; }
-case 30732: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (30734) | 0; pc = (5408) - 1; continue runner; }
-case 30733: { if(executed!==0&&executed+8>maxInstructions){pc=30733;return save("budget",executed);}executed+=8; m[(2570) >>> 0] = (1946781) | 0; pc = 30734; }
+case 30732: {  pc=30732; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=30733; }
+case 30733: {  m[(2570) >>> 0] = (1946781) | 0; pc = 30734; }
 case 30734: {  m[(2571) >>> 0] = (0) | 0; pc = 30735; }
 case 30735: {  m[(2572) >>> 0] = (128) | 0; pc = 30736; }
 case 30736: {  m[(2573) >>> 0] = (128) | 0; pc = 30737; }
 case 30737: {  m[(2574) >>> 0] = (52) | 0; pc = 30738; }
 case 30738: {  m[(2575) >>> 0] = (47) | 0; pc = 30739; }
 case 30739: {  m[(2576) >>> 0] = (39) | 0; pc = 30740; }
-case 30740: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (30742) | 0; pc = (5408) - 1; continue runner; }
-case 30741: { if(executed!==0&&executed+1>maxInstructions){pc=30741;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 30741; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
+case 30740: {  pc=30740; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=30741; }
+case 30741: {  X = 1685024357; if (d === 0) { pc = 30741; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 30742: { if(executed!==0&&executed+5>maxInstructions){pc=30742;return save("budget",executed);}executed+=5; m[(6580) >>> 0] = (0) | 0; pc = 30743; }
 case 30743: {  m[(6702) >>> 0] = (0) | 0; pc = 30744; }
 case 30744: {  m[(3521) >>> 0] = (32) | 0; pc = 30745; }
@@ -33501,7 +33501,7 @@ function createRegion31744(dispatch, native) {
       const f64w=(a,v)=>md.setFloat64((a>>>0)*4,v,true);
       if(halted)return save("halted",0);
       runner: while(true){ switch(pc){
-        case 31744: { if(executed!==0&&executed+9>maxInstructions){pc=31744;return save("budget",executed);}executed+=9; m[(6748) >>> 0] = (0) | 0; pc = 31745; }
+        case 31744: { if(executed!==0&&executed+11>maxInstructions){pc=31744;return save("budget",executed);}executed+=11; m[(6748) >>> 0] = (0) | 0; pc = 31745; }
 case 31745: {  m[(2570) >>> 0] = (1945757) | 0; pc = 31746; }
 case 31746: {  m[(2571) >>> 0] = (0) | 0; pc = 31747; }
 case 31747: {  m[(2572) >>> 0] = (0) | 0; pc = 31748; }
@@ -33509,8 +33509,8 @@ case 31748: {  m[(2573) >>> 0] = (256) | 0; pc = 31749; }
 case 31749: {  m[(2574) >>> 0] = (0) | 0; pc = 31750; }
 case 31750: {  m[(2575) >>> 0] = (0) | 0; pc = 31751; }
 case 31751: {  m[(2576) >>> 0] = (0) | 0; pc = 31752; }
-case 31752: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (31754) | 0; pc = (5408) - 1; continue runner; }
-case 31753: { if(executed!==0&&executed+2>maxInstructions){pc=31753;return save("budget",executed);}executed+=2; m[(6876) >>> 0] = (0) | 0; pc = 31754; }
+case 31752: {  pc=31752; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=31753; }
+case 31753: {  m[(6876) >>> 0] = (0) | 0; pc = 31754; }
 case 31754: {  X = 1685024357; if (d === 0) { pc = 31754; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 31755: { if(executed!==0&&executed+2>maxInstructions){pc=31755;return save("budget",executed);}executed+=2; A = ((m[(6710) >>> 0] | 0)) | 0; pc = 31756; }
 case 31756: {  if ((((A) | 0) != ((0) | 0))) { pc = ((31770) - 1); continue runner; } pc = 31757; }
@@ -33540,7 +33540,7 @@ case 31779: {  A = ((m[(6748) >>> 0] | 0)) | 0; pc = 31780; }
 case 31780: {  m[(2574) >>> 0] = (A) | 0; pc = 31781; }
 case 31781: {  m[(2575) >>> 0] = (A) | 0; pc = 31782; }
 case 31782: {  m[(2576) >>> 0] = (A) | 0; pc = 31783; }
-case 31783: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (31785) | 0; pc = (5408) - 1; continue runner; }
+case 31783: {  pc=31783; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=31784; }
 case 31784: { if(executed!==0&&executed+1>maxInstructions){pc=31784;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 31784; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 31785: { if(executed!==0&&executed+2>maxInstructions){pc=31785;return save("budget",executed);}executed+=2; A = ((m[(6164) >>> 0] | 0)) | 0; pc = 31786; }
 case 31786: {  if ((((A) | 0) >= ((0) | 0))) { pc = ((31789) - 1); continue runner; } pc = 31787; }
@@ -45571,39 +45571,39 @@ case 43362: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.s
 case 43363: { if(executed!==0&&executed+1>maxInstructions){pc=43363;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 43363; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 43364: { if(executed!==0&&executed+1>maxInstructions){pc=43364;return save("budget",executed);}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (43366) | 0; pc = (5369) - 1; continue runner; }
 case 43365: { if(executed!==0&&executed+1>maxInstructions){pc=43365;return save("budget",executed);}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (43367) | 0; pc = (5397) - 1; continue runner; }
-case 43366: { if(executed!==0&&executed+8>maxInstructions){pc=43366;return save("budget",executed);}executed+=8; m[(2570) >>> 0] = (1946781) | 0; pc = 43367; }
+case 43366: { if(executed!==0&&executed+33>maxInstructions){pc=43366;return save("budget",executed);}executed+=33; m[(2570) >>> 0] = (1946781) | 0; pc = 43367; }
 case 43367: {  m[(2571) >>> 0] = (0) | 0; pc = 43368; }
 case 43368: {  m[(2572) >>> 0] = (0) | 0; pc = 43369; }
 case 43369: {  m[(2573) >>> 0] = (64) | 0; pc = 43370; }
 case 43370: {  m[(2574) >>> 0] = (16) | 0; pc = 43371; }
 case 43371: {  m[(2575) >>> 0] = (32) | 0; pc = 43372; }
 case 43372: {  m[(2576) >>> 0] = (63) | 0; pc = 43373; }
-case 43373: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (43375) | 0; pc = (5408) - 1; continue runner; }
-case 43374: { if(executed!==0&&executed+8>maxInstructions){pc=43374;return save("budget",executed);}executed+=8; m[(2570) >>> 0] = (1946781) | 0; pc = 43375; }
+case 43373: {  pc=43373; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=43374; }
+case 43374: {  m[(2570) >>> 0] = (1946781) | 0; pc = 43375; }
 case 43375: {  m[(2571) >>> 0] = (0) | 0; pc = 43376; }
 case 43376: {  m[(2572) >>> 0] = (64) | 0; pc = 43377; }
 case 43377: {  m[(2573) >>> 0] = (64) | 0; pc = 43378; }
 case 43378: {  m[(2574) >>> 0] = (32) | 0; pc = 43379; }
 case 43379: {  m[(2575) >>> 0] = (48) | 0; pc = 43380; }
 case 43380: {  m[(2576) >>> 0] = (63) | 0; pc = 43381; }
-case 43381: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (43383) | 0; pc = (5408) - 1; continue runner; }
-case 43382: { if(executed!==0&&executed+8>maxInstructions){pc=43382;return save("budget",executed);}executed+=8; m[(2570) >>> 0] = (1946781) | 0; pc = 43383; }
+case 43381: {  pc=43381; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=43382; }
+case 43382: {  m[(2570) >>> 0] = (1946781) | 0; pc = 43383; }
 case 43383: {  m[(2571) >>> 0] = (0) | 0; pc = 43384; }
 case 43384: {  m[(2572) >>> 0] = (128) | 0; pc = 43385; }
 case 43385: {  m[(2573) >>> 0] = (64) | 0; pc = 43386; }
 case 43386: {  m[(2574) >>> 0] = (63) | 0; pc = 43387; }
 case 43387: {  m[(2575) >>> 0] = (56) | 0; pc = 43388; }
 case 43388: {  m[(2576) >>> 0] = (48) | 0; pc = 43389; }
-case 43389: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (43391) | 0; pc = (5408) - 1; continue runner; }
-case 43390: { if(executed!==0&&executed+8>maxInstructions){pc=43390;return save("budget",executed);}executed+=8; m[(2570) >>> 0] = (1946781) | 0; pc = 43391; }
+case 43389: {  pc=43389; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=43390; }
+case 43390: {  m[(2570) >>> 0] = (1946781) | 0; pc = 43391; }
 case 43391: {  m[(2571) >>> 0] = (0) | 0; pc = 43392; }
 case 43392: {  m[(2572) >>> 0] = (192) | 0; pc = 43393; }
 case 43393: {  m[(2573) >>> 0] = (64) | 0; pc = 43394; }
 case 43394: {  m[(2574) >>> 0] = (40) | 0; pc = 43395; }
 case 43395: {  m[(2575) >>> 0] = (52) | 0; pc = 43396; }
 case 43396: {  m[(2576) >>> 0] = (63) | 0; pc = 43397; }
-case 43397: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (43399) | 0; pc = (5408) - 1; continue runner; }
-case 43398: { if(executed!==0&&executed+1>maxInstructions){pc=43398;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 43398; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
+case 43397: {  pc=43397; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=43398; }
+case 43398: {  X = 1685024357; if (d === 0) { pc = 43398; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 43399: { if(executed!==0&&executed+6>maxInstructions){pc=43399;return save("budget",executed);}executed+=6; m[(7860) >>> 0] = ((m[(6054) >>> 0] | 0)) | 0; pc = 43400; }
 case 43400: {  m[(7861) >>> 0] = ((m[(6056) >>> 0] | 0)) | 0; pc = 43401; }
 case 43401: {  m[(7862) >>> 0] = ((m[(6057) >>> 0] | 0)) | 0; pc = 43402; }
@@ -45854,7 +45854,7 @@ case 43645: {  m[(2573) >>> 0] = (64) | 0; pc = 43646; }
 case 43646: {  m[(2574) >>> 0] = (63) | 0; pc = 43647; }
 case 43647: {  m[(2575) >>> 0] = (63) | 0; pc = 43648; }
 case 43648: {  m[(2576) >>> 0] = (63) | 0; pc = 43649; }
-case 43649: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (43651) | 0; pc = (5408) - 1; continue runner; }
+case 43649: {  pc=43649; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=43650; }
 case 43650: { if(executed!==0&&executed+1>maxInstructions){pc=43650;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 43650; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 43651: { if(executed!==0&&executed+2>maxInstructions){pc=43651;return save("budget",executed);}executed+=2; A = ((m[(7370) >>> 0] | 0)) | 0; pc = 43652; }
 case 43652: {  if ((((A) | 0) != ((0) | 0))) { pc = ((43794) - 1); continue runner; } pc = 43653; }
@@ -46017,7 +46017,7 @@ case 43788: {  m[(2573) >>> 0] = (64) | 0; pc = 43789; }
 case 43789: {  m[(2574) >>> 0] = ((m[(7880) >>> 0] | 0)) | 0; pc = 43790; }
 case 43790: {  m[(2575) >>> 0] = ((m[(7881) >>> 0] | 0)) | 0; pc = 43791; }
 case 43791: {  m[(2576) >>> 0] = ((m[(7882) >>> 0] | 0)) | 0; pc = 43792; }
-case 43792: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (43794) | 0; pc = (5408) - 1; continue runner; }
+case 43792: {  pc=43792; sync(); native("service:paltavola", machine); m=machine.memory; md=new DataView(m.buffer,m.byteOffset,m.byteLength); s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=43793; }
 case 43793: { if(executed!==0&&executed+1>maxInstructions){pc=43793;return save("budget",executed);}executed+=1; X = 1685024357; if (d === 0) { pc = 43793; halted = true; return save("halted", executed); } pc = (s[--d] | 0) - 1; continue runner; }
 case 43794: { if(executed!==0&&executed+4>maxInstructions){pc=43794;return save("budget",executed);}executed+=4; m[(2708) >>> 0] = ((m[(6055) >>> 0] | 0)) | 0; pc = 43795; }
 case 43795: {  m[2453]=m[2708];f64w(2440,fread(m[2453]|0)); pc=43796; }
