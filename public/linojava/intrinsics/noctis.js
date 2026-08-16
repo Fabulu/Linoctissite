@@ -3058,7 +3058,7 @@ function drawConstantMergerPolygon(machine, linked, p) {
   memory[p.SPi] = row;
 }
 
-function polymap(machine, linked) {
+function polymap(machine, linked, preRotated = false) {
   const memory = machine.memory;
   const p = polymapAddresses(linked);
   memory[p.PJgate] = 0;
@@ -3070,7 +3070,7 @@ function polymap(machine, linked) {
   }
   memory[p.PJmode] = 1;
   memory[p.PJdx] = originalVertices;
-  if ((memory[p.PJpreproject] | 0) === 0) {
+  if ((memory[p.PJpreproject] | 0) === 0 && !preRotated) {
     if (originalVertices === 3) {
       memory[p.PJnrv] = 3;
       polyRotateDirect(machine, linked, p);
@@ -8816,18 +8816,6 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
   memory[p.VHGNDtilepolys] = 0;
   memory[p.PJfwbase] = p.fw;
 
-  memory[p.VHGNDvctri] = 0;
-  const facing0 = terrainFacingDirect(machine, p, 0);
-  memory[p.VHGNDvctri] = 1;
-  const facing1 = terrainFacingDirect(machine, p, 1);
-  const facingCount = (facing0 ? 1 : 0) + (facing1 ? 1 : 0);
-  memory[p.VHGNDtilepolys] = facingCount;
-  if (facingCount === 0) {
-    memory[done] = 1;
-    return;
-  }
-  memory[p.PGtexf] = 5;
-
   const polygon = polymapAddresses(linked);
   const x0 = memory[p.VHGNDx] << 14;
   const z0 = memory[p.VHGNDz] << 14;
@@ -8905,10 +8893,6 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
         && (memory[p.VHGNDvcvisible + corner1] | 0) !== 0
         && (memory[p.VHGNDvcvisible + corner2] | 0) !== 0
         && (memory[p.VHGNDvcvisible + corner3] | 0) !== 0) {
-      projectTerrainCachedVertexDirect(machine, polygon, p, corner0);
-      projectTerrainCachedVertexDirect(machine, polygon, p, corner1);
-      projectTerrainCachedVertexDirect(machine, polygon, p, corner2);
-      projectTerrainCachedVertexDirect(machine, polygon, p, corner3);
       const minX = Math.min(memory[p.VHGNDvcpx + corner0], memory[p.VHGNDvcpx + corner1],
         memory[p.VHGNDvcpx + corner2], memory[p.VHGNDvcpx + corner3]);
       const maxX = Math.max(memory[p.VHGNDvcpx + corner0], memory[p.VHGNDvcpx + corner1],
@@ -8922,7 +8906,25 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
     }
   }
 
-  if (tileOnScreen) for (let triangle = 0; triangle < 2; triangle += 1) {
+  if (!tileOnScreen) {
+    memory[p.VHGNDvctri] = 1;
+    memory[done] = 1;
+    return;
+  }
+
+  memory[p.VHGNDvctri] = 0;
+  const facing0 = terrainFacingDirect(machine, p, 0);
+  memory[p.VHGNDvctri] = 1;
+  const facing1 = terrainFacingDirect(machine, p, 1);
+  const facingCount = (facing0 ? 1 : 0) + (facing1 ? 1 : 0);
+  memory[p.VHGNDtilepolys] = facingCount;
+  if (facingCount === 0) {
+    memory[done] = 1;
+    return;
+  }
+  memory[p.PGtexf] = 5;
+
+  for (let triangle = 0; triangle < 2; triangle += 1) {
     if (triangle === 0 ? !facing0 : !facing1) continue;
     memory[p.VHGNDvctri] = triangle;
     landedTerrainTriangle(machine, linked);
@@ -9019,23 +9021,16 @@ function cacheTerrainWorldVertexDirect(machine, p, ground, index, xInput, yInput
   storeTerrainCachedFloat(memory, ground.VHGNDvcrz0, ground.VHGNDvcrz1, index, rz);
   const visible = !Number.isNaN(rotatedZWide) && !Number.isNaN(near) && rotatedZWide >= near ? 1 : 0;
   memory[ground.VHGNDvcvisible + index] = visible;
+  if (visible !== 0) {
+    const factor = directPolySlot(memory, p, p.FSDPP) / rz;
+    memory[ground.VHGNDvcpx + index] = convertToInt32(
+      factor * rx + directPolySlot(memory, p, p.FSXC), control,
+    );
+    memory[ground.VHGNDvcpy + index] = convertToInt32(
+      factor * ry + directPolySlot(memory, p, p.FSYC), control,
+    );
+  }
   memory[ground.VHGNDvcstamp + index] = memory[ground.VHGNDvcgen];
-}
-
-function projectTerrainCachedVertexDirect(machine, p, ground, index) {
-  const memory = machine.memory;
-  if ((memory[ground.VHGNDvcvisible + index] | 0) === 0) return;
-  const control = floatingPoint(machine).control;
-  const rz = terrainCachedFloat(memory, ground.VHGNDvcrz0, ground.VHGNDvcrz1, index);
-  const rx = terrainCachedFloat(memory, ground.VHGNDvcrx0, ground.VHGNDvcrx1, index);
-  const ry = terrainCachedFloat(memory, ground.VHGNDvcry0, ground.VHGNDvcry1, index);
-  const factor = directPolySlot(memory, p, p.FSDPP) / rz;
-  memory[ground.VHGNDvcpx + index] = convertToInt32(
-    factor * rx + directPolySlot(memory, p, p.FSXC), control,
-  );
-  memory[ground.VHGNDvcpy + index] = convertToInt32(
-    factor * ry + directPolySlot(memory, p, p.FSYC), control,
-  );
 }
 
 function cacheTerrainMappedVertexDirect(machine, p, ground, index, vertex) {
@@ -9203,13 +9198,30 @@ function terrainMapped(machine, linked) {
     cacheTerrainMappedVertexDirect(machine, p, ground, index, vertex);
   }
 
+  let visibleCount = 0;
   for (let vertex = 0; vertex < 3; vertex += 1) {
     const index = vertex === 0 ? index0 : vertex === 1 ? index1 : index2;
-    if ((memory[ground.VHGNDvcvisible + index] | 0) === 0) {
-      genericTerrainMapped(machine, linked, p);
-      return;
-    }
-    projectTerrainCachedVertexDirect(machine, p, ground, index);
+    const visible = memory[ground.VHGNDvcvisible + index] | 0;
+    visibleCount += visible;
+    memory[p.rwf + vertex] = visible;
+    const x = p.fw + (p.FSRXF + vertex) * 2;
+    const y = p.fw + (p.FSRYF + vertex) * 2;
+    const z = p.fw + (p.FSRZF + vertex) * 2;
+    memory[x] = memory[ground.VHGNDvcrx0 + index]; memory[x + 1] = memory[ground.VHGNDvcrx1 + index];
+    memory[y] = memory[ground.VHGNDvcry0 + index]; memory[y + 1] = memory[ground.VHGNDvcry1 + index];
+    memory[z] = memory[ground.VHGNDvcrz0 + index]; memory[z + 1] = memory[ground.VHGNDvcrz1 + index];
+  }
+  copyQword(memory, p.fw + (p.FSRXF + 2) * 2, p.fw + (p.FSRXF + 3) * 2);
+  copyQword(memory, p.fw + (p.FSRYF + 2) * 2, p.fw + (p.FSRYF + 3) * 2);
+  copyQword(memory, p.fw + (p.FSRZF + 2) * 2, p.fw + (p.FSRZF + 3) * 2);
+  memory[p.rwf + 3] = memory[p.rwf + 2];
+  memory[p.PJdoflag] = visibleCount + (memory[p.rwf + 2] | 0);
+  if (visibleCount !== 3) {
+    memory[p.PJnrv] = 3;
+    memory[p.PJpreproject] = 0;
+    polymap(machine, linked, true);
+    memory[spterrain] = 0;
+    return;
   }
 
   for (let vertex = 0; vertex < 3; vertex += 1) {
