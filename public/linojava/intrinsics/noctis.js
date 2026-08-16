@@ -6091,10 +6091,9 @@ function rockCommandBounds(commands) {
   return [minX, minY, minZ, maxX, maxY, maxZ];
 }
 
-function rockBoundsMayRender(machine, p, bounds, margin = 2) {
+function terrainBoundsContext(machine, p) {
   const memory = machine.memory;
   const view = machine.noctisDataView ??= dataView(memory);
-  const control = floatingPoint(machine).control;
   const cameraX = directPolySlotView(view, p, p.FSCAMX);
   const cameraY = directPolySlotView(view, p, p.FSCAMY);
   const cameraZ = directPolySlotView(view, p, p.FSCAMZ);
@@ -6106,37 +6105,72 @@ function rockBoundsMayRender(machine, p, bounds, margin = 2) {
   const distance = directPolySlotView(view, p, p.FSDPP);
   const centerX = directPolySlotView(view, p, p.FSXC);
   const centerY = directPolySlotView(view, p, p.FSYC);
-  let visibleCorners = 0;
-  let minScreenX = Infinity; let maxScreenX = -Infinity;
-  let minScreenY = Infinity; let maxScreenY = -Infinity;
-  for (let corner = 0; corner < 8; corner += 1) {
-    const worldX = bounds[(corner & 1) !== 0 ? 3 : 0];
-    const worldY = bounds[(corner & 2) !== 0 ? 4 : 1];
-    const worldZ = bounds[(corner & 4) !== 0 ? 5 : 2];
-    const z = roundFloat32(worldZ - cameraZ, control);
-    const x = roundFloat32(worldX - cameraX, control);
-    const y = roundFloat32(worldY - cameraY, control);
-    const rx = roundFloat32(x * betaCos + z * betaSin, control);
-    const z2 = roundFloat32(z * betaCos - x * betaSin, control);
-    const rotatedZWide = y * alphaSin + z2 * alphaCos;
-    if (Number.isNaN(rotatedZWide) || rotatedZWide < near) continue;
-    const rz = roundFloat32(rotatedZWide, control);
-    const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
-    const factor = distance / rz;
-    const screenX = factor * rx + centerX;
-    const screenY = factor * ry + centerY;
-    if (screenX < minScreenX) minScreenX = screenX;
-    if (screenX > maxScreenX) maxScreenX = screenX;
-    if (screenY < minScreenY) minScreenY = screenY;
-    if (screenY > maxScreenY) maxScreenY = screenY;
-    visibleCorners += 1;
-  }
-  if (visibleCorners === 0) return false;
-  if (visibleCorners !== 8) return true;
-  return maxScreenX >= p.PGLBX - margin
-    && minScreenX <= p.PGUBX + margin
-    && maxScreenY >= p.PGLBY - margin
-    && minScreenY <= p.PGUBY + margin;
+  const planeNorms = (margin) => {
+    const leftOffset = centerX - (p.PGLBX - margin);
+    const rightOffset = centerX - (p.PGUBX + margin);
+    const topOffset = centerY - (p.PGLBY - margin);
+    const bottomOffset = centerY - (p.PGUBY + margin);
+    return [
+      Math.sqrt(distance * distance + leftOffset * leftOffset),
+      Math.sqrt(distance * distance + rightOffset * rightOffset),
+      Math.sqrt(distance * distance + topOffset * topOffset),
+      Math.sqrt(distance * distance + bottomOffset * bottomOffset),
+    ];
+  };
+  return {
+    p, control: floatingPoint(machine).control,
+    cameraX, cameraY, cameraZ, betaSin, betaCos, alphaCos, alphaSin, near,
+    distance, centerX, centerY,
+    planeNorms2: planeNorms(2),
+    planeNorms10: planeNorms(10),
+  };
+}
+
+function rockBoundsMayRender(machine, p, bounds, margin = 2) {
+  const context = machine.noctisTerrainBoundsContext?.p === p
+    ? machine.noctisTerrainBoundsContext : terrainBoundsContext(machine, p);
+  const {
+    control, cameraX, cameraY, cameraZ, betaSin, betaCos, alphaCos, alphaSin,
+    near, distance, centerX, centerY,
+  } = context;
+  const worldX = (bounds[0] + bounds[3]) * 0.5;
+  const worldY = (bounds[1] + bounds[4]) * 0.5;
+  const worldZ = (bounds[2] + bounds[5]) * 0.5;
+  const halfX = (bounds[3] - bounds[0]) * 0.5;
+  const halfY = (bounds[4] - bounds[1]) * 0.5;
+  const halfZ = (bounds[5] - bounds[2]) * 0.5;
+  // The AABB's circumscribed sphere is deliberately widened. This absorbs the
+  // binary32 spills in the per-vertex source transform, so this cheap test may
+  // admit extra work but can never remove a potentially visible model.
+  const radius = Math.sqrt(halfX * halfX + halfY * halfY + halfZ * halfZ) + 128;
+  const z = roundFloat32(worldZ - cameraZ, control);
+  const x = roundFloat32(worldX - cameraX, control);
+  const y = roundFloat32(worldY - cameraY, control);
+  const rx = roundFloat32(x * betaCos + z * betaSin, control);
+  const z2 = roundFloat32(z * betaCos - x * betaSin, control);
+  const rz = roundFloat32(y * alphaSin + z2 * alphaCos, control);
+  const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
+  if (!Number.isFinite(rx) || !Number.isFinite(ry)
+      || !Number.isFinite(rz) || !Number.isFinite(radius)) return true;
+  if (rz + radius < near) return false;
+  if (rz - radius <= near) return true;
+  const leftOffset = centerX - (p.PGLBX - margin);
+  const rightOffset = centerX - (p.PGUBX + margin);
+  const topOffset = centerY - (p.PGLBY - margin);
+  const bottomOffset = centerY - (p.PGUBY + margin);
+  const horizontal = distance * rx;
+  const vertical = distance * ry;
+  const left = horizontal + leftOffset * rz;
+  const right = horizontal + rightOffset * rz;
+  const top = vertical + topOffset * rz;
+  const bottom = vertical + bottomOffset * rz;
+  const norms = margin === 10 ? context.planeNorms10 : context.planeNorms2;
+  return !(
+    left < -radius * norms[0]
+    || right > radius * norms[1]
+    || top < -radius * norms[2]
+    || bottom > radius * norms[3]
+  );
 }
 
 const TREE_POLYGON_STATE_NAMES = Object.freeze([
@@ -6930,6 +6964,7 @@ function renderTerrainTileDetails(machine, linked, p, handles, x, z) {
 function terrainTraverseFaithful(machine, linked) {
   const memory = machine.memory;
   const p = landedTerrainAddresses(linked);
+  machine.noctisTerrainBoundsContext = terrainBoundsContext(machine, polymapAddresses(linked));
   const fullTile = codeHandle(linked, "VHGND tile");
   const detailHandles = {
     capsule: codeHandle(linked, "VHGND capsule"),
