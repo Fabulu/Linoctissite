@@ -249,7 +249,12 @@ const SERVICE_IDS = Object.freeze({
   polymap: "service:pgpolymap",
   terrainMapped: "service:vhgndterrainmapped",
   terrainFacing: "service:vhgndterrainfacing",
+  terrainTileFauna: "service:vhgndrendertilefauna",
+  terrainRock: "service:vhgndrock",
   terrainTraverse: "service:vhgndtraversefaithful",
+  terrainVegetation: "service:vhgndveget",
+  terrainBush: "service:vhgndbush",
+  terrainTree: "service:vhgndtree",
   waterBackdrop: "service:vhgndwaterbackdrop",
   denseAtmosphere: "service:vhgnddenseatmosphere",
   terrainRenderRandom: "service:vhgndrenderrandom",
@@ -303,6 +308,7 @@ const rasterAddressCaches = new WeakMap();
 const poly3dAddressCaches = new WeakMap();
 const polymapAddressCaches = new WeakMap();
 const landedTerrainAddressCaches = new WeakMap();
+const landedRockAddressCaches = new WeakMap();
 const denseAtmosphereAddressCaches = new WeakMap();
 const rectangleAddressCaches = new WeakMap();
 const pixelEffectCaches = new WeakMap();
@@ -5384,7 +5390,7 @@ function landedTileAdmissionAt(machine, linked, p, x, z, camtx, camtz) {
   const raw = roundedDistance >> 14;
   memory[p.VHGNDrawdepth] = raw;
   memory[p.VHGNDdepth] = Math.max(raw - 1, 0);
-  landedTerrainTileCore(machine, linked, manhattan, raw);
+  if (!machine.noctisDisableTerrainTileCore) landedTerrainTileCore(machine, linked, manhattan, raw);
 }
 
 function landedTerrainAddresses(linked) {
@@ -5393,7 +5399,7 @@ function landedTerrainAddresses(linked) {
   const names = [
     "VHGNDnativecomplete", "VHGNDmirror", "VHGNDruinpass", "VHGNDruinanchor",
     "VHGNDdepth", "VHGNDshade", "VHGNDh1", "VHGNDs1", "VHGNDs2", "VHGNDs3", "VHGNDs4",
-    "GRiptype", "VHGNDsctype", "VHGNDruined", "SPtinta", "DBcol", "SPescr", "DBflar", "DBent",
+    "GRiptype", "VHGNDsctype", "VHGNDruined", "VHGNDruindrawn", "VHGNDruins", "SPtinta", "DBcol", "SPescr", "DBflar", "DBent",
     "SPcull", "VHGNDtilepolys", "PJfwbase", "fw", "VHGNDvctri", "FCret", "PGtexf", "RPSM",
     "VHGNDnormindex", "VHGNDnormgen", "VHGNDnormstamp", "VHGNDnormx", "VHGNDnormy", "VHGNDnormz",
     "VHGNDvcgen", "VHGNDvcindex", "VHGNDvcstamp", "VHGNDvcvisible",
@@ -5403,6 +5409,9 @@ function landedTerrainAddresses(linked) {
     "VHGNDx", "VHGNDz", "VHGNDxlo", "VHGNDxhi", "VHGNDzlo", "VHGNDzhi",
     "VHGNDlodstep", "VHGNDlodradius", "VHGNDbackspan", "VHGNDmindepth", "VHGNDmaxdepth",
     "VHGNDcamtx", "VHGNDcamtz", "VHGNDcamx", "VHGNDcamz", "VHGlanded", "VHGNDbeta", "VHGNDtmp",
+    "VHGNDdropx", "VHGNDdropz", "VHGNDanimals", "VHGNDbirds", "VHGNDanidata", "VHGNDbirddata",
+    "VHGNDanisingle", "VHGNDanii", "VHGNDanip", "VHGNDanix", "VHGNDaniz", "VHGNDviewrz",
+    "VHGNDmii", "VHGNDbii", "VHGNDfaunamid", "VHGNDfaunabid", "SPskipmid",
     "VHGNDalpha", "VHGNDwaterhorizon", "VHGNDwaterden", "VHGNDwatery",
     "GRSKnightzone", "VHGNDwaterbase", "VHGNDwaterptr", "VHGNDwatercount",
     "VHGNDmanhattan", "VHGNDrawdepth", "VHGNDvv",
@@ -5495,9 +5504,467 @@ function denseAtmosphere(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function terrainTileFauna(machine, linked) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  const animals = codeHandle(linked, "VHGND render animals");
+  const birds = codeHandle(linked, "VHGND render birds");
+  if (typeof machine.callCode !== "function" || animals < 1 || birds < 1) {
+    throw new Error("Faithful terrain fauna requires nested Lino model dispatch");
+  }
+  const x = memory[p.VHGNDx] | 0;
+  const z = memory[p.VHGNDz] | 0;
+  const planetType = memory[p.GRiptype] | 0;
+  if (planetType !== 3) {
+    memory[p.VHGNDanisingle] = 0;
+    memory[p.SPskipmid] = 0;
+    machine.A = planetType;
+    machine.X = LINO_DONE;
+    return;
+  }
+  let mammal = 0;
+  let bird = 0;
+  const animalCount = memory[p.VHGNDanimals] >>> 0;
+  const birdCount = memory[p.VHGNDbirds] >>> 0;
+  memory[p.VHGNDmii] = 0;
+  memory[p.VHGNDbii] = 0;
+  memory[p.VHGNDanisingle] = 1;
+  while (mammal < animalCount || bird < birdCount) {
+    const mammalRecord = p.VHGNDanidata + mammal * 10;
+    const birdRecord = p.VHGNDbirddata + bird * 12;
+    const mammalId = mammal < animalCount ? memory[mammalRecord + 9] >>> 0 : 0x7fffffff;
+    const birdId = bird < birdCount ? memory[birdRecord + 10] >>> 0 : 0x7fffffff;
+    memory[p.VHGNDfaunamid] = mammalId;
+    memory[p.VHGNDfaunabid] = birdId;
+    const chooseMammal = mammalId < birdId;
+    const record = chooseMammal ? mammalRecord : birdRecord;
+    memory[p.VHGNDanip] = record;
+    memory[p.VHGNDanix] = memory[record];
+    memory[p.VHGNDaniz] = memory[record + 1];
+    machine.C = record;
+    const cellX = Math.max(0, Math.min(199, (memory[p.VHGNDanix] / 16384) | 0));
+    const cellZ = Math.max(0, Math.min(199, (memory[p.VHGNDaniz] / 16384) | 0));
+    const matches = cellX === x && cellZ === z;
+    memory[p.VHGNDviewrz] = matches ? 1 : 0;
+    if (matches) {
+      memory[p.VHGNDanii] = chooseMammal ? mammal : bird;
+      machine.callCode(chooseMammal ? animals : birds);
+    }
+    if (chooseMammal) {
+      mammal += 1;
+      memory[p.VHGNDmii] = mammal;
+    } else {
+      bird += 1;
+      memory[p.VHGNDbii] = bird;
+    }
+  }
+  memory[p.VHGNDfaunamid] = 0x7fffffff;
+  memory[p.VHGNDfaunabid] = 0x7fffffff;
+  memory[p.VHGNDanisingle] = 0;
+  memory[p.SPskipmid] = 0;
+  machine.A = 0x7fffffff;
+  machine.X = LINO_DONE;
+}
+
+function callTerrainSourceModel(machine, linked, label) {
+  const source = codeHandle(linked, label);
+  if (typeof machine.callCode !== "function" || source < 1) {
+    throw new Error(`Source terrain model ${label} requires nested Lino dispatch`);
+  }
+  machine.callCode(source);
+  machine.X = LINO_DONE;
+}
+
+function landedRockAddresses(linked) {
+  let cached = landedRockAddressCaches.get(linked);
+  if (cached) return cached;
+  const names = [
+    "VHGNDrocktile", "VHGNDrockdensity", "VHGNDcdown", "VHGNDrockworkscale",
+    "VHGNDrockscale", "VHGNDrockpeak", "VHGNDquartz", "VHGNDoox", "VHGNDooy",
+    "VHGNDooz", "VHGNDrx0", "VHGNDrx1", "VHGNDrx2", "VHGNDrz0", "VHGNDrz1",
+    "VHGNDrz2", "VHGNDry0", "VHGNDry1", "VHGNDry2", "VHGNDrcolor",
+    "VHGNDrcol0", "VHGNDrcol1", "VHGNDrcol2", "VHGNDrtop", "VHGNDrox",
+    "VHGNDroz", "VHGNDroy", "VHGNDviewx", "VHGNDviewz", "VHGNDheight",
+    "VHGNDtilex", "VHGNDtilez", "VHGNDfx", "VHGNDfz", "VHGNDh1i",
+    "VHGNDh2i", "VHGNDh3i", "VHGNDh4i", "VHGNDpy", "GRcwc", "GRcwn",
+  ];
+  cached = {
+    ...landedTerrainAddresses(linked),
+    ...polymapAddresses(linked),
+    ...Object.fromEntries(names.map((name) => [name, address(linked, name)])),
+  };
+  landedRockAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function landedEyeHeightAt(machine, linked, p, worldX, worldZ) {
+  const memory = machine.memory;
+  const tileX = Math.max(0, Math.min(198, worldX >> 14));
+  const tileZ = Math.max(0, Math.min(198, worldZ >> 14));
+  const fx = worldX & 16383;
+  const fz = worldZ & 16383;
+  const h1 = tileZ * 200 + tileX;
+  const surface = p.surface;
+  const s1 = memory[surface + h1] & 255;
+  const s2 = memory[surface + h1 + 1] & 255;
+  const s3 = memory[surface + h1 + 201] & 255;
+  const s4 = memory[surface + h1 + 200] & 255;
+  memory[p.VHGNDcamx] = worldX;
+  memory[p.VHGNDcamz] = worldZ;
+  memory[p.VHGNDtilex] = tileX;
+  memory[p.VHGNDtilez] = tileZ;
+  memory[p.VHGNDfx] = fx;
+  memory[p.VHGNDfz] = fz;
+  memory[p.VHGNDh1] = h1;
+  memory[p.VHGNDs1] = s1;
+  memory[p.VHGNDs2] = s2;
+  memory[p.VHGNDs3] = s3;
+  memory[p.VHGNDs4] = s4;
+  memory[p.VHGNDh1i] = -(s1 << 11);
+  memory[p.VHGNDh2i] = -(s2 << 11);
+  memory[p.VHGNDh3i] = -(s3 << 11);
+  memory[p.VHGNDh4i] = -(s4 << 11);
+  writeFloat64(memory, p.FB0, 1 / 16384);
+  landedHeightTriangle(machine, linked, fx + fz < 16384);
+  memory[p.FS0] = memory[p.VHGNDpy];
+  landedHeightChop(machine, linked);
+  const height = ((memory[p.FI] | 0) - 600) | 0;
+  memory[p.VHGNDheight] = height;
+  return height;
+}
+
+function loadTriangleCoordinates(machine, p,
+  x0, y0, z0, x1, y1, z1, x2, y2, z2, duplicateApex = false) {
+  const memory = machine.memory;
+  const floats = memory[p.PJfwbase] >>> 0;
+  const view = dataView(memory);
+  writeFloat64View(view, floats + 504, x0); writeFloat64View(view, floats + 506, x1); writeFloat64View(view, floats + 508, x2);
+  writeFloat64View(view, floats + 512, y0); writeFloat64View(view, floats + 514, y1); writeFloat64View(view, floats + 516, y2);
+  writeFloat64View(view, floats + 520, z0); writeFloat64View(view, floats + 522, z1); writeFloat64View(view, floats + 524, z2);
+  if (duplicateApex) {
+    writeFloat64View(view, floats + 510, x2);
+    writeFloat64View(view, floats + 518, y2);
+    writeFloat64View(view, floats + 526, z2);
+  }
+  const count = duplicateApex ? 4 : 3;
+  memory[p.VHGNDvi] = count - 1;
+  memory[p.VHGNDvv] = z2;
+  memory[p.VHGNDvslot] = p.FSINZ;
+  memory[p.PGFi] = p.FSINZ + count - 1;
+}
+
+function loadRockTriangle(machine, p, vertices, duplicateApex = false) {
+  loadTriangleCoordinates(machine, p,
+    vertices[0][0], vertices[0][1], vertices[0][2],
+    vertices[1][0], vertices[1][1], vertices[1][2],
+    vertices[2][0], vertices[2][1], vertices[2][2], duplicateApex);
+}
+
+function renderRockCommand(machine, linked, p, command) {
+  loadTriangleCoordinates(machine, p,
+    command[0], command[1], command[2], command[3], command[4], command[5],
+    command[6], command[7], command[8], command[10] !== 0);
+  mappedFacing(machine, linked);
+  if ((machine.memory[p.FCret] | 0) === 0) return;
+  machine.memory[p.DBcol] = command[9];
+  machine.memory[p.SPtinta] = command[9];
+  if (command[10] !== 0) {
+    machine.memory[p.PJnrv] = 4;
+    polymap(machine, linked);
+  } else {
+    machine.memory[p.PJnrv] = 3;
+    poly3d(machine, linked);
+  }
+}
+
+function rockCommandBounds(commands) {
+  let minX = Infinity; let minY = Infinity; let minZ = Infinity;
+  let maxX = -Infinity; let maxY = -Infinity; let maxZ = -Infinity;
+  for (const command of commands) {
+    for (let vertex = 0; vertex < 3; vertex += 1) {
+      const offset = vertex * 3;
+      const x = command[offset]; const y = command[offset + 1]; const z = command[offset + 2];
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    }
+  }
+  return [minX, minY, minZ, maxX, maxY, maxZ];
+}
+
+function rockBoundsMayRender(machine, p, bounds) {
+  const memory = machine.memory;
+  const control = floatingPoint(machine).control;
+  const cameraX = directPolySlot(memory, p, p.FSCAMX);
+  const cameraY = directPolySlot(memory, p, p.FSCAMY);
+  const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
+  const betaSin = directPolySlot(memory, p, p.FSTSB);
+  const betaCos = directPolySlot(memory, p, p.FSTCB);
+  const alphaCos = directPolySlot(memory, p, p.FSTCA);
+  const alphaSin = directPolySlot(memory, p, p.FSTSA);
+  const near = directPolySlot(memory, p, p.FSUNEG);
+  const distance = directPolySlot(memory, p, p.FSDPP);
+  const centerX = directPolySlot(memory, p, p.FSXC);
+  const centerY = directPolySlot(memory, p, p.FSYC);
+  let visibleCorners = 0;
+  let minScreenX = Infinity; let maxScreenX = -Infinity;
+  let minScreenY = Infinity; let maxScreenY = -Infinity;
+  for (let corner = 0; corner < 8; corner += 1) {
+    const worldX = bounds[(corner & 1) !== 0 ? 3 : 0];
+    const worldY = bounds[(corner & 2) !== 0 ? 4 : 1];
+    const worldZ = bounds[(corner & 4) !== 0 ? 5 : 2];
+    const z = roundFloat32(worldZ - cameraZ, control);
+    const x = roundFloat32(worldX - cameraX, control);
+    const y = roundFloat32(worldY - cameraY, control);
+    const rx = roundFloat32(x * betaCos + z * betaSin, control);
+    const z2 = roundFloat32(z * betaCos - x * betaSin, control);
+    const rotatedZWide = y * alphaSin + z2 * alphaCos;
+    if (Number.isNaN(rotatedZWide) || rotatedZWide < near) continue;
+    const rz = roundFloat32(rotatedZWide, control);
+    const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
+    const factor = distance / rz;
+    const screenX = factor * rx + centerX;
+    const screenY = factor * ry + centerY;
+    if (screenX < minScreenX) minScreenX = screenX;
+    if (screenX > maxScreenX) maxScreenX = screenX;
+    if (screenY < minScreenY) minScreenY = screenY;
+    if (screenY > maxScreenY) maxScreenY = screenY;
+    visibleCorners += 1;
+  }
+  if (visibleCorners === 0) return false;
+  if (visibleCorners !== 8) return true;
+  const margin = 2;
+  return maxScreenX >= (memory[p.PGLBX] | 0) - margin
+    && minScreenX <= (memory[p.PGUBX] | 0) + margin
+    && maxScreenY >= (memory[p.PGLBY] | 0) - margin
+    && minScreenY <= (memory[p.PGUBY] | 0) + margin;
+}
+
+function terrainRock(machine, linked) {
+  if (machine.noctisDisableTerrainRock) {
+    const source = codeHandle(linked, "VHGND rock");
+    if (typeof machine.callCode !== "function" || source < 1) {
+      throw new Error("Source terrain rock path requires nested Lino dispatch");
+    }
+    machine.callCode(source);
+    machine.X = LINO_DONE;
+    return;
+  }
+  const memory = machine.memory;
+  const p = landedRockAddresses(linked);
+  const truncDiv = (left, right) => Math.trunc((left | 0) / (right | 0)) | 0;
+  const random = (mask) => {
+    memory[p.SUfmask] = mask;
+    return landedFastRandom(machine, linked, mask) | 0;
+  };
+  const scaledRandom = (scale) => truncDiv(Math.imul(random(32767), scale), 32767);
+  const rockTile = memory[p.VHGNDh1] | 0;
+  const viewX = memory[p.VHGNDviewx] | 0;
+  const viewZ = memory[p.VHGNDviewz] | 0;
+  const depth = memory[p.VHGNDdepth] | 0;
+  let objectX = memory[p.VHGNDoox] | 0;
+  let objectY = memory[p.VHGNDooy] | 0;
+  let objectZ = memory[p.VHGNDooz] | 0;
+  machine.noctisRockModels ??= new Map();
+  const modelKey = `${memory[p.VHGNDseed] | 0}:${memory[p.GRiptype] | 0}`
+    + `:${memory[p.VHGNDsctype] | 0}:${rockTile}:${depth}:${objectX}:${objectY}:${objectZ}`
+    + `:${memory[p.VHGNDrockdensity] | 0}:${memory[p.VHGNDrockscale] | 0}`
+    + `:${memory[p.VHGNDrockpeak] | 0}:${memory[p.VHGNDquartz] | 0}`;
+  const cachedModel = machine.noctisRockModels.get(modelKey);
+  if (cachedModel) {
+    memory[p.SPcull] = 0;
+    memory[p.DBflar] = depth <= 2 ? memory[p.VHGNDquartz] : 0;
+    memory[p.DBent] = 0;
+    if (depth <= 2) {
+      memory[p.SPflar] = memory[p.VHGNDquartz];
+      memory[p.SPhalf] = 0;
+      memory[p.SPescr] = 0;
+      memory[p.PGtexf] = 5;
+      memory[p.SPsrc] = 1;
+    }
+    if (rockBoundsMayRender(machine, p, cachedModel.bounds)) {
+      for (const command of cachedModel.commands) renderRockCommand(machine, linked, p, command);
+    }
+    memory[p.VHGNDoox] = cachedModel.objectX;
+    memory[p.VHGNDooy] = cachedModel.objectY;
+    memory[p.VHGNDooz] = cachedModel.objectZ;
+    memory[p.VHGNDrockworkscale] = cachedModel.workScale;
+    memory[p.VHGNDcdown] = 0;
+    memory[p.SUfseed] = cachedModel.seed;
+    memory[p.SUfeax] = cachedModel.eax;
+    memory[p.SUfval] = cachedModel.randomValue;
+    memory[p.SUfmask] = cachedModel.randomMask;
+    memory[p.SPflar] = depth <= 2 ? 0 : memory[p.SPflar];
+    memory[p.DBflar] = 0;
+    memory[p.SPhalf] = 0;
+    machine.X = LINO_DONE;
+    return;
+  }
+  const commands = [];
+  memory[p.VHGNDrocktile] = rockTile;
+  memory[p.SUfseed] = ((Math.imul(memory[p.VHGNDz] | 0, 200) + (memory[p.VHGNDx] | 0)) | 3) | 0;
+  let remaining = random(memory[p.VHGNDrockdensity] | 0);
+  memory[p.VHGNDcdown] = remaining;
+  if (remaining === 0) {
+    machine.X = LINO_DONE;
+    return;
+  }
+  const rockHeight = (x, z) => {
+    memory[p.VHGNDrox] = x;
+    memory[p.VHGNDroz] = z;
+    const y = (landedEyeHeightAt(machine, linked, p, x, z) + 600) | 0;
+    memory[p.VHGNDroy] = y;
+    memory[p.VHGNDcamx] = viewX;
+    memory[p.VHGNDcamz] = viewZ;
+    memory[p.VHGNDh1] = rockTile;
+    return y;
+  };
+  const drawFace = (vertices, color) => {
+    commands.push([
+      vertices[0][0], vertices[0][1], vertices[0][2],
+      vertices[1][0], vertices[1][1], vertices[1][2],
+      vertices[2][0], vertices[2][1], vertices[2][2], color, depth < 2 ? 1 : 0,
+    ]);
+    loadRockTriangle(machine, p, vertices, depth < 2);
+    mappedFacing(machine, linked);
+    if ((memory[p.FCret] | 0) === 0) return;
+    memory[p.DBcol] = color;
+    memory[p.SPtinta] = color;
+    if (depth < 2) {
+      memory[p.PJnrv] = 4;
+      polymap(machine, linked);
+    } else {
+      memory[p.PJnrv] = 3;
+      poly3d(machine, linked);
+    }
+  };
+
+  memory[p.SPcull] = 0;
+  memory[p.DBflar] = 0;
+  memory[p.DBent] = 0;
+  if (depth > 2) {
+    const scale = memory[p.VHGNDrockscale] | 0;
+    const peak = memory[p.VHGNDrockpeak] | 0;
+    const x0 = objectX;
+    const z0 = objectZ;
+    const x1 = objectX;
+    const z1 = objectZ;
+    const x2 = (objectX + scale - scaledRandom(scale)) | 0;
+    const z2 = (objectZ + scale - scaledRandom(scale)) | 0;
+    const y0 = (objectY - 100 - scaledRandom(peak)) | 0;
+    const y1 = (objectY - 100 - scaledRandom(peak)) | 0;
+    const y2 = (objectY - 100 - scaledRandom(peak)) | 0;
+    const color = random(71);
+    memory[p.VHGNDrx0] = x0; memory[p.VHGNDrz0] = z0;
+    memory[p.VHGNDrx1] = x1; memory[p.VHGNDrz1] = z1;
+    memory[p.VHGNDrx2] = x2; memory[p.VHGNDrz2] = z2;
+    memory[p.VHGNDry0] = y0; memory[p.VHGNDry1] = y1; memory[p.VHGNDry2] = y2;
+    memory[p.DBcol] = color;
+    commands.push([x0, y0, z0, x1, y1, z1, x2, y2, z2, color, 0]);
+    loadRockTriangle(machine, p, [[x0, y0, z0], [x1, y1, z1], [x2, y2, z2]]);
+    mappedFacing(machine, linked);
+    if ((memory[p.FCret] | 0) !== 0) {
+      memory[p.PJnrv] = 3;
+      poly3d(machine, linked);
+    }
+    machine.noctisRockModels.set(modelKey, {
+      commands, bounds: rockCommandBounds(commands), objectX, objectY, objectZ,
+      workScale: memory[p.VHGNDrockworkscale] | 0,
+      seed: memory[p.SUfseed] | 0, eax: memory[p.SUfeax] | 0,
+      randomValue: memory[p.SUfval] | 0, randomMask: memory[p.SUfmask] | 0,
+    });
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  let workScale = Math.imul(memory[p.VHGNDrockscale] | 0, 5);
+  memory[p.VHGNDrockworkscale] = workScale;
+  memory[p.SPflar] = memory[p.VHGNDquartz];
+  memory[p.DBflar] = memory[p.VHGNDquartz];
+  memory[p.SPhalf] = 0;
+  memory[p.SPescr] = 0;
+  memory[p.PGtexf] = 5;
+  memory[p.SPsrc] = 1;
+  while (remaining > 0) {
+    const x0 = (objectX - scaledRandom(workScale)) | 0;
+    const z0 = (objectZ - scaledRandom(workScale)) | 0;
+    const x1 = objectX;
+    const z1 = (objectZ + scaledRandom(workScale)) | 0;
+    const x2 = (objectX + scaledRandom(workScale)) | 0;
+    const z2 = (objectZ - scaledRandom(workScale)) | 0;
+    const baseColor = random(63);
+    const color0 = (baseColor + random(7)) | 0;
+    const color1 = (baseColor + random(15)) | 0;
+    const color2 = (baseColor + random(31)) | 0;
+    const top = (objectY - 100 - scaledRandom(memory[p.VHGNDrockpeak] | 0)) | 0;
+    const y0 = rockHeight(x0, z0);
+    const y1 = rockHeight(x1, z1);
+    const y2 = rockHeight(x2, z2);
+    memory[p.VHGNDrx0] = x0; memory[p.VHGNDrz0] = z0; memory[p.VHGNDry0] = y0;
+    memory[p.VHGNDrx1] = x1; memory[p.VHGNDrz1] = z1; memory[p.VHGNDry1] = y1;
+    memory[p.VHGNDrx2] = x2; memory[p.VHGNDrz2] = z2; memory[p.VHGNDry2] = y2;
+    memory[p.VHGNDrcolor] = baseColor;
+    memory[p.VHGNDrcol0] = color0; memory[p.VHGNDrcol1] = color1; memory[p.VHGNDrcol2] = color2;
+    memory[p.VHGNDrtop] = top;
+    drawFace([[x0, y0, z0], [x1, y1, z1], [objectX, top, objectZ]], color0);
+    drawFace([[x1, y1, z1], [x2, y2, z2], [objectX, top, objectZ]], color1);
+    drawFace([[x2, y2, z2], [x0, y0, z0], [objectX, top, objectZ]], color2);
+
+    const move = () => truncDiv(Math.imul(Math.imul(random(32767), 1000), remaining), 32767);
+    objectX = (objectX + move() - move()) | 0;
+    objectZ = (objectZ + move() - move()) | 0;
+    objectY = rockHeight(objectX, objectZ);
+    memory[p.VHGNDoox] = objectX;
+    memory[p.VHGNDooy] = objectY;
+    memory[p.VHGNDooz] = objectZ;
+    workScale = truncDiv(workScale, 2);
+    memory[p.VHGNDrockworkscale] = workScale;
+    remaining -= 1;
+    memory[p.VHGNDcdown] = remaining;
+  }
+  memory[p.SPflar] = 0;
+  memory[p.DBflar] = 0;
+  memory[p.SPcull] = 0;
+  memory[p.SPhalf] = 0;
+  machine.noctisRockModels.set(modelKey, {
+    commands, bounds: rockCommandBounds(commands), objectX, objectY, objectZ, workScale,
+    seed: memory[p.SUfseed] | 0, eax: memory[p.SUfeax] | 0,
+    randomValue: memory[p.SUfval] | 0, randomMask: memory[p.SUfmask] | 0,
+  });
+  machine.X = LINO_DONE;
+}
+
+function renderTerrainTileDetails(machine, linked, p, handles, x, z) {
+  const memory = machine.memory;
+  if ((memory[p.VHGNDmirror] | 0) !== 0 || (memory[p.VHGNDruinpass] | 0) !== 0
+      || (memory[p.VHGNDlodstep] | 0) !== 1) return;
+
+  if (((memory[p.VHGNDdropx] / 16384) | 0) === x
+      && ((memory[p.VHGNDdropz] / 16384) | 0) === z) machine.callCode(handles.capsule);
+
+  const depth = memory[p.VHGNDdepth] | 0;
+  if (depth > 40 || (depth > 8 && (memory[p.VHGNDtilepolys] | 0) === 0)) return;
+
+  terrainTileFauna(machine, linked);
+
+  const objectChart = noctisBuffer(linked, "ROBJ");
+  if ((memory[objectChart + z * 200 + x] & 3) !== 0) machine.callCode(handles.objects);
+}
+
 function terrainTraverseFaithful(machine, linked) {
   const memory = machine.memory;
   const p = landedTerrainAddresses(linked);
+  const fullTile = codeHandle(linked, "VHGND tile");
+  const detailHandles = {
+    capsule: codeHandle(linked, "VHGND capsule"),
+    animals: codeHandle(linked, "VHGND render animals"),
+    birds: codeHandle(linked, "VHGND render birds"),
+    objects: codeHandle(linked, "VHGND tile objects"),
+  };
+  if (typeof machine.callCode !== "function" || fullTile < 1
+      || Object.values(detailHandles).some((handle) => handle < 1)) {
+    throw new Error("Faithful terrain traversal requires nested Lino tile dispatch");
+  }
   machine.X = LINO_DONE;
   const camtx = memory[p.VHGNDcamtx] | 0;
   const camtz = memory[p.VHGNDcamtz] | 0;
@@ -5521,6 +5988,9 @@ function terrainTraverseFaithful(machine, linked) {
     memory[p.VHGNDz] = z;
     memory[p.VHGNDnativecomplete] = 0;
     landedTileAdmissionAt(machine, linked, p, x, z, camtx, camtz);
+    const completed = memory[p.VHGNDnativecomplete] | 0;
+    if (completed === 0) machine.callCode(fullTile);
+    else if (completed === 1) renderTerrainTileDetails(machine, linked, p, detailHandles, x, z);
   };
 
   if (beta < 45 || beta >= 315) {
@@ -8266,6 +8736,16 @@ function rectanglePixelWriter(memory, p, effect) {
     alphaDim(pointer - 1, amount); alphaDim(pointer + 1, amount);
     alphaDim(pointer - width, amount); alphaDim(pointer + width, amount);
   };
+  const addPackedAmounts = (left, right) => (
+    Math.min((left & 0xff) + (right & 0xff), 0xff)
+    | Math.min((left & 0xff00) + (right & 0xff00), 0xff00)
+    | Math.min((left & 0xff0000) + (right & 0xff0000), 0xff0000)
+  );
+  const doublePackedAmount = (amount) => (
+    Math.min((amount & 0xff) * 2, 0xff)
+    | Math.min((amount & 0xff00) * 2, 0xff00)
+    | Math.min((amount & 0xff0000) * 2, 0xff0000)
+  );
   let write;
   switch (effect.kind) {
     case "null": write = () => {}; break;
@@ -8302,16 +8782,36 @@ function rectanglePixelWriter(memory, p, effect) {
     case "aaLight": write = antialiasLight; break;
     case "aaDim": write = antialiasDim; break;
     case "doubleAaLight": write = (pointer, color) => {
-      antialiasLight(pointer, (color & 0xfcfcfc) >>> 2);
+      const quarter = (color & 0xfcfcfc) >>> 2;
       const half = (color & 0xfefefe) >>> 1;
-      antialiasLight(pointer - 1, half); antialiasLight(pointer + 1, half);
-      antialiasLight(pointer - width, half); antialiasLight(pointer + width, half);
+      const quarterEdge = (quarter & 0xf0f0f0) >>> 4;
+      const halfEdge = (half & 0xf0f0f0) >>> 4;
+      const doubleEdge = doublePackedAmount(halfEdge);
+      const axis = addPackedAmounts(half, quarterEdge);
+      const center = addPackedAmounts(quarter, doublePackedAmount(doubleEdge));
+      alphaLight(pointer, center);
+      alphaLight(pointer - 1, axis); alphaLight(pointer + 1, axis);
+      alphaLight(pointer - width, axis); alphaLight(pointer + width, axis);
+      alphaLight(pointer - 2, halfEdge); alphaLight(pointer + 2, halfEdge);
+      alphaLight(pointer - width * 2, halfEdge); alphaLight(pointer + width * 2, halfEdge);
+      alphaLight(pointer - width - 1, doubleEdge); alphaLight(pointer - width + 1, doubleEdge);
+      alphaLight(pointer + width - 1, doubleEdge); alphaLight(pointer + width + 1, doubleEdge);
     }; break;
     case "doubleAaDim": write = (pointer, color) => {
-      antialiasDim(pointer, (color & 0xfcfcfc) >>> 2);
+      const quarter = (color & 0xfcfcfc) >>> 2;
       const half = (color & 0xfefefe) >>> 1;
-      antialiasDim(pointer - 1, half); antialiasDim(pointer + 1, half);
-      antialiasDim(pointer - width, half); antialiasDim(pointer + width, half);
+      const quarterEdge = (quarter & 0xf0f0f0) >>> 4;
+      const halfEdge = (half & 0xf0f0f0) >>> 4;
+      const doubleEdge = doublePackedAmount(halfEdge);
+      const axis = addPackedAmounts(half, quarterEdge);
+      const center = addPackedAmounts(quarter, doublePackedAmount(doubleEdge));
+      alphaDim(pointer, center);
+      alphaDim(pointer - 1, axis); alphaDim(pointer + 1, axis);
+      alphaDim(pointer - width, axis); alphaDim(pointer + width, axis);
+      alphaDim(pointer - 2, halfEdge); alphaDim(pointer + 2, halfEdge);
+      alphaDim(pointer - width * 2, halfEdge); alphaDim(pointer + width * 2, halfEdge);
+      alphaDim(pointer - width - 1, doubleEdge); alphaDim(pointer - width + 1, doubleEdge);
+      alphaDim(pointer + width - 1, doubleEdge); alphaDim(pointer + width + 1, doubleEdge);
     }; break;
     default: throw new RangeError(`Unsupported Rectangle pixel effect ${effect.kind}`);
   }
@@ -8777,8 +9277,7 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
   const p = landedTerrainAddresses(linked);
   const done = p.VHGNDnativecomplete;
   if ((memory[p.VHGNDmirror] | 0) !== 0
-      || (memory[p.VHGNDruinpass] | 0) !== 0
-      || (memory[p.VHGNDruinanchor] | 0) !== 0) return;
+      || (memory[p.VHGNDruinpass] | 0) !== 0) return;
   if (manhattan > 90 || rawDepth > 64) {
     memory[done] = 2;
     return;
@@ -8805,9 +9304,22 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
     return;
   }
 
-  memory[p.VHGNDruined] = 0;
-  memory[p.SPtinta] = shade;
-  memory[p.DBcol] = shade;
+  let ruined = 0;
+  if ((memory[p.VHGNDruinanchor] | 0) !== 0
+      && ((memory[p.VHGNDruins + h1] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + 1] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + 201] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + 200] | 0) !== 0)) ruined = 1;
+  memory[p.VHGNDruined] = ruined;
+  const tint = ruined !== 0 ? ((shade & 63) + 64) : shade;
+  memory[p.SPtinta] = tint;
+  memory[p.DBcol] = tint;
+  if (ruined !== 0) {
+    const polygon = polymapAddresses(linked);
+    directPolyStoreWide(memory, polygon, polygon.FSTX, 512);
+    directPolyStoreWide(memory, polygon, polygon.FSTY, 512);
+    memory[p.VHGNDruindrawn] = (memory[p.VHGNDruindrawn] + 1) | 0;
+  }
   memory[p.SPescr] = 0;
   memory[p.DBflar] = 0;
   memory[p.DBent] = 0;
@@ -10356,7 +10868,12 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.polymap]: polymap,
     [SERVICE_IDS.terrainMapped]: terrainMapped,
     [SERVICE_IDS.terrainFacing]: terrainFacing,
+    [SERVICE_IDS.terrainTileFauna]: terrainTileFauna,
+    [SERVICE_IDS.terrainRock]: terrainRock,
     [SERVICE_IDS.terrainTraverse]: terrainTraverseFaithful,
+    [SERVICE_IDS.terrainVegetation]: (machine, linked) => callTerrainSourceModel(machine, linked, "VHGND veget"),
+    [SERVICE_IDS.terrainBush]: (machine, linked) => callTerrainSourceModel(machine, linked, "VHGND bush"),
+    [SERVICE_IDS.terrainTree]: (machine, linked) => callTerrainSourceModel(machine, linked, "VHGND tree"),
     [SERVICE_IDS.waterBackdrop]: waterBackdrop,
     [SERVICE_IDS.denseAtmosphere]: denseAtmosphere,
     [SERVICE_IDS.terrainRenderRandom]: terrainRenderRandom,
