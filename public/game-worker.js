@@ -41,6 +41,21 @@ let pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, p
 
 const canonical = (value) => String(value).replace(/[\x00-\x20]+/g, "").replaceAll("\\", "/").toLowerCase();
 
+function publishPointerWorkspace() {
+  if (!program) return;
+  const memory = program.machine.memory;
+  const write = (name, value) => {
+    const symbol = program.linked.symbols.get(canonical(name));
+    if (symbol) memory[symbol.value] = value | 0;
+  };
+  // Pointer state is live OS state in Lino's native host. Publishing it when
+  // an event arrives prevents a release from waiting behind a long game
+  // control-loop slice with the menu button left permanently pressed.
+  write("Pointer Status", 3 | pointerButtons);
+  write("Pointer X Coordinate", pointerX);
+  write("Pointer Y Coordinate", pointerY);
+}
+
 function isolatedNoctisIntrinsics() {
   // Keep Chromium from folding the complete renderer into one unstable
   // optimization unit. The cold branch also provides an on-demand profiler.
@@ -284,6 +299,9 @@ async function initialize(message) {
         emitMessage({ type: "pointerMode", mode: pointerMode });
       }
       const transition = pointerTransitions.shift();
+      if (transition && pointerTransitions.length > 0) {
+        queueMicrotask(publishPointerWorkspace);
+      }
       const deltaX = transition?.deltaX ?? pointerDeltaX;
       const deltaY = transition?.deltaY ?? pointerDeltaY;
       if (!transition) pointerDeltaX = pointerDeltaY = 0;
@@ -362,6 +380,7 @@ function handleMessage(message) {
     pointerX = message.x | 0;
     pointerY = message.y | 0;
     pointerButtons = message.buttons | 0;
+    publishPointerWorkspace();
     if (message.transition) pointerTransitions.push({
       x: pointerX, y: pointerY, buttons: pointerButtons,
       deltaX: message.deltaX | 0, deltaY: message.deltaY | 0,
