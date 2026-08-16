@@ -5117,7 +5117,7 @@ function landedDenseAverage(machine, linked) {
 
 function landedMushroomPixels(machine, linked) {
   const memory = machine.memory;
-  const page = address(linked, "RADPT");
+  const page = noctisBuffer(linked, "RADPT");
   let remaining = value(memory, linked, "VHGNDmushinner") >>> 0;
   const colorMask = value(memory, linked, "VHGNDmushcolmask");
   while (remaining !== 0) {
