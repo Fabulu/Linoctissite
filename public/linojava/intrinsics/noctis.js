@@ -8477,6 +8477,128 @@ function cacheTerrainMappedVertexDirect(machine, p, ground, index, vertex) {
   );
 }
 
+function mirrorTerrainCache(machine, memory, p, ground) {
+  const signature = [
+    directPolySlot(memory, p, p.FSCAMX), directPolySlot(memory, p, p.FSCAMY),
+    directPolySlot(memory, p, p.FSCAMZ), directPolySlot(memory, p, p.FSTSB),
+    directPolySlot(memory, p, p.FSTCB), directPolySlot(memory, p, p.FSTSA),
+    directPolySlot(memory, p, p.FSTCA), directPolySlot(memory, p, p.FSDPP),
+    directPolySlot(memory, p, p.FSXC), directPolySlot(memory, p, p.FSYC),
+    directPolySlot(memory, p, p.FSUNEG), floatingPoint(machine).control,
+    memory[ground.VHGNDnormgen] | 0,
+  ];
+  let cache = machine.noctisMirrorTerrainCache;
+  if (!cache) {
+    cache = machine.noctisMirrorTerrainCache = {
+      signature: [], generation: 0, stamp: new Uint32Array(40000),
+      visible: new Uint8Array(40000), rx: new Float64Array(40000),
+      ry: new Float64Array(40000), rz: new Float64Array(40000),
+      px: new Int32Array(40000), py: new Int32Array(40000),
+    };
+  }
+  let changed = signature.length !== cache.signature.length;
+  for (let index = 0; !changed && index < signature.length; index += 1) {
+    if (!Object.is(signature[index], cache.signature[index])) changed = true;
+  }
+  if (changed) {
+    cache.signature = signature;
+    cache.generation = (cache.generation + 1) >>> 0;
+    if (cache.generation === 0) {
+      cache.stamp.fill(0);
+      cache.generation = 1;
+    }
+  }
+  return cache;
+}
+
+function cacheMirrorTerrainVertex(machine, memory, p, cache, index, vertex) {
+  const control = floatingPoint(machine).control;
+  const xInput = directPolySlot(memory, p, p.FSINX + vertex);
+  const yInput = directPolySlot(memory, p, p.FSINY + vertex);
+  const zInput = directPolySlot(memory, p, p.FSINZ + vertex);
+  const cameraX = directPolySlot(memory, p, p.FSCAMX);
+  const cameraY = directPolySlot(memory, p, p.FSCAMY);
+  const cameraZ = directPolySlot(memory, p, p.FSCAMZ);
+  const betaSin = directPolySlot(memory, p, p.FSTSB);
+  const betaCos = directPolySlot(memory, p, p.FSTCB);
+  const alphaCos = directPolySlot(memory, p, p.FSTCA);
+  const alphaSin = directPolySlot(memory, p, p.FSTSA);
+  const near = directPolySlot(memory, p, p.FSUNEG);
+  const z = roundFloat32(zInput - cameraZ, control);
+  const x = roundFloat32(xInput - cameraX, control);
+  const y = roundFloat32(yInput - cameraY, control);
+  const rx = roundFloat32(x * betaCos + z * betaSin, control);
+  const z2 = roundFloat32(z * betaCos - x * betaSin, control);
+  const rotatedZWide = y * alphaSin + z2 * alphaCos;
+  const rz = roundFloat32(rotatedZWide, control);
+  const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
+  cache.rx[index] = rx;
+  cache.ry[index] = ry;
+  cache.rz[index] = rz;
+  cache.visible[index] = !Number.isNaN(rotatedZWide) && !Number.isNaN(near)
+    && rotatedZWide >= near ? 1 : 0;
+  if (cache.visible[index] !== 0) {
+    const factor = directPolySlot(memory, p, p.FSDPP) / rz;
+    cache.px[index] = convertToInt32(factor * rx + directPolySlot(memory, p, p.FSXC), control);
+    cache.py[index] = convertToInt32(factor * ry + directPolySlot(memory, p, p.FSYC), control);
+  }
+  cache.stamp[index] = cache.generation;
+}
+
+function mirrorTerrainMapped(machine, linked, p, ground) {
+  const memory = machine.memory;
+  const h1 = memory[ground.VHGNDh1] | 0;
+  const triangle = memory[ground.VHGNDvctri] | 0;
+  const indices = triangle === 0 ? [h1, h1 + 1, h1 + 200] : [h1 + 1, h1 + 201, h1 + 200];
+  const cache = mirrorTerrainCache(machine, memory, p, ground);
+  for (let vertex = 0; vertex < 3; vertex += 1) {
+    const index = indices[vertex];
+    memory[ground.VHGNDvi] = vertex;
+    memory[ground.VHGNDvcindex] = index;
+    if (cache.stamp[index] !== cache.generation) {
+      cacheMirrorTerrainVertex(machine, memory, p, cache, index, vertex);
+    }
+    if (cache.visible[index] === 0) return false;
+  }
+  for (let vertex = 0; vertex < 3; vertex += 1) {
+    const index = indices[vertex];
+    writeFloat64(memory, p.fw + (p.FSUX + vertex) * 2, cache.rx[index]);
+    writeFloat64(memory, p.fw + (p.FSUY + vertex) * 2, cache.ry[index]);
+    writeFloat64(memory, p.fw + (p.FSUZ + vertex) * 2, cache.rz[index]);
+    memory[p.mp + vertex * 2] = cache.px[index];
+    memory[p.mp + vertex * 2 + 1] = cache.py[index];
+  }
+  memory[ground.VHGNDvi] = 3;
+  memory[ground.VHGNDvcindex] = indices[2];
+  memory[p.mp + 6] = memory[p.mp + 4];
+  memory[p.mp + 7] = memory[p.mp + 5];
+  memory[p.PJdoflag] = 4;
+  memory[ground.VHGNDmpbase] = p.mp;
+  let minX = memory[p.mp] | 0;
+  let maxX = minX;
+  let minY = memory[p.mp + 1] | 0;
+  let maxY = minY;
+  for (let vertex = 1; vertex < 3; vertex += 1) {
+    const x = memory[p.mp + vertex * 2] | 0;
+    const y = memory[p.mp + vertex * 2 + 1] | 0;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  memory[p.PJminx] = minX;
+  memory[p.PJmaxx] = maxX;
+  memory[p.BXminy] = minY;
+  memory[p.BXmaxy] = maxY;
+  memory[p.PJvr] = 4;
+  memory[p.PJvr2] = 4;
+  memory[p.PJvr22] = 8;
+  memory[p.PJpreproject] = 0;
+  rasterProjectedTerrain(machine, linked, p);
+  memory[p.PJgate] = 0;
+  return true;
+}
+
 function terrainMapped(machine, linked) {
   const memory = machine.memory;
   const p = polymapAddresses(linked);
@@ -8485,6 +8607,10 @@ function terrainMapped(machine, linked) {
   memory[spterrain] = 1;
 
   if ((memory[ground.VHGNDmirror] | 0) !== 0) {
+    if (mirrorTerrainMapped(machine, linked, p, ground)) {
+      memory[spterrain] = 0;
+      return;
+    }
     genericTerrainMapped(machine, linked, p);
     return;
   }
