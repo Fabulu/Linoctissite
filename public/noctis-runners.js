@@ -37925,7 +37925,7 @@ case 35916: { if(executed!==0&&executed+2>maxInstructions){pc=35916;outputStatus
 case 35917: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35919) | 0; pc = (4743) - 1; continue runner; }
 case 35918: { if(executed!==0&&executed+1>maxInstructions){pc=35918;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35920) | 0; pc = (4745) - 1; continue runner; }
 case 35919: { if(executed!==0&&executed+1>maxInstructions){pc=35919;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35921) | 0; pc = (4747) - 1; continue runner; }
-case 35920: { if(executed!==0&&executed+13>maxInstructions){pc=35920;outputStatus="budget";outputInstructions=executed;break runner;}executed+=13; m[(3266) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 35921; }
+case 35920: { if(executed!==0&&executed+14>maxInstructions){pc=35920;outputStatus="budget";outputInstructions=executed;break runner;}executed+=14; m[(3266) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 35921; }
 case 35921: {  m[(3267) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 35922; }
 case 35922: {  m[(3268) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 35923; }
 case 35923: {  m[(3263) >>> 0] = (0) | 0; pc = 35924; }
@@ -37937,8 +37937,8 @@ case 35928: {  m[(3260) >>> 0] = (A) | 0; pc = 35929; }
 case 35929: {  m[(3261) >>> 0] = (A) | 0; pc = 35930; }
 case 35930: {  m[(3262) >>> 0] = (0) | 0; pc = 35931; }
 case 35931: {  m[(3206) >>> 0] = (3) | 0; pc = 35932; }
-case 35932: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35934) | 0; pc = (14445) - 1; continue runner; }
-case 35933: { if(executed!==0&&executed+1>maxInstructions){pc=35933;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35935) | 0; pc = (35354) - 1; continue runner; }
+case 35932: {  pc=35932; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=35933; }
+case 35933: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35935) | 0; pc = (35354) - 1; continue runner; }
 case 35934: { if(executed!==0&&executed+3>maxInstructions){pc=35934;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6464) >>> 0] = (0) | 0; pc = 35935; }
 case 35935: {  A = ((m[(6282) >>> 0] | 0)) | 0; pc = 35936; }
 case 35936: {  if ((((A) | 0) != ((1) | 0))) { pc = ((35996) - 1); continue runner; } pc = 35937; }
@@ -37946,7 +37946,7 @@ case 35937: { if(executed!==0&&executed+4>maxInstructions){pc=35937;outputStatus
 case 35938: {  C = (0) | 0; pc = 35939; }
 case 35939: {  C = (((C) - (10))) | 0; pc = 35940; }
 case 35940: {  if ((((A) | 0) <= ((C) | 0))) { pc = ((35996) - 1); continue runner; } pc = 35941; }
-case 35941: { if(executed!==0&&executed+15>maxInstructions){pc=35941;outputStatus="budget";outputInstructions=executed;break runner;}executed+=15; m[(6464) >>> 0] = (1) | 0; pc = 35942; }
+case 35941: { if(executed!==0&&executed+26>maxInstructions){pc=35941;outputStatus="budget";outputInstructions=executed;break runner;}executed+=26; m[(6464) >>> 0] = (1) | 0; pc = 35942; }
 case 35942: {  m[(6441) >>> 0] = ((m[(6462) >>> 0] | 0)) | 0; pc = 35943; }
 case 35943: {  m[(3266) >>> 0] = (1065353216) | 0; pc = 35944; }
 case 35944: {  m[(3267) >>> 0] = (1060320051) | 0; pc = 35945; }
@@ -37960,8 +37960,8 @@ case 35951: {  m[(3260) >>> 0] = (A) | 0; pc = 35952; }
 case 35952: {  m[(3261) >>> 0] = (A) | 0; pc = 35953; }
 case 35953: {  m[(3262) >>> 0] = (0) | 0; pc = 35954; }
 case 35954: {  m[(3206) >>> 0] = (3) | 0; pc = 35955; }
-case 35955: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35957) | 0; pc = (14445) - 1; continue runner; }
-case 35956: { if(executed!==0&&executed+11>maxInstructions){pc=35956;outputStatus="budget";outputInstructions=executed;break runner;}executed+=11; m[(3266) >>> 0] = (1065353216) | 0; pc = 35957; }
+case 35955: {  pc=35955; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=35956; }
+case 35956: {  m[(3266) >>> 0] = (1065353216) | 0; pc = 35957; }
 case 35957: {  m[(3267) >>> 0] = (0) | 0; pc = 35958; }
 case 35958: {  m[(3268) >>> 0] = (1065353216) | 0; pc = 35959; }
 case 35959: {  m[(3263) >>> 0] = (0) | 0; pc = 35960; }
@@ -37972,10 +37972,10 @@ case 35963: {  A = (((A) - (1))) | 0; pc = 35964; }
 case 35964: {  m[(3260) >>> 0] = (A) | 0; pc = 35965; }
 case 35965: {  m[(3261) >>> 0] = (A) | 0; pc = 35966; }
 case 35966: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35968) | 0; pc = (35178) - 1; continue runner; }
-case 35967: { if(executed!==0&&executed+3>maxInstructions){pc=35967;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 35968; }
+case 35967: { if(executed!==0&&executed+11>maxInstructions){pc=35967;outputStatus="budget";outputInstructions=executed;break runner;}executed+=11; m[(3262) >>> 0] = (6860709) | 0; pc = 35968; }
 case 35968: {  m[(3206) >>> 0] = (3) | 0; pc = 35969; }
-case 35969: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35971) | 0; pc = (14445) - 1; continue runner; }
-case 35970: { if(executed!==0&&executed+8>maxInstructions){pc=35970;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; A = ((m[(6460) >>> 0] | 0)) | 0; pc = 35971; }
+case 35969: {  pc=35969; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=35970; }
+case 35970: {  A = ((m[(6460) >>> 0] | 0)) | 0; pc = 35971; }
 case 35971: {  A = (udiv(A, 1200)) | 0; pc = 35972; }
 case 35972: {  m[(6465) >>> 0] = (A) | 0; pc = 35973; }
 case 35973: {  m[(3266) >>> 0] = (1065353216) | 0; pc = 35974; }
@@ -37991,15 +37991,15 @@ case 35982: {  m[(2452) >>> 0] = ((m[(6465) >>> 0] | 0)) | 0; pc = 35983; }
 case 35983: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35985) | 0; pc = (4743) - 1; continue runner; }
 case 35984: { if(executed!==0&&executed+1>maxInstructions){pc=35984;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35986) | 0; pc = (4745) - 1; continue runner; }
 case 35985: { if(executed!==0&&executed+1>maxInstructions){pc=35985;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35987) | 0; pc = (4747) - 1; continue runner; }
-case 35986: { if(executed!==0&&executed+8>maxInstructions){pc=35986;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; m[(3265) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 35987; }
+case 35986: { if(executed!==0&&executed+9>maxInstructions){pc=35986;outputStatus="budget";outputInstructions=executed;break runner;}executed+=9; m[(3265) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 35987; }
 case 35987: {  A = (0) | 0; pc = 35988; }
 case 35988: {  A = (((A) - (1))) | 0; pc = 35989; }
 case 35989: {  m[(3260) >>> 0] = (A) | 0; pc = 35990; }
 case 35990: {  m[(3261) >>> 0] = (A) | 0; pc = 35991; }
 case 35991: {  m[(3262) >>> 0] = (0) | 0; pc = 35992; }
 case 35992: {  m[(3206) >>> 0] = (3) | 0; pc = 35993; }
-case 35993: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (35995) | 0; pc = (14445) - 1; continue runner; }
-case 35994: { if(executed!==0&&executed+1>maxInstructions){pc=35994;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; pc = (36157) - 1; continue runner; }
+case 35993: {  pc=35993; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=35994; }
+case 35994: {  pc = (36157) - 1; continue runner; }
 case 35995: { if(executed!==0&&executed+2>maxInstructions){pc=35995;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = ((m[(6446) >>> 0] | 0)) | 0; pc = 35996; }
 case 35996: {  if ((((A) | 0) === ((0) | 0))) { pc = ((36059) - 1); continue runner; } pc = 35997; }
 case 35997: { if(executed!==0&&executed+11>maxInstructions){pc=35997;outputStatus="budget";outputInstructions=executed;break runner;}executed+=11; m[(3266) >>> 0] = (1073741824) | 0; pc = 35998; }
@@ -38013,17 +38013,17 @@ case 36004: {  A = (((A) - (1))) | 0; pc = 36005; }
 case 36005: {  m[(3260) >>> 0] = (A) | 0; pc = 36006; }
 case 36006: {  m[(3261) >>> 0] = (A) | 0; pc = 36007; }
 case 36007: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36009) | 0; pc = (35148) - 1; continue runner; }
-case 36008: { if(executed!==0&&executed+3>maxInstructions){pc=36008;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36009; }
+case 36008: { if(executed!==0&&executed+8>maxInstructions){pc=36008;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; m[(3262) >>> 0] = (6860709) | 0; pc = 36009; }
 case 36009: {  m[(3206) >>> 0] = (3) | 0; pc = 36010; }
-case 36010: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36012) | 0; pc = (14445) - 1; continue runner; }
-case 36011: { if(executed!==0&&executed+5>maxInstructions){pc=36011;outputStatus="budget";outputInstructions=executed;break runner;}executed+=5; m[(3266) >>> 0] = (1065353216) | 0; pc = 36012; }
+case 36010: {  pc=36010; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36011; }
+case 36011: {  m[(3266) >>> 0] = (1065353216) | 0; pc = 36012; }
 case 36012: {  m[(3267) >>> 0] = (1065353216) | 0; pc = 36013; }
 case 36013: {  m[(3268) >>> 0] = (1065353216) | 0; pc = 36014; }
 case 36014: {  m[(2452) >>> 0] = (60) | 0; pc = 36015; }
 case 36015: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36017) | 0; pc = (4743) - 1; continue runner; }
 case 36016: { if(executed!==0&&executed+1>maxInstructions){pc=36016;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36018) | 0; pc = (4745) - 1; continue runner; }
 case 36017: { if(executed!==0&&executed+1>maxInstructions){pc=36017;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36019) | 0; pc = (4747) - 1; continue runner; }
-case 36018: { if(executed!==0&&executed+10>maxInstructions){pc=36018;outputStatus="budget";outputInstructions=executed;break runner;}executed+=10; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36019; }
+case 36018: { if(executed!==0&&executed+14>maxInstructions){pc=36018;outputStatus="budget";outputInstructions=executed;break runner;}executed+=14; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36019; }
 case 36019: {  m[(3264) >>> 0] = (0) | 0; pc = 36020; }
 case 36020: {  m[(3265) >>> 0] = (0) | 0; pc = 36021; }
 case 36021: {  m[(3262) >>> 0] = (0) | 0; pc = 36022; }
@@ -38032,8 +38032,8 @@ case 36023: {  A = (((A) - (1))) | 0; pc = 36024; }
 case 36024: {  m[(3260) >>> 0] = (A) | 0; pc = 36025; }
 case 36025: {  m[(3261) >>> 0] = (A) | 0; pc = 36026; }
 case 36026: {  m[(3206) >>> 0] = (3) | 0; pc = 36027; }
-case 36027: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36029) | 0; pc = (14445) - 1; continue runner; }
-case 36028: { if(executed!==0&&executed+4>maxInstructions){pc=36028;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; A = (0) | 0; pc = 36029; }
+case 36027: {  pc=36027; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36028; }
+case 36028: {  A = (0) | 0; pc = 36029; }
 case 36029: {  A = (((A) - (100))) | 0; pc = 36030; }
 case 36030: {  m[(2452) >>> 0] = (A) | 0; pc = 36031; }
 case 36031: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36033) | 0; pc = (4743) - 1; continue runner; }
@@ -38045,10 +38045,10 @@ case 36036: {  m[(3265) >>> 0] = (0) | 0; pc = 36037; }
 case 36037: {  m[(3260) >>> 0] = (46) | 0; pc = 36038; }
 case 36038: {  m[(3261) >>> 0] = (1) | 0; pc = 36039; }
 case 36039: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36041) | 0; pc = (35169) - 1; continue runner; }
-case 36040: { if(executed!==0&&executed+3>maxInstructions){pc=36040;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36041; }
+case 36040: { if(executed!==0&&executed+5>maxInstructions){pc=36040;outputStatus="budget";outputInstructions=executed;break runner;}executed+=5; m[(3262) >>> 0] = (6860709) | 0; pc = 36041; }
 case 36041: {  m[(3206) >>> 0] = (3) | 0; pc = 36042; }
-case 36042: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36044) | 0; pc = (14445) - 1; continue runner; }
-case 36043: { if(executed!==0&&executed+2>maxInstructions){pc=36043;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = ((m[(6446) >>> 0] | 0)) | 0; pc = 36044; }
+case 36042: {  pc=36042; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36043; }
+case 36043: {  A = ((m[(6446) >>> 0] | 0)) | 0; pc = 36044; }
 case 36044: {  if ((((A) | 0) === ((2) | 0))) { pc = ((36059) - 1); continue runner; } pc = 36045; }
 case 36045: { if(executed!==0&&executed+13>maxInstructions){pc=36045;outputStatus="budget";outputInstructions=executed;break runner;}executed+=13; m[(3266) >>> 0] = (1051260355) | 0; pc = 36046; }
 case 36046: {  m[(3267) >>> 0] = (1051260355) | 0; pc = 36047; }
@@ -38062,7 +38062,7 @@ case 36053: {  A = (((A) - (1))) | 0; pc = 36054; }
 case 36054: {  m[(3260) >>> 0] = (A) | 0; pc = 36055; }
 case 36055: {  m[(3261) >>> 0] = (A) | 0; pc = 36056; }
 case 36056: {  m[(3206) >>> 0] = (3) | 0; pc = 36057; }
-case 36057: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36059) | 0; pc = (14445) - 1; continue runner; }
+case 36057: {  pc=36057; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36058; }
 case 36058: { if(executed!==0&&executed+5>maxInstructions){pc=36058;outputStatus="budget";outputInstructions=executed;break runner;}executed+=5; m[(3266) >>> 0] = (1065353216) | 0; pc = 36059; }
 case 36059: {  m[(3267) >>> 0] = (1065353216) | 0; pc = 36060; }
 case 36060: {  m[(3268) >>> 0] = (1065353216) | 0; pc = 36061; }
@@ -38070,15 +38070,15 @@ case 36061: {  m[(2452) >>> 0] = ((m[(6461) >>> 0] | 0)) | 0; pc = 36062; }
 case 36062: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36064) | 0; pc = (4743) - 1; continue runner; }
 case 36063: { if(executed!==0&&executed+1>maxInstructions){pc=36063;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36065) | 0; pc = (4745) - 1; continue runner; }
 case 36064: { if(executed!==0&&executed+1>maxInstructions){pc=36064;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36066) | 0; pc = (4747) - 1; continue runner; }
-case 36065: { if(executed!==0&&executed+8>maxInstructions){pc=36065;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36066; }
+case 36065: { if(executed!==0&&executed+10>maxInstructions){pc=36065;outputStatus="budget";outputInstructions=executed;break runner;}executed+=10; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36066; }
 case 36066: {  m[(3264) >>> 0] = (0) | 0; pc = 36067; }
 case 36067: {  m[(3265) >>> 0] = (0) | 0; pc = 36068; }
 case 36068: {  m[(3260) >>> 0] = (16) | 0; pc = 36069; }
 case 36069: {  m[(3261) >>> 0] = (2) | 0; pc = 36070; }
 case 36070: {  m[(3262) >>> 0] = (0) | 0; pc = 36071; }
 case 36071: {  m[(3206) >>> 0] = (3) | 0; pc = 36072; }
-case 36072: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36074) | 0; pc = (14445) - 1; continue runner; }
-case 36073: { if(executed!==0&&executed+2>maxInstructions){pc=36073;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = ((m[(6447) >>> 0] | 0)) | 0; pc = 36074; }
+case 36072: {  pc=36072; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36073; }
+case 36073: {  A = ((m[(6447) >>> 0] | 0)) | 0; pc = 36074; }
 case 36074: {  if ((((A) >>> 0) < ((50) >>> 0))) { pc = ((36134) - 1); continue runner; } pc = 36075; }
 case 36075: { if(executed!==0&&executed+2>maxInstructions){pc=36075;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = (45) | 0; pc = 36076; }
 case 36076: {  if (((((m[(6446) >>> 0] | 0)) | 0) === ((0) | 0))) { pc = ((36081) - 1); continue runner; } pc = 36077; }
@@ -38115,15 +38115,15 @@ case 36106: {  m[(2443) >>> 0] = (1083129856) | 0; pc = 36107; }
 case 36107: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36109) | 0; pc = (4681) - 1; continue runner; }
 case 36108: { if(executed!==0&&executed+1>maxInstructions){pc=36108;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36110) | 0; pc = (4745) - 1; continue runner; }
 case 36109: { if(executed!==0&&executed+1>maxInstructions){pc=36109;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36111) | 0; pc = (4747) - 1; continue runner; }
-case 36110: { if(executed!==0&&executed+8>maxInstructions){pc=36110;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36111; }
+case 36110: { if(executed!==0&&executed+12>maxInstructions){pc=36110;outputStatus="budget";outputInstructions=executed;break runner;}executed+=12; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36111; }
 case 36111: {  m[(3264) >>> 0] = (0) | 0; pc = 36112; }
 case 36112: {  m[(3265) >>> 0] = (0) | 0; pc = 36113; }
 case 36113: {  m[(3260) >>> 0] = (16) | 0; pc = 36114; }
 case 36114: {  m[(3261) >>> 0] = (2) | 0; pc = 36115; }
 case 36115: {  m[(3262) >>> 0] = (0) | 0; pc = 36116; }
 case 36116: {  m[(3206) >>> 0] = (3) | 0; pc = 36117; }
-case 36117: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36119) | 0; pc = (14445) - 1; continue runner; }
-case 36118: { if(executed!==0&&executed+4>maxInstructions){pc=36118;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; A = ((m[(6448) >>> 0] | 0)) | 0; pc = 36119; }
+case 36117: {  pc=36117; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36118; }
+case 36118: {  A = ((m[(6448) >>> 0] | 0)) | 0; pc = 36119; }
 case 36119: {  A = (Math.imul(A, 100)) | 0; pc = 36120; }
 case 36120: {  m[(2452) >>> 0] = (A) | 0; pc = 36121; }
 case 36121: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36123) | 0; pc = (4743) - 1; continue runner; }
@@ -38134,10 +38134,10 @@ case 36125: { if(executed!==0&&executed+1>maxInstructions){pc=36125;outputStatus
 case 36126: { if(executed!==0&&executed+1>maxInstructions){pc=36126;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36128) | 0; pc = (4747) - 1; continue runner; }
 case 36127: { if(executed!==0&&executed+2>maxInstructions){pc=36127;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36128; }
 case 36128: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36130) | 0; pc = (35148) - 1; continue runner; }
-case 36129: { if(executed!==0&&executed+3>maxInstructions){pc=36129;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36130; }
+case 36129: { if(executed!==0&&executed+4>maxInstructions){pc=36129;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; m[(3262) >>> 0] = (6860709) | 0; pc = 36130; }
 case 36130: {  m[(3206) >>> 0] = (3) | 0; pc = 36131; }
-case 36131: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36133) | 0; pc = (14445) - 1; continue runner; }
-case 36132: { if(executed!==0&&executed+1>maxInstructions){pc=36132;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; pc = (36157) - 1; continue runner; }
+case 36131: {  pc=36131; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36132; }
+case 36132: {  pc = (36157) - 1; continue runner; }
 case 36133: { if(executed!==0&&executed+3>maxInstructions){pc=36133;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6451) >>> 0] | 0)) | 0; pc = 36134; }
 case 36134: {  A = (Math.imul(A, 4)) | 0; pc = 36135; }
 case 36135: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36137) | 0; pc = (15286) - 1; continue runner; }
@@ -38160,7 +38160,7 @@ case 36151: {  m[(3261) >>> 0] = (1) | 0; pc = 36152; }
 case 36152: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36154) | 0; pc = (35169) - 1; continue runner; }
 case 36153: { if(executed!==0&&executed+3>maxInstructions){pc=36153;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36154; }
 case 36154: {  m[(3206) >>> 0] = (3) | 0; pc = 36155; }
-case 36155: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36157) | 0; pc = (14445) - 1; continue runner; }
+case 36155: {  pc=36155; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36156; }
 case 36156: { if(executed!==0&&executed+6>maxInstructions){pc=36156;outputStatus="budget";outputInstructions=executed;break runner;}executed+=6; q = (6463) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 36157; }
 case 36157: {  A = ((m[(6443) >>> 0] | 0)) | 0; pc = 36158; }
 case 36158: {  A = (idiv(A, 100)) | 0; pc = 36159; }
@@ -38169,15 +38169,15 @@ case 36160: {  m[(2452) >>> 0] = (A) | 0; pc = 36161; }
 case 36161: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36163) | 0; pc = (4743) - 1; continue runner; }
 case 36162: { if(executed!==0&&executed+1>maxInstructions){pc=36162;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36164) | 0; pc = (4745) - 1; continue runner; }
 case 36163: { if(executed!==0&&executed+1>maxInstructions){pc=36163;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36165) | 0; pc = (4747) - 1; continue runner; }
-case 36164: { if(executed!==0&&executed+8>maxInstructions){pc=36164;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; m[(3264) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36165; }
+case 36164: { if(executed!==0&&executed+10>maxInstructions){pc=36164;outputStatus="budget";outputInstructions=executed;break runner;}executed+=10; m[(3264) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36165; }
 case 36165: {  m[(3263) >>> 0] = (0) | 0; pc = 36166; }
 case 36166: {  m[(3265) >>> 0] = (0) | 0; pc = 36167; }
 case 36167: {  m[(3262) >>> 0] = (0) | 0; pc = 36168; }
 case 36168: {  m[(3260) >>> 0] = (16) | 0; pc = 36169; }
 case 36169: {  m[(3261) >>> 0] = (2) | 0; pc = 36170; }
 case 36170: {  m[(3206) >>> 0] = (3) | 0; pc = 36171; }
-case 36171: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36173) | 0; pc = (14445) - 1; continue runner; }
-case 36172: { if(executed!==0&&executed+2>maxInstructions){pc=36172;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = ((m[(6469) >>> 0] | 0)) | 0; pc = 36173; }
+case 36171: {  pc=36171; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36172; }
+case 36172: {  A = ((m[(6469) >>> 0] | 0)) | 0; pc = 36173; }
 case 36173: {  if ((((A) >>> 0) >= ((75000) >>> 0))) { pc = ((36177) - 1); continue runner; } pc = 36174; }
 case 36174: { if(executed!==0&&executed+2>maxInstructions){pc=36174;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(3206) >>> 0] = (3) | 0; pc = 36175; }
 case 36175: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36177) | 0; pc = (14797) - 1; continue runner; }
@@ -38434,7 +38434,7 @@ case 36425: { if(executed!==0&&executed+2>maxInstructions){pc=36425;outputStatus
 case 36426: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36428) | 0; pc = (4743) - 1; continue runner; }
 case 36427: { if(executed!==0&&executed+1>maxInstructions){pc=36427;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36429) | 0; pc = (4745) - 1; continue runner; }
 case 36428: { if(executed!==0&&executed+1>maxInstructions){pc=36428;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36430) | 0; pc = (4747) - 1; continue runner; }
-case 36429: { if(executed!==0&&executed+13>maxInstructions){pc=36429;outputStatus="budget";outputInstructions=executed;break runner;}executed+=13; m[(3266) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36430; }
+case 36429: { if(executed!==0&&executed+15>maxInstructions){pc=36429;outputStatus="budget";outputInstructions=executed;break runner;}executed+=15; m[(3266) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36430; }
 case 36430: {  m[(3267) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36431; }
 case 36431: {  m[(3268) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36432; }
 case 36432: {  m[(3263) >>> 0] = (0) | 0; pc = 36433; }
@@ -38446,8 +38446,8 @@ case 36437: {  m[(3260) >>> 0] = (A) | 0; pc = 36438; }
 case 36438: {  m[(3261) >>> 0] = (A) | 0; pc = 36439; }
 case 36439: {  m[(3262) >>> 0] = (0) | 0; pc = 36440; }
 case 36440: {  m[(3206) >>> 0] = (5) | 0; pc = 36441; }
-case 36441: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36443) | 0; pc = (14445) - 1; continue runner; }
-case 36442: { if(executed!==0&&executed+2>maxInstructions){pc=36442;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = ((m[(6433) >>> 0] | 0)) | 0; pc = 36443; }
+case 36441: {  pc=36441; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36442; }
+case 36442: {  A = ((m[(6433) >>> 0] | 0)) | 0; pc = 36443; }
 case 36443: {  if ((((A) | 0) < ((0) | 0))) { pc = ((36560) - 1); continue runner; } pc = 36444; }
 case 36444: { if(executed!==0&&executed+2>maxInstructions){pc=36444;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = ((m[(6431) >>> 0] | 0)) | 0; pc = 36445; }
 case 36445: {  if ((((A) >>> 0) >= ((50) >>> 0))) { pc = ((36516) - 1); continue runner; } pc = 36446; }
@@ -38492,10 +38492,10 @@ case 36483: { if(executed!==0&&executed+1>maxInstructions){pc=36483;outputStatus
 case 36484: { if(executed!==0&&executed+1>maxInstructions){pc=36484;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36486) | 0; pc = (4747) - 1; continue runner; }
 case 36485: { if(executed!==0&&executed+2>maxInstructions){pc=36485;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(3265) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36486; }
 case 36486: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36488) | 0; pc = (35200) - 1; continue runner; }
-case 36487: { if(executed!==0&&executed+3>maxInstructions){pc=36487;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36488; }
+case 36487: { if(executed!==0&&executed+7>maxInstructions){pc=36487;outputStatus="budget";outputInstructions=executed;break runner;}executed+=7; m[(3262) >>> 0] = (6860709) | 0; pc = 36488; }
 case 36488: {  m[(3206) >>> 0] = (5) | 0; pc = 36489; }
-case 36489: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36491) | 0; pc = (14445) - 1; continue runner; }
-case 36490: { if(executed!==0&&executed+4>maxInstructions){pc=36490;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; A = (0) | 0; pc = 36491; }
+case 36489: {  pc=36489; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36490; }
+case 36490: {  A = (0) | 0; pc = 36491; }
 case 36491: {  A = (((A) - ((m[(6448) >>> 0] | 0)))) | 0; pc = 36492; }
 case 36492: {  m[(2452) >>> 0] = (A) | 0; pc = 36493; }
 case 36493: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36495) | 0; pc = (4743) - 1; continue runner; }
@@ -38516,10 +38516,10 @@ case 36507: { if(executed!==0&&executed+1>maxInstructions){pc=36507;outputStatus
 case 36508: { if(executed!==0&&executed+1>maxInstructions){pc=36508;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36510) | 0; pc = (4747) - 1; continue runner; }
 case 36509: { if(executed!==0&&executed+2>maxInstructions){pc=36509;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(3265) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36510; }
 case 36510: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36512) | 0; pc = (35205) - 1; continue runner; }
-case 36511: { if(executed!==0&&executed+3>maxInstructions){pc=36511;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36512; }
+case 36511: { if(executed!==0&&executed+4>maxInstructions){pc=36511;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; m[(3262) >>> 0] = (6860709) | 0; pc = 36512; }
 case 36512: {  m[(3206) >>> 0] = (5) | 0; pc = 36513; }
-case 36513: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36515) | 0; pc = (14445) - 1; continue runner; }
-case 36514: { if(executed!==0&&executed+1>maxInstructions){pc=36514;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; pc = (36575) - 1; continue runner; }
+case 36513: {  pc=36513; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36514; }
+case 36514: {  pc = (36575) - 1; continue runner; }
 case 36515: { if(executed!==0&&executed+11>maxInstructions){pc=36515;outputStatus="budget";outputInstructions=executed;break runner;}executed+=11; m[(3266) >>> 0] = (1065353216) | 0; pc = 36516; }
 case 36516: {  m[(3267) >>> 0] = (1065353216) | 0; pc = 36517; }
 case 36517: {  m[(3268) >>> 0] = (1065353216) | 0; pc = 36518; }
@@ -38535,10 +38535,10 @@ case 36526: { if(executed!==0&&executed+1>maxInstructions){pc=36526;outputStatus
 case 36527: { if(executed!==0&&executed+1>maxInstructions){pc=36527;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36529) | 0; pc = (4747) - 1; continue runner; }
 case 36528: { if(executed!==0&&executed+2>maxInstructions){pc=36528;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36529; }
 case 36529: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36531) | 0; pc = (35195) - 1; continue runner; }
-case 36530: { if(executed!==0&&executed+3>maxInstructions){pc=36530;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36531; }
+case 36530: { if(executed!==0&&executed+4>maxInstructions){pc=36530;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; m[(3262) >>> 0] = (6860709) | 0; pc = 36531; }
 case 36531: {  m[(3206) >>> 0] = (5) | 0; pc = 36532; }
-case 36532: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36534) | 0; pc = (14445) - 1; continue runner; }
-case 36533: { if(executed!==0&&executed+1>maxInstructions){pc=36533;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36535) | 0; pc = (35397) - 1; continue runner; }
+case 36532: {  pc=36532; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36533; }
+case 36533: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36535) | 0; pc = (35397) - 1; continue runner; }
 case 36534: { if(executed!==0&&executed+8>maxInstructions){pc=36534;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; m[(3260) >>> 0] = (1) | 0; pc = 36535; }
 case 36535: {  m[(3261) >>> 0] = (0) | 0; pc = 36536; }
 case 36536: {  m[(3263) >>> 0] = (0) | 0; pc = 36537; }
@@ -38551,34 +38551,34 @@ case 36542: { if(executed!==0&&executed+1>maxInstructions){pc=36542;outputStatus
 case 36543: { if(executed!==0&&executed+1>maxInstructions){pc=36543;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36545) | 0; pc = (4747) - 1; continue runner; }
 case 36544: { if(executed!==0&&executed+2>maxInstructions){pc=36544;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(3265) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36545; }
 case 36545: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36547) | 0; pc = (35200) - 1; continue runner; }
-case 36546: { if(executed!==0&&executed+3>maxInstructions){pc=36546;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36547; }
+case 36546: { if(executed!==0&&executed+5>maxInstructions){pc=36546;outputStatus="budget";outputInstructions=executed;break runner;}executed+=5; m[(3262) >>> 0] = (6860709) | 0; pc = 36547; }
 case 36547: {  m[(3206) >>> 0] = (5) | 0; pc = 36548; }
-case 36548: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36550) | 0; pc = (14445) - 1; continue runner; }
-case 36549: { if(executed!==0&&executed+2>maxInstructions){pc=36549;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(2452) >>> 0] = ((m[(6430) >>> 0] | 0)) | 0; pc = 36550; }
+case 36548: {  pc=36548; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36549; }
+case 36549: {  m[(2452) >>> 0] = ((m[(6430) >>> 0] | 0)) | 0; pc = 36550; }
 case 36550: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36552) | 0; pc = (4743) - 1; continue runner; }
 case 36551: { if(executed!==0&&executed+1>maxInstructions){pc=36551;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36553) | 0; pc = (4745) - 1; continue runner; }
 case 36552: { if(executed!==0&&executed+1>maxInstructions){pc=36552;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36554) | 0; pc = (4747) - 1; continue runner; }
 case 36553: { if(executed!==0&&executed+2>maxInstructions){pc=36553;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(3265) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36554; }
 case 36554: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36556) | 0; pc = (35205) - 1; continue runner; }
-case 36555: { if(executed!==0&&executed+3>maxInstructions){pc=36555;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(3262) >>> 0] = (6860709) | 0; pc = 36556; }
+case 36555: { if(executed!==0&&executed+4>maxInstructions){pc=36555;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; m[(3262) >>> 0] = (6860709) | 0; pc = 36556; }
 case 36556: {  m[(3206) >>> 0] = (5) | 0; pc = 36557; }
-case 36557: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36559) | 0; pc = (14445) - 1; continue runner; }
-case 36558: { if(executed!==0&&executed+1>maxInstructions){pc=36558;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; pc = (36575) - 1; continue runner; }
+case 36557: {  pc=36557; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36558; }
+case 36558: {  pc = (36575) - 1; continue runner; }
 case 36559: { if(executed!==0&&executed+4>maxInstructions){pc=36559;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; A = (180) | 0; pc = 36560; }
 case 36560: {  A = (udiv(A, (m[(6433) >>> 0] | 0))) | 0; pc = 36561; }
 case 36561: {  m[(2452) >>> 0] = (A) | 0; pc = 36562; }
 case 36562: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36564) | 0; pc = (4743) - 1; continue runner; }
 case 36563: { if(executed!==0&&executed+1>maxInstructions){pc=36563;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36565) | 0; pc = (4745) - 1; continue runner; }
 case 36564: { if(executed!==0&&executed+1>maxInstructions){pc=36564;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36566) | 0; pc = (4747) - 1; continue runner; }
-case 36565: { if(executed!==0&&executed+8>maxInstructions){pc=36565;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36566; }
+case 36565: { if(executed!==0&&executed+9>maxInstructions){pc=36565;outputStatus="budget";outputInstructions=executed;break runner;}executed+=9; m[(3263) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36566; }
 case 36566: {  m[(3264) >>> 0] = (0) | 0; pc = 36567; }
 case 36567: {  m[(3265) >>> 0] = (0) | 0; pc = 36568; }
 case 36568: {  m[(3260) >>> 0] = (1) | 0; pc = 36569; }
 case 36569: {  m[(3261) >>> 0] = (0) | 0; pc = 36570; }
 case 36570: {  m[(3262) >>> 0] = (0) | 0; pc = 36571; }
 case 36571: {  m[(3206) >>> 0] = (5) | 0; pc = 36572; }
-case 36572: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36574) | 0; pc = (14445) - 1; continue runner; }
-case 36573: { if(executed!==0&&executed+1>maxInstructions){pc=36573;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; pc = (36598) - 1; continue runner; }
+case 36572: {  pc=36572; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36573; }
+case 36573: {  pc = (36598) - 1; continue runner; }
 case 36574: { if(executed!==0&&executed+2>maxInstructions){pc=36574;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = ((m[(6431) >>> 0] | 0)) | 0; pc = 36575; }
 case 36575: {  if ((((A) >>> 0) >= ((500) >>> 0))) { pc = ((36598) - 1); continue runner; } pc = 36576; }
 case 36576: { if(executed!==0&&executed+3>maxInstructions){pc=36576;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = (250) | 0; pc = 36577; }
@@ -38601,22 +38601,22 @@ case 36592: {  m[(3260) >>> 0] = (1) | 0; pc = 36593; }
 case 36593: {  m[(3261) >>> 0] = (0) | 0; pc = 36594; }
 case 36594: {  m[(3262) >>> 0] = (0) | 0; pc = 36595; }
 case 36595: {  m[(3206) >>> 0] = (5) | 0; pc = 36596; }
-case 36596: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36598) | 0; pc = (14445) - 1; continue runner; }
+case 36596: {  pc=36596; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36597; }
 case 36597: { if(executed!==0&&executed+4>maxInstructions){pc=36597;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; A = ((m[(6443) >>> 0] | 0)) | 0; pc = 36598; }
 case 36598: {  A = (idiv(A, 100)) | 0; pc = 36599; }
 case 36599: {  m[(2452) >>> 0] = (A) | 0; pc = 36600; }
 case 36600: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36602) | 0; pc = (4743) - 1; continue runner; }
 case 36601: { if(executed!==0&&executed+1>maxInstructions){pc=36601;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36603) | 0; pc = (4745) - 1; continue runner; }
 case 36602: { if(executed!==0&&executed+1>maxInstructions){pc=36602;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36604) | 0; pc = (4747) - 1; continue runner; }
-case 36603: { if(executed!==0&&executed+8>maxInstructions){pc=36603;outputStatus="budget";outputInstructions=executed;break runner;}executed+=8; m[(3264) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36604; }
+case 36603: { if(executed!==0&&executed+10>maxInstructions){pc=36603;outputStatus="budget";outputInstructions=executed;break runner;}executed+=10; m[(3264) >>> 0] = ((m[(2453) >>> 0] | 0)) | 0; pc = 36604; }
 case 36604: {  m[(3263) >>> 0] = (0) | 0; pc = 36605; }
 case 36605: {  m[(3265) >>> 0] = (0) | 0; pc = 36606; }
 case 36606: {  m[(3262) >>> 0] = (0) | 0; pc = 36607; }
 case 36607: {  m[(3260) >>> 0] = (1) | 0; pc = 36608; }
 case 36608: {  m[(3261) >>> 0] = (0) | 0; pc = 36609; }
 case 36609: {  m[(3206) >>> 0] = (5) | 0; pc = 36610; }
-case 36610: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36612) | 0; pc = (14445) - 1; continue runner; }
-case 36611: { if(executed!==0&&executed+2>maxInstructions){pc=36611;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; A = ((m[(6469) >>> 0] | 0)) | 0; pc = 36612; }
+case 36610: {  pc=36610; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:spmodpv", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36611; }
+case 36611: {  A = ((m[(6469) >>> 0] | 0)) | 0; pc = 36612; }
 case 36612: {  if ((((A) >>> 0) >= ((75000) >>> 0))) { pc = ((36616) - 1); continue runner; } pc = 36613; }
 case 36613: { if(executed!==0&&executed+2>maxInstructions){pc=36613;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; m[(3206) >>> 0] = (5) | 0; pc = 36614; }
 case 36614: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36616) | 0; pc = (14797) - 1; continue runner; }

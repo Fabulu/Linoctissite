@@ -253,6 +253,7 @@ const SERVICE_IDS = Object.freeze({
   terrainRock: "service:vhgndrock",
   terrainTree: "service:vhgndtree",
   terrainGreenmush: "service:vhgndgreenmush",
+  modifyPolyVector: "service:spmodpv",
   terrainTraverse: "service:vhgndtraversefaithful",
   waterBackdrop: "service:vhgndwaterbackdrop",
   denseAtmosphere: "service:vhgnddenseatmosphere",
@@ -317,6 +318,7 @@ const polymapAddressCaches = new WeakMap();
 const landedTerrainAddressCaches = new WeakMap();
 const landedRockAddressCaches = new WeakMap();
 const landedTreeRenderAddressCaches = new WeakMap();
+const polyVectorAddressCaches = new WeakMap();
 const denseAtmosphereAddressCaches = new WeakMap();
 const rectangleAddressCaches = new WeakMap();
 const pixelEffectCaches = new WeakMap();
@@ -6303,6 +6305,277 @@ function rockBoundsMayRender(machine, p, bounds, margin = 2) {
     || top < -radius * norms[2]
     || bottom > radius * norms[3]
   );
+}
+
+function polyVectorAddresses(linked) {
+  let cached = polyVectorAddressCaches.get(linked);
+  if (cached) return cached;
+  const names = [
+    "PVh", "PVcnt", "PVptr", "PVds", "PVret", "PVax", "PVay", "PVaz", "PVac",
+    "PVamx", "PVamy", "PVamz", "PVamd", "PVadi", "PVp", "PVc", "PVv", "PVi",
+    "PVnv", "PVj", "PVk", "MOpid", "MOvid", "MOlist", "MOxa", "MOya", "MOza",
+    "MOxs", "MOys", "MOzs", "MOnv", "MOwalk", "SPskipmid", "SPreg", "SPidx",
+    "SPf", "SPval", "PGFt", "PGFi", "FI", "FA0", "FB0", "FS0",
+  ];
+  cached = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+  cached.pvhtab = address(linked, "pvhtab");
+  cached.pvlst = address(linked, "pvlst");
+  cached.arena = noctisBuffer(linked, "RPVF");
+  cached.fw = address(linked, "fw");
+  cached.RGPVF = address(linked, "RGPVF");
+  cached.slots = Object.fromEntries([
+    "SFT0", "SFSNX", "SFCSX", "SFSNY", "SFCSY", "SFSNZ", "SFCSZ",
+    "SFMCX", "SFMCY", "SFMCZ", "SFX1", "SFY1", "SFZ1", "SFSCX", "SFSCY",
+    "SFSCZ", "SFV0", "SFV1", "SFV2", "SFV3",
+  ].map((name) => [name, address(linked, name)]));
+  polyVectorAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function polyVectorStoreSlot(memory, p, name, number) {
+  writeFloat64(memory, p.fw + p.slots[name] * 2, number);
+}
+
+function polyVectorReadFloat(machine, p, index) {
+  const memory = machine.memory;
+  const base = p.arena + (index >>> 0);
+  const bits = ((memory[base] & 255) | ((memory[base + 1] & 255) << 8)
+    | ((memory[base + 2] & 255) << 16) | ((memory[base + 3] & 255) << 24)) | 0;
+  memory[p.SPreg] = p.RGPVF;
+  memory[p.SPidx] = index;
+  memory[p.SPf] = bits;
+  machine.A = base;
+  machine.C = bits;
+  machine.D = memory[base] & 255;
+  return float32FromBits(bits);
+}
+
+function polyVectorWriteFloat(machine, p, index, number) {
+  const memory = machine.memory;
+  const base = p.arena + (index >>> 0);
+  const bits = float32Bits(number);
+  memory[p.SPreg] = p.RGPVF;
+  memory[p.SPidx] = index;
+  memory[p.SPf] = bits;
+  memory[base] = bits & 255;
+  memory[base + 1] = (bits >>> 8) & 255;
+  memory[base + 2] = (bits >>> 16) & 255;
+  memory[base + 3] = (bits >>> 24) & 255;
+  machine.A = base;
+  machine.C = (bits >>> 24) & 255;
+}
+
+function polyVectorLoadAddresses(machine, p) {
+  const memory = machine.memory;
+  const handle = memory[p.PVh] >>> 0;
+  const slot = p.pvhtab + handle * 8;
+  const count = memory[slot] | 0;
+  const pointer = memory[slot + 1] | 0;
+  memory[p.PVcnt] = count;
+  memory[p.PVptr] = pointer;
+  memory[p.PVds] = memory[slot + 3];
+  memory[p.PVac] = pointer;
+  memory[p.PVax] = pointer + count;
+  memory[p.PVay] = pointer + count * 17;
+  memory[p.PVaz] = pointer + count * 33;
+  memory[p.PVj] = pointer + count * 49;
+  memory[p.PVamx] = pointer + count * 50;
+  memory[p.PVamy] = pointer + count * 54;
+  memory[p.PVamz] = pointer + count * 58;
+  memory[p.PVamd] = pointer + count * 62;
+  memory[p.PVadi] = pointer + count * 66;
+  machine.A = memory[p.PVadi] | 0;
+  machine.C = Math.imul(count, 66);
+  return { slot, count };
+}
+
+function polyVectorMidpointsDirect(machine, linked, p) {
+  const memory = machine.memory;
+  const control = floatingPoint(machine).control;
+  const { count } = polyVectorLoadAddresses(machine, p);
+  memory[p.SPreg] = p.RGPVF;
+  memory[p.PVp] = 0;
+  for (let polygon = 0; polygon < count; polygon += 1) {
+    const vertices = memory[p.arena + (memory[p.PVac] | 0) + polygon] & 255;
+    memory[p.SPidx] = (memory[p.PVac] + polygon) | 0;
+    memory[p.SPval] = vertices;
+    memory[p.PVnv] = vertices;
+    let sx = 0;
+    let sy = 0;
+    let sz = 0;
+    polyVectorStoreSlot(memory, p, "SFV0", 0);
+    polyVectorStoreSlot(memory, p, "SFV1", 0);
+    polyVectorStoreSlot(memory, p, "SFV2", 0);
+    memory[p.PVv] = 0;
+    for (let vertex = 0; vertex < vertices; vertex += 1) {
+      const offset = polygon * 16 + vertex * 4;
+      memory[p.PVi] = offset;
+      sx = roundFloat32(sx + polyVectorReadFloat(machine, p, memory[p.PVax] + offset), control);
+      polyVectorStoreSlot(memory, p, "SFV0", sx);
+      sy = roundFloat32(sy + polyVectorReadFloat(machine, p, memory[p.PVay] + offset), control);
+      polyVectorStoreSlot(memory, p, "SFV1", sy);
+      sz = roundFloat32(sz + polyVectorReadFloat(machine, p, memory[p.PVaz] + offset), control);
+      polyVectorStoreSlot(memory, p, "SFV2", sz);
+      memory[p.PVv] = vertex + 1;
+    }
+    polyVectorStoreSlot(memory, p, "SFV3", vertices);
+    memory[p.FI] = vertices;
+    const averages = [sx, sy, sz].map((sum) => roundFloat32(
+      scalarBinaryNumber(sum, vertices, control, "divide"), control,
+    ));
+    const destinations = [p.PVamx, p.PVamy, p.PVamz];
+    for (let axis = 0; axis < 3; axis += 1) {
+      writeFloat64(memory, p.FA0, averages[axis]);
+      memory[p.FS0] = float32Bits(averages[axis]);
+      memory[p.PGFt] = memory[p.FS0];
+      polyVectorWriteFloat(machine, p, memory[destinations[axis]] + polygon * 4, averages[axis]);
+    }
+    memory[p.PVp] = polygon + 1;
+  }
+  machine.A = count;
+}
+
+function modifyPolyVector(machine, linked) {
+  const memory = machine.memory;
+  const p = polyVectorAddresses(linked);
+  const handle = memory[p.PVh] >>> 0;
+  if (handle >= 16) { machine.X = LINO_DONE; return; }
+  const slot = p.pvhtab + handle * 8;
+  if ((memory[slot + 2] | 0) === 0) { machine.X = LINO_DONE; return; }
+  polyVectorLoadAddresses(machine, p);
+  memory[p.MOwalk] = 0;
+  const control = floatingPoint(machine).control;
+  const degree = Math.PI / 180;
+  const trig = (bits, sineName, cosineName) => {
+    const angle = scalarBinaryNumber(float32FromBits(bits), degree, control, "multiply");
+    polyVectorStoreSlot(memory, p, "SFT0", angle);
+    const sine = roundFloat32(Math.sin(angle), control);
+    const cosine = roundFloat32(Math.cos(angle), control);
+    polyVectorStoreSlot(memory, p, sineName, sine);
+    polyVectorStoreSlot(memory, p, cosineName, cosine);
+    return [sine, cosine];
+  };
+  const [sinX, cosX] = trig(memory[p.MOxa], "SFSNX", "SFCSX");
+  const [sinY, cosY] = trig(memory[p.MOya], "SFSNY", "SFCSY");
+  const [sinZ, cosZ] = trig(memory[p.MOza], "SFSNZ", "SFCSZ");
+  const scaleX = float32FromBits(memory[p.MOxs]);
+  const scaleY = float32FromBits(memory[p.MOys]);
+  const scaleZ = float32FromBits(memory[p.MOzs]);
+  polyVectorStoreSlot(memory, p, "SFSCX", scaleX);
+  polyVectorStoreSlot(memory, p, "SFSCY", scaleY);
+  polyVectorStoreSlot(memory, p, "SFSCZ", scaleZ);
+  let centerX = 0;
+  let centerY = 0;
+  let centerZ = 0;
+  if ((memory[p.MOpid] | 0) >= 0 && (memory[p.MOvid] | 0) >= 0) {
+    const offset = (Math.imul(memory[p.MOpid] | 0, 4) + (memory[p.MOvid] | 0)) * 4;
+    memory[p.PVi] = offset;
+    centerX = polyVectorReadFloat(machine, p, memory[p.PVax] + offset);
+    centerY = polyVectorReadFloat(machine, p, memory[p.PVay] + offset);
+    centerZ = polyVectorReadFloat(machine, p, memory[p.PVaz] + offset);
+  }
+  polyVectorStoreSlot(memory, p, "SFMCX", centerX);
+  polyVectorStoreSlot(memory, p, "SFMCY", centerY);
+  polyVectorStoreSlot(memory, p, "SFMCZ", centerZ);
+
+  const transform = (offset) => {
+    memory[p.PVi] = offset;
+    const x0 = polyVectorReadFloat(machine, p, memory[p.PVax] + offset);
+    const y0 = polyVectorReadFloat(machine, p, memory[p.PVay] + offset);
+    const z0 = polyVectorReadFloat(machine, p, memory[p.PVaz] + offset);
+    const x = scalarBinaryNumber(x0, centerX, control, "subtract");
+    const y = scalarBinaryNumber(y0, centerY, control, "subtract");
+    const z = scalarBinaryNumber(z0, centerZ, control, "subtract");
+    polyVectorStoreSlot(memory, p, "SFV0", x);
+    polyVectorStoreSlot(memory, p, "SFV1", y);
+    polyVectorStoreSlot(memory, p, "SFV2", z);
+    const xPart = scalarBinaryNumber(x, cosY, control, "multiply");
+    polyVectorStoreSlot(memory, p, "SFT0", xPart);
+    const x1 = roundFloat32(scalarBinaryNumber(
+      scalarBinaryNumber(z, sinY, control, "multiply"), xPart, control, "add",
+    ), control);
+    polyVectorStoreSlot(memory, p, "SFX1", x1);
+    const zPart = scalarBinaryNumber(z, cosY, control, "multiply");
+    polyVectorStoreSlot(memory, p, "SFT0", zPart);
+    const z1 = roundFloat32(scalarBinaryNumber(
+      zPart, scalarBinaryNumber(x, sinY, control, "multiply"), control, "subtract",
+    ), control);
+    polyVectorStoreSlot(memory, p, "SFZ1", z1);
+    let result = scalarBinaryNumber(z1, cosX, control, "multiply");
+    polyVectorStoreSlot(memory, p, "SFT0", result);
+    result = scalarBinaryNumber(result, scalarBinaryNumber(y, sinX, control, "multiply"), control, "add");
+    result = scalarBinaryNumber(result, scaleZ, control, "multiply");
+    const outZ = roundFloat32(scalarBinaryNumber(result, centerZ, control, "add"), control);
+    writeFloat64(memory, p.FA0, outZ);
+    memory[p.FS0] = float32Bits(outZ);
+    memory[p.PGFt] = memory[p.FS0];
+    polyVectorWriteFloat(machine, p, memory[p.PVaz] + offset, outZ);
+    const yPart = scalarBinaryNumber(y, cosX, control, "multiply");
+    polyVectorStoreSlot(memory, p, "SFT0", yPart);
+    const y1 = roundFloat32(scalarBinaryNumber(
+      yPart, scalarBinaryNumber(z1, sinX, control, "multiply"), control, "subtract",
+    ), control);
+    polyVectorStoreSlot(memory, p, "SFY1", y1);
+    result = scalarBinaryNumber(x1, cosZ, control, "multiply");
+    polyVectorStoreSlot(memory, p, "SFT0", result);
+    result = scalarBinaryNumber(result, scalarBinaryNumber(y1, sinZ, control, "multiply"), control, "add");
+    result = scalarBinaryNumber(result, scaleX, control, "multiply");
+    const outX = roundFloat32(scalarBinaryNumber(result, centerX, control, "add"), control);
+    writeFloat64(memory, p.FA0, outX);
+    memory[p.FS0] = float32Bits(outX);
+    memory[p.PGFt] = memory[p.FS0];
+    polyVectorWriteFloat(machine, p, memory[p.PVax] + offset, outX);
+    result = scalarBinaryNumber(y1, cosZ, control, "multiply");
+    polyVectorStoreSlot(memory, p, "SFT0", result);
+    result = scalarBinaryNumber(result, scalarBinaryNumber(x1, sinZ, control, "multiply"), control, "subtract");
+    result = scalarBinaryNumber(result, scaleY, control, "multiply");
+    const outY = roundFloat32(scalarBinaryNumber(result, centerY, control, "add"), control);
+    writeFloat64(memory, p.FA0, outY);
+    memory[p.FS0] = float32Bits(outY);
+    memory[p.PGFt] = memory[p.FS0];
+    polyVectorWriteFloat(machine, p, memory[p.PVay] + offset, outY);
+    memory[p.MOwalk] = ((memory[p.MOwalk] | 0) + 1) | 0;
+  };
+
+  if ((memory[p.MOlist] | 0) === 0) {
+    memory[p.PVp] = 0;
+    const count = memory[p.PVcnt] | 0;
+    for (let polygon = 0; polygon < count; polygon += 1) {
+      const vertices = memory[p.arena + (memory[p.PVac] | 0) + polygon] & 255;
+      memory[p.SPval] = vertices;
+      memory[p.MOnv] = vertices;
+      memory[p.PVv] = 0;
+      for (let vertex = 0; vertex < vertices; vertex += 1) {
+        transform(polygon * 16 + vertex * 4);
+        memory[p.PVv] = vertex + 1;
+      }
+      memory[p.PVp] = polygon + 1;
+    }
+  } else {
+    memory[p.PVp] = 0;
+    for (let listIndex = 0; listIndex < 250; listIndex += 1) {
+      const packed = memory[p.pvlst + listIndex] & 0xffff;
+      memory[p.PVk] = packed;
+      const polygon = packed & 4095;
+      if (polygon === 4095) break;
+      memory[p.PVc] = polygon;
+      const vertices = memory[p.arena + (memory[p.PVac] | 0) + polygon] & 255;
+      memory[p.SPval] = vertices;
+      memory[p.MOnv] = vertices;
+      memory[p.PVv] = 0;
+      for (let vertex = 0; vertex < vertices; vertex += 1) {
+        if (vertex < 4 && (packed & (1 << (vertex + 12))) !== 0) {
+          transform(polygon * 16 + vertex * 4);
+        }
+        memory[p.PVv] = vertex + 1;
+      }
+      memory[p.PVp] = listIndex + 1;
+    }
+  }
+  if ((memory[p.SPskipmid] | 0) === 0 && (memory[p.PVds] | 0) !== 0) {
+    polyVectorMidpointsDirect(machine, linked, p);
+  }
+  machine.X = LINO_DONE;
 }
 
 const TREE_POLYGON_STATE_NAMES = Object.freeze([
@@ -12348,6 +12621,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.terrainRock]: terrainRock,
     [SERVICE_IDS.terrainTree]: terrainTree,
     [SERVICE_IDS.terrainGreenmush]: terrainGreenmush,
+    [SERVICE_IDS.modifyPolyVector]: modifyPolyVector,
     [SERVICE_IDS.terrainTraverse]: terrainTraverseFaithful,
     [SERVICE_IDS.waterBackdrop]: waterBackdrop,
     [SERVICE_IDS.denseAtmosphere]: denseAtmosphere,
