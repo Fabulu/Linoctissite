@@ -19,6 +19,9 @@ await access(compilerPath);
 await access(entryPath);
 
 const { loadProject } = await import(pathToFileURL(resolve(compilerRoot, "src/compiler/project-loader.js")));
+const {
+  createNoctisIntrinsics, emitStaticRunnerModule, linkProject,
+} = await import(pathToFileURL(compilerPath));
 
 async function firstFile(candidates, suffixes) {
   for (const candidate of candidates) {
@@ -97,4 +100,8 @@ await writeFile(
   JSON.stringify({ sources: sourceManifest, stockfiles: stockfileManifest, files: namedFileManifest }),
 );
 
-console.log(`Prepared real Noctis project: ${project.modules.length} modules, ${project.stockfiles.length} stockfiles`);
+const linked = linkProject(project);
+const runnerSource = emitStaticRunnerModule(linked, createNoctisIntrinsics(), { regionSize: 1024 });
+await writeFile(resolve("public/noctis-runners.js"), runnerSource);
+
+console.log(`Prepared real Noctis project: ${project.modules.length} modules, ${project.stockfiles.length} stockfiles, ${Math.ceil(runnerSource.length / 1024)} KiB static runners`);

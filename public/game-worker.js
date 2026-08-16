@@ -1,4 +1,9 @@
 import { compileProject, createNoctisIntrinsics } from "./linojava/compiler.js";
+import {
+  createRunners as createNoctisRunners,
+  instructionCount as noctisInstructionCount,
+  regionSize as noctisRegionSize,
+} from "./noctis-runners.js";
 
 const workerScope = typeof WorkerGlobalScope !== "undefined"
   && globalThis instanceof WorkerGlobalScope;
@@ -310,7 +315,11 @@ async function initialize(message) {
   program = await compileProject(entry, resolvers, {
     host,
     intrinsics: isolatedNoctisIntrinsics(),
-    regionSize: 1024,
+    precompiledRunners: {
+      create: createNoctisRunners,
+      instructionCount: noctisInstructionCount,
+      regionSize: noctisRegionSize,
+    },
     physicalWidth: Math.max(1, message.physicalWidth | 0),
     physicalHeight: Math.max(1, message.physicalHeight | 0),
     audioPlayback: Boolean(message.audioPlayback),

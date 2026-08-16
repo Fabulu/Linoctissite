@@ -401,7 +401,9 @@ export function inspect(source) {
   };
 }
 
-export { compileLinkedProject, compileProject, emitRunner } from "./compiler/project-compiler.js";
+export {
+  compileLinkedProject, compileProject, emitRunner, emitStaticRunnerModule,
+} from "./compiler/project-compiler.js";
 export { linkProject } from "./compiler/linker.js";
 export {
   createNoctisIntrinsics,
