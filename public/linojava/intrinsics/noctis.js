@@ -374,16 +374,13 @@ function address(linked, name) {
     cache = Object.create(null);
     symbolCaches.set(linked, cache);
   }
-  let result = cache[name];
-  if (result === undefined) {
-    const symbol = linked.symbols.get(canonicalName(name));
-    if (symbol) {
-      result = symbol.value >>> 0;
-      cache[name] = result;
-    }
+  let symbol = cache[name];
+  if (symbol === undefined) {
+    symbol = linked.symbols.get(canonicalName(name));
+    if (symbol) cache[name] = symbol;
   }
-  if (result === undefined) throw new ReferenceError(`Missing Noctis Lino symbol ${name}`);
-  return result;
+  if (!symbol) throw new ReferenceError(`Missing Noctis Lino symbol ${name}`);
+  return symbol.value >>> 0;
 }
 
 function floatingPoint(machine) {
