@@ -19,8 +19,44 @@ const fullscreenCanvas = document.querySelector("#fullscreen-game");
 const fullscreenContext = fullscreenCanvas.getContext("2d", { alpha: false });
 const exitFullscreenButton = document.querySelector("#exit-fullscreen");
 const status = document.querySelector("#status");
+const crashPanel = document.querySelector("#crash-panel");
+const crashReport = document.querySelector("#crash-report");
+const copyCrashButton = document.querySelector("#copy-crash");
 const sourceRoot = new URL("./lino-src/", location.href);
 const entry = new URL("work/vhgame.txt", sourceRoot).href;
+
+function showCrash(error) {
+  const pc = program?.machine?.pc ?? null;
+  const packet = {
+    version: 1,
+    occurredAt: new Date().toISOString(),
+    phase: "foreground-run",
+    message: error?.stack || error?.message || String(error),
+    pc,
+    instruction: pc === null ? null : program.linked.instructions[pc] ?? null,
+    labels: pc === null ? [] : program.linked.aliases
+      .filter((item) => item.instruction === pc).map((item) => item.name),
+    registers: program?.machine ? { A: program.machine.A | 0, B: program.machine.B | 0,
+      C: program.machine.C | 0, D: program.machine.D | 0, E: program.machine.E | 0,
+      X: program.machine.X | 0 } : null,
+    depth: program?.machine?.depth ?? null,
+    stackTop: program?.machine
+      ? Array.from(program.machine.stack.slice(Math.max(0, program.machine.depth - 16), program.machine.depth)) : [],
+  };
+  const report = JSON.stringify(packet, null, 2);
+  crashReport.textContent = report;
+  crashPanel.hidden = false;
+  try { sessionStorage.setItem("linoctis:last-crash", report); } catch { /* optional */ }
+}
+
+copyCrashButton.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(crashReport.textContent);
+    copyCrashButton.textContent = "Copied";
+  } catch {
+    copyCrashButton.textContent = "Select report below";
+  }
+});
 
 async function openPersistence() {
   if (!window.indexedDB) return null;
@@ -463,6 +499,7 @@ function runFrame() {
   } catch (error) {
     cancelQueuedAnimationFrame();
     status.textContent = `Lino stopped: ${error.message}`;
+    showCrash(error);
     throw error;
   }
 }

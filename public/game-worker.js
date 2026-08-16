@@ -37,8 +37,41 @@ let renderedFps = 0;
 let runnerMillisecondsPerFrame = 0;
 let instructionsPerFrame = 0;
 let pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, paused: false };
+const recentInputEvents = [];
 
 const canonical = (value) => String(value).replace(/[\x00-\x20]+/g, "").replaceAll("\\", "/").toLowerCase();
+
+function recordInputEvent(message) {
+  if (!["key", "clearKeys", "ascii", "pointer", "physical", "displayPosition"].includes(message.type)) return;
+  const entry = { at: Math.round(performance.now()), type: message.type };
+  for (const name of ["name", "down", "value", "x", "y", "buttons", "deltaX", "deltaY",
+    "transition", "width", "height"]) {
+    if (message[name] !== undefined) entry[name] = message[name];
+  }
+  recentInputEvents.push(entry);
+  if (recentInputEvents.length > 32) recentInputEvents.shift();
+}
+
+function crashPacket(error, phase) {
+  const machine = program?.machine;
+  const pc = machine?.pc ?? null;
+  return {
+    version: 1,
+    occurredAt: new Date().toISOString(),
+    phase,
+    message: error?.stack || error?.message || String(error),
+    renderedFrames,
+    pc,
+    instruction: pc === null ? null : program.linked.instructions[pc] ?? null,
+    labels: pc === null ? [] : program.linked.aliases
+      .filter((item) => item.instruction === pc).map((item) => item.name),
+    registers: machine ? { A: machine.A | 0, B: machine.B | 0, C: machine.C | 0,
+      D: machine.D | 0, E: machine.E | 0, X: machine.X | 0 } : null,
+    depth: machine?.depth ?? null,
+    stackTop: machine ? Array.from(machine.stack.slice(Math.max(0, machine.depth - 16), machine.depth)) : [],
+    recentInputEvents: recentInputEvents.slice(),
+  };
+}
 
 function publishPointerWorkspace() {
   if (!program) return;
@@ -255,7 +288,8 @@ function runMachine() {
     queueRun(delay, !producedFrame && result.status === "budget");
   } catch (error) {
     running = false;
-    emitMessage({ type: "error", message: error?.stack || error?.message || String(error) });
+    emitMessage({ type: "error", message: error?.stack || error?.message || String(error),
+      packet: crashPacket(error, "run") });
   }
 }
 
@@ -371,8 +405,10 @@ async function initialize(message) {
 
 function handleMessage(message) {
   message ??= {};
+  recordInputEvent(message);
   if (message.type === "init") {
-    initialize(message).catch((error) => emitMessage({ type: "error", message: error?.stack || String(error) }));
+    initialize(message).catch((error) => emitMessage({ type: "error", message: error?.stack || String(error),
+      packet: crashPacket(error, "initialize") }));
   } else if (message.type === "key") {
     if (message.down) heldKeys[message.name] = 1;
     else delete heldKeys[message.name];

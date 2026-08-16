@@ -8,6 +8,9 @@ const fullscreenCanvas = document.querySelector("#fullscreen-game");
 const fullscreenContext = fullscreenCanvas.getContext("2d", { alpha: false });
 const exitFullscreenButton = document.querySelector("#exit-fullscreen");
 const status = document.querySelector("#status");
+const crashPanel = document.querySelector("#crash-panel");
+const crashReport = document.querySelector("#crash-report");
+const copyCrashButton = document.querySelector("#copy-crash");
 const sourceRoot = new URL("./lino-src/", location.href);
 
 async function openPersistence() {
@@ -142,6 +145,24 @@ let displayRate = 0;
 let displayStartedAt = performance.now();
 let displayMilliseconds = 0;
 let lastMetrics = null;
+
+function showCrash(message) {
+  const packet = message.packet ?? { version: 1, occurredAt: new Date().toISOString(),
+    phase: "worker", message: message.message ?? "Unknown worker failure" };
+  const report = JSON.stringify(packet, null, 2);
+  crashReport.textContent = report;
+  crashPanel.hidden = false;
+  try { sessionStorage.setItem("linoctis:last-crash", report); } catch { /* optional */ }
+}
+
+copyCrashButton.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(crashReport.textContent);
+    copyCrashButton.textContent = "Copied";
+  } catch {
+    copyCrashButton.textContent = "Select report below";
+  }
+});
 
 function releaseFrame(frame) {
   if (!frame) return;
@@ -421,9 +442,15 @@ worker.addEventListener("message", (event) => {
     writePersistence(persistence, "globalK", String(message.name), message.units === null ? null : new Int32Array(message.units));
   } else if (message.type === "pcm") pcmHost.command(message);
   else if (message.type === "stopped") status.textContent = `Lino stopped: ${message.status}`;
-  else if (message.type === "error") status.textContent = `Lino stopped: ${message.message}`;
+  else if (message.type === "error") {
+    status.textContent = `Lino stopped: ${message.message}`;
+    showCrash(message);
+  }
 });
-worker.addEventListener("error", (event) => { status.textContent = `Lino worker failed: ${event.message}`; });
+worker.addEventListener("error", (event) => {
+  status.textContent = `Lino worker failed: ${event.message}`;
+  showCrash({ message: event.message });
+});
 
 status.textContent = "Compiling the real 73-module Noctis project in JavaScript...";
 const windowBounds = linoWindow.getBoundingClientRect();

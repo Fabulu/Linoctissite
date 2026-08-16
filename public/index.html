@@ -16,6 +16,10 @@
         <button id="exit-fullscreen" class="exit-fullscreen" type="button" hidden title="Exit full screen (Ctrl+Shift+F)">Exit full screen</button>
       </section>
       <p id="status" class="status">Loading the real Lino Noctis sources...</p>
+      <section id="crash-panel" class="crash-panel" hidden aria-live="assertive">
+        <div><strong>Lino stopped unexpectedly.</strong> <button id="copy-crash" type="button">Copy crash report</button></div>
+        <pre id="crash-report"></pre>
+      </section>
     </main>
     <noscript>Linoctis needs JavaScript to compile and run L.in.oleum source.</noscript>
     <script type="module" src="./app.js"></script>

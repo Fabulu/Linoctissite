@@ -104,6 +104,30 @@ body {
   color: #91a8bb;
 }
 
+.crash-panel {
+  max-height: min(38vh, 280px);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #b95e68;
+  background: #21080ddd;
+  color: #ffd9dc;
+  font-size: 11px;
+}
+
+.crash-panel button {
+  margin-left: 8px;
+  border: 1px solid #d9a0a6;
+  background: #3b1118;
+  color: #fff;
+  cursor: pointer;
+}
+
+.crash-panel pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .lino-window.is-dormant {
   gap: 0;
 }
