@@ -291,12 +291,16 @@ async function initialize(message) {
       if (frameCredit) {
         frameCredit = false;
         const count = width * height;
-        let pixels = frameBuffers.pop();
-        if (!pixels || pixels.length !== count) pixels = new Int32Array(count);
-        pixels.set(memory.subarray(origin, origin + count));
+        let pixels;
+        if (foregroundRuntime) pixels = memory.subarray(origin, origin + count);
+        else {
+          pixels = frameBuffers.pop();
+          if (!pixels || pixels.length !== count) pixels = new Int32Array(count);
+          pixels.set(memory.subarray(origin, origin + count));
+        }
         pendingFrame = {
           type: "frame", width, height,
-          pixels,
+          pixels, borrowed: foregroundRuntime,
         };
       }
       return true;

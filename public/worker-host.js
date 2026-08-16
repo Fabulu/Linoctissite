@@ -201,7 +201,8 @@ function animationFrame(now) {
     const frame = pendingFrame;
     pendingFrame = null;
     present(frame);
-    worker.postMessage({ type: "frameCredit", buffer: frame.pixels.buffer }, [frame.pixels.buffer]);
+    if (frame.borrowed) worker.postMessage({ type: "frameCredit" });
+    else worker.postMessage({ type: "frameCredit", buffer: frame.pixels.buffer }, [frame.pixels.buffer]);
   }
   const elapsed = now - displayStartedAt;
   if (elapsed >= 1000) {
