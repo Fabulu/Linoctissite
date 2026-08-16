@@ -140,6 +140,7 @@ let gameTop = 0;
 let gameWidth = 320;
 let gameHeight = 200;
 let linoFullscreenPress = false;
+let linoMenuPress = false;
 let linoWindowDrag = null;
 let linoWindowResize = null;
 let activePointerTarget = null;
@@ -310,6 +311,15 @@ async function requestGameFullscreen() {
 
 function releasePointer(event, target) {
   pointerPosition(event, target);
+  if (linoMenuPress) {
+    if (event.button === 0 && target === canvas
+        && insideLinoBounds("menubuttonhotspot", pointerX, pointerY)) {
+      worker.postMessage({ type: "guiAction", name: "menu" });
+    }
+    linoMenuPress = false;
+    activePointerTarget = null;
+    return;
+  }
   if (linoWindowResize) {
     const desiredX = Math.round((event.clientX - linoWindowResize.clientX) * linoWindowResize.width / linoWindowResize.cssWidth);
     const desiredY = Math.round((event.clientY - linoWindowResize.clientY) * linoWindowResize.height / linoWindowResize.cssHeight);
@@ -330,13 +340,14 @@ function releasePointer(event, target) {
 }
 
 function cancelActivePointer() {
-  if (pointerButtons === 0 && activePointerTarget === null) return;
+  if (pointerButtons === 0 && activePointerTarget === null && !linoMenuPress) return;
   // Browsers may cancel or lose pointer capture when focus changes, the page
   // is hidden, or canvas geometry changes during an iGUI redraw. Native Lino
   // would still observe the OS button-up edge, so publish it explicitly.
   pointerButtons = 0;
   sendPointer(0, 0, true);
   linoFullscreenPress = false;
+  linoMenuPress = false;
   linoWindowDrag = null;
   linoWindowResize = null;
   activePointerTarget = null;
@@ -346,6 +357,14 @@ for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("pointermove", (event) => movePointer(event, target));
   target.addEventListener("pointerdown", (event) => {
     pointerPosition(event);
+    if (event.button === 0 && target === canvas
+        && insideLinoBounds("menubuttonhotspot", pointerX, pointerY)) {
+      linoMenuPress = true;
+      activePointerTarget = target;
+      target.focus();
+      target.setPointerCapture(event.pointerId);
+      return;
+    }
     linoFullscreenPress = event.button === 0 && target === canvas
       && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY);
     pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
@@ -385,7 +404,7 @@ window.addEventListener("mouseup", (event) => {
   // Chromium can drop the canvas pointerup after pointer capture changes
   // during a Lino redraw. Mouseup still reaches the window; use it as the
   // final release authority so iGUI buttons cannot remain permanently down.
-  if (pointerButtons === 0 || !activePointerTarget) return;
+  if ((pointerButtons === 0 && !linoMenuPress) || !activePointerTarget) return;
   releasePointer(event, activePointerTarget);
 });
 

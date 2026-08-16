@@ -136,6 +136,7 @@ let runCallsPerFrame = 0;
 let statusStartedAt = 0;
 let statusStartedFrame = -1;
 let linoFullscreenPress = false;
+let linoMenuPress = false;
 let linoWindowDrag = null;
 let linoWindowResize = null;
 let activePointerTarget = null;
@@ -421,6 +422,20 @@ async function requestGameFullscreen() {
   if (!document.fullscreenElement) await gameStage.requestFullscreen();
 }
 
+function scheduleLinoMenuAction() {
+  const instruction = program.linked.labels.get("menubuttonaction");
+  if (instruction === undefined) throw new ReferenceError("Missing Lino menu action");
+  const machine = program.machine;
+  if (machine.depth === machine.stack.length) {
+    const grown = new Int32Array(machine.stack.length * 2);
+    grown.set(machine.stack);
+    machine.stack = grown;
+  }
+  machine.stack[machine.depth++] = (machine.pc | 0) + 1;
+  machine.pc = instruction;
+  queueAnimationFrame();
+}
+
 const budgetChannel = new MessageChannel();
 let budgetContinuationQueued = false;
 let animationFrameRequest = 0;
@@ -555,6 +570,15 @@ function movePointer(event, target) {
 
 function releasePointer(event, target) {
   pointerPosition(event, target);
+  if (linoMenuPress) {
+    if (event.button === 0 && target === canvas
+        && insideLinoBounds("menubuttonhotspot", pointerX, pointerY)) {
+      scheduleLinoMenuAction();
+    }
+    linoMenuPress = false;
+    activePointerTarget = null;
+    return;
+  }
   if (linoWindowResize) {
     const desiredX = Math.round(
       (event.clientX - linoWindowResize.clientX)
@@ -587,7 +611,7 @@ function releasePointer(event, target) {
 }
 
 function cancelActivePointer() {
-  if (pointerButtons === 0 && activePointerTarget === null) return;
+  if (pointerButtons === 0 && activePointerTarget === null && !linoMenuPress) return;
   // Match the button-up edge an OS host supplies when capture or focus is
   // interrupted. Without it, a legacy hotspot can remain pressed forever.
   pointerButtons = 0;
@@ -597,6 +621,7 @@ function cancelActivePointer() {
     buttons: 0, x: pointerX, y: pointerY, deltaX: 0, deltaY: 0,
   });
   linoFullscreenPress = false;
+  linoMenuPress = false;
   linoWindowDrag = null;
   linoWindowResize = null;
   activePointerTarget = null;
@@ -606,6 +631,14 @@ for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("pointermove", (event) => movePointer(event, target));
   target.addEventListener("pointerdown", (event) => {
     pointerPosition(event);
+    if (event.button === 0 && target === canvas
+        && insideLinoBounds("menubuttonhotspot", pointerX, pointerY)) {
+      linoMenuPress = true;
+      activePointerTarget = target;
+      target.focus();
+      target.setPointerCapture(event.pointerId);
+      return;
+    }
     linoFullscreenPress = event.button === 0 && target === canvas
       && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY);
     pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
@@ -655,6 +688,10 @@ window.addEventListener("pointermove", (event) => {
 });
 window.addEventListener("pointerup", (event) => {
   if (!activePointerTarget || event.target === canvas || event.target === fullscreenCanvas) return;
+  releasePointer(event, activePointerTarget);
+});
+window.addEventListener("mouseup", (event) => {
+  if ((pointerButtons === 0 && !linoMenuPress) || !activePointerTarget) return;
   releasePointer(event, activePointerTarget);
 });
 

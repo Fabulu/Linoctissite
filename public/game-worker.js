@@ -251,8 +251,8 @@ function publishFrame(result, runnerMilliseconds, producedFrame) {
   pendingFrame = null;
   frame.ui = symbolValues(
     ["vhguileft", "vhguitop", "vhguidw", "vhguidh", "displayxposition", "displayyposition",
-      "fullbuttonhotspot", "titlebarbounds", "sizebuttonhotspot"],
-    { fullbuttonhotspot: 4, titlebarbounds: 4, sizebuttonhotspot: 4 },
+      "fullbuttonhotspot", "titlebarbounds", "sizebuttonhotspot", "menubuttonhotspot"],
+    { fullbuttonhotspot: 4, titlebarbounds: 4, sizebuttonhotspot: 4, menubuttonhotspot: 5 },
   );
   frame.metrics = {
     renderedFrames, renderedFps, runnerMillisecondsPerFrame, instructionsPerFrame,
@@ -459,6 +459,24 @@ function handleMessage(message) {
     const y = program.linked.symbols.get("displayyposition");
     if (x) program.machine.memory[x.value] = message.x | 0;
     if (y) program.machine.memory[y.value] = message.y | 0;
+  } else if (message.type === "guiAction" && program && message.name === "menu") {
+    try {
+      const instruction = program.linked.labels.get("menubuttonaction");
+      if (instruction === undefined) throw new ReferenceError("Missing Lino menu action");
+      const machine = program.machine;
+      if (machine.depth === machine.stack.length) {
+        const grown = new Int32Array(machine.stack.length * 2);
+        grown.set(machine.stack);
+        machine.stack = grown;
+      }
+      machine.stack[machine.depth++] = (machine.pc | 0) + 1;
+      machine.pc = instruction;
+      if (running && !runQueued && delayedRun === 0) queueRun(0, true);
+    } catch (error) {
+      running = false;
+      emitMessage({ type: "error", message: error?.stack || error?.message || String(error),
+        packet: crashPacket(error, "guiAction:menu") });
+    }
   }
 }
 
