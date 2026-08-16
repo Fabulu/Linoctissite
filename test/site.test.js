@@ -36,7 +36,9 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(gameWorker, /precompiledRunners/);
   assert.match(gameWorker, /foregroundRuntime\) pixels = memory\.subarray\(origin, origin \+ count\)/);
   assert.match(gameWorker, /pixels\.set\(memory\.subarray\(origin, origin \+ count\)\)/);
-  assert.match(workerHost, /if \(frame\.borrowed\) worker\.postMessage\(\{ type: "frameCredit" \}\)/);
+  assert.match(workerHost, /if \(credit\) worker\.postMessage\(\{ type: "frameCredit" \}\)/);
+  assert.match(workerHost, /credit \? "frameCredit" : "frameBuffer"/);
+  assert.match(gameWorker, /waitingForFrameCredit/);
   assert.match(app, /syncDisplay\(\{ width, height, x, y \}\)/);
   assert.match(app, /pointerTransitions/);
   assert.match(app, /physicalWidth: Math\.max\(1, window\.innerWidth\)/);

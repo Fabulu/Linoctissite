@@ -26,6 +26,7 @@ let completedFrame = false;
 const maxFrameCredits = workerScope ? 3 : 1;
 let frameCredits = maxFrameCredits;
 const frameBuffers = [];
+let waitingForFrameCredit = false;
 let runQueued = false;
 let delayedRun = 0;
 let renderedFrames = 0;
@@ -285,7 +286,7 @@ function runMachine() {
     // presentation. Yield through the worker event loop between those slices
     // so pointer releases and other host messages cannot be starved by our
     // private MessageChannel queue.
-    queueRun(delay, !producedFrame && result.status === "budget");
+    if (!waitingForFrameCredit) queueRun(delay, !producedFrame && result.status === "budget");
   } catch (error) {
     running = false;
     emitMessage({ type: "error", message: error?.stack || error?.message || String(error),
@@ -384,7 +385,8 @@ async function initialize(message) {
           type: "frame", width, height,
           pixels, borrowed: foregroundRuntime,
         };
-      }
+        if (frameCredits === 0) waitingForFrameCredit = true;
+      } else waitingForFrameCredit = true;
       return true;
     },
     pcm: pcmCommand,
@@ -427,6 +429,12 @@ function handleMessage(message) {
   } else if (message.type === "frameCredit") {
     if (message.buffer instanceof ArrayBuffer) frameBuffers.push(new Int32Array(message.buffer));
     frameCredits = Math.min(maxFrameCredits, frameCredits + 1);
+    if (waitingForFrameCredit) {
+      waitingForFrameCredit = false;
+      queueRun();
+    }
+  } else if (message.type === "frameBuffer") {
+    if (message.buffer instanceof ArrayBuffer) frameBuffers.push(new Int32Array(message.buffer));
   } else if (message.type === "ascii") consoleInput.push(message.value | 0);
   else if (message.type === "pointer") {
     pointerX = message.x | 0;

@@ -171,10 +171,14 @@ copyCrashButton.addEventListener("click", async () => {
   }
 });
 
-function releaseFrame(frame) {
+function releaseFrame(frame, credit = true) {
   if (!frame) return;
-  if (frame.borrowed) worker.postMessage({ type: "frameCredit" });
-  else worker.postMessage({ type: "frameCredit", buffer: frame.pixels.buffer }, [frame.pixels.buffer]);
+  if (frame.borrowed) {
+    if (credit) worker.postMessage({ type: "frameCredit" });
+    return;
+  }
+  const type = credit ? "frameCredit" : "frameBuffer";
+  worker.postMessage({ type, buffer: frame.pixels.buffer }, [frame.pixels.buffer]);
 }
 
 function configureDisplay(width, height) {
@@ -432,7 +436,7 @@ worker.addEventListener("message", (event) => {
   const message = event.data ?? {};
   if (message.type === "ready") status.textContent = "Starting Noctis...";
   else if (message.type === "frame") {
-    releaseFrame(pendingFrame);
+    releaseFrame(pendingFrame, false);
     pendingFrame = message;
   }
   else if (message.type === "display") {
