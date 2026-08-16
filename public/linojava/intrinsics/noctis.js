@@ -9981,15 +9981,6 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
   memory[p.VHGNDtilepolys] = 0;
   memory[p.PJfwbase] = p.fw;
 
-  const polygon = polymapAddresses(linked);
-  if (!landedTerrainTileOnScreen(
-    machine, p, polygon, h1, height0, height1, height2, height3,
-  )) {
-    memory[p.VHGNDvctri] = 1;
-    memory[done] = 1;
-    return;
-  }
-
   memory[p.VHGNDvctri] = 0;
   const facing0 = terrainFacingDirect(machine, p, 0);
   memory[p.VHGNDvctri] = 1;
