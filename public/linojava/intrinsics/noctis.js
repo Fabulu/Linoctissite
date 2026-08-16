@@ -5832,9 +5832,13 @@ function landedTerrainAddresses(linked) {
     "VHGNDhudpacked", "VHGNDhudshift",
     "FT0", "GRcwc", "GRcwn",
     "VHGNDseed", "SUfseed", "SUfeax", "SUfmask", "SUfval",
+    "VHGNDobjbyte", "VHGNDocount", "VHGNDobjid", "VHGNDobjclass",
+    "VHGNDobjcachep", "VHGNDobjcachex", "VHGNDobjcachey", "VHGNDobjcachez",
+    "VHGNDobjcacheseed", "VHGNDoox", "VHGNDooy", "VHGNDooz",
   ];
   cached = { ...Object.fromEntries(names.map((name) => [name, address(linked, name)])) };
   cached.surface = noctisBuffer(linked, "RPSM");
+  cached.objectChart = noctisBuffer(linked, "ROBJ");
   landedTerrainAddressCaches.set(linked, cached);
   return cached;
 }
@@ -7056,6 +7060,48 @@ function terrainRock(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function renderTerrainTileObjects(machine, linked, p, handles, x, z) {
+  const memory = machine.memory;
+  memory[p.VHGNDh1] = Math.imul(z, 200) + x;
+  const packed = memory[p.objectChart + memory[p.VHGNDh1]] & 0xff;
+  memory[p.VHGNDobjbyte] = packed;
+  memory[p.VHGNDocount] = packed & 3;
+  memory[p.VHGNDobjid] = 0;
+
+  while ((memory[p.VHGNDocount] | 0) !== 0) {
+    machine.A = memory[p.VHGNDobjbyte] | 0;
+    machine.C = ((memory[p.VHGNDobjid] | 0) + 1) << 1;
+    machine.A = (machine.A >>> (machine.C & 31)) & 3;
+    memory[p.VHGNDobjclass] = machine.A;
+
+    machine.A = (Math.imul(memory[p.VHGNDh1] | 0, 3)
+      + (memory[p.VHGNDobjid] | 0)) | 0;
+    memory[p.VHGNDobjcachep] = machine.A;
+    machine.C = (p.VHGNDobjcachex + machine.A) | 0;
+    memory[p.VHGNDoox] = memory[machine.C];
+    machine.C = (p.VHGNDobjcachey + machine.A) | 0;
+    memory[p.VHGNDooy] = memory[machine.C];
+    machine.C = (p.VHGNDobjcachez + machine.A) | 0;
+    memory[p.VHGNDooz] = memory[machine.C];
+    machine.C = (p.VHGNDobjcacheseed + machine.A) | 0;
+    memory[p.SUfseed] = memory[machine.C];
+
+    machine.A = memory[p.VHGNDobjclass] | 0;
+    if (machine.A === 0) terrainRock(machine, linked);
+    else if (machine.A === 1) machine.callCode(handles.vegetation);
+    else if (machine.A === 2) {
+      machine.A = memory[p.VHGNDooy] | 0;
+      machine.C = -15000;
+      if (machine.A <= machine.C) terrainTree(machine, linked);
+      else machine.callCode(handles.bush);
+    }
+
+    memory[p.VHGNDobjid] = ((memory[p.VHGNDobjid] | 0) + 1) | 0;
+    memory[p.VHGNDocount] = ((memory[p.VHGNDocount] | 0) - 1) | 0;
+  }
+  machine.A = 0;
+}
+
 function renderTerrainTileDetails(machine, linked, p, handles, x, z) {
   const memory = machine.memory;
   if ((memory[p.VHGNDmirror] | 0) !== 0 || (memory[p.VHGNDruinpass] | 0) !== 0
@@ -7069,8 +7115,10 @@ function renderTerrainTileDetails(machine, linked, p, handles, x, z) {
 
   terrainTileFauna(machine, linked);
 
-  const objectChart = noctisBuffer(linked, "ROBJ");
-  if ((memory[objectChart + z * 200 + x] & 3) !== 0) machine.callCode(handles.objects);
+  if ((memory[p.objectChart + z * 200 + x] & 3) !== 0) {
+    if (machine.noctisDisableTerrainTileObjects) machine.callCode(handles.objects);
+    else renderTerrainTileObjects(machine, linked, p, handles, x, z);
+  }
 }
 
 function terrainTraverseFaithful(machine, linked) {
@@ -7087,6 +7135,8 @@ function terrainTraverseFaithful(machine, linked) {
     animals: codeHandle(linked, "VHGND render animals"),
     birds: codeHandle(linked, "VHGND render birds"),
     objects: codeHandle(linked, "VHGND tile objects"),
+    vegetation: codeHandle(linked, "VHGND veget"),
+    bush: codeHandle(linked, "VHGND bush"),
   };
   if (typeof machine.callCode !== "function" || fullTile < 1
       || Object.values(detailHandles).some((handle) => handle < 1)) {
