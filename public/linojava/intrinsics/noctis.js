@@ -251,6 +251,7 @@ const SERVICE_IDS = Object.freeze({
   terrainFacing: "service:vhgndterrainfacing",
   terrainTraverse: "service:vhgndtraversefaithful",
   waterBackdrop: "service:vhgndwaterbackdrop",
+  denseAtmosphere: "service:vhgnddenseatmosphere",
   terrainRenderRandom: "service:vhgndrenderrandom",
   terrainVertexLoad: "service:vhgndvload",
   rectangle: "service:rectangle",
@@ -268,6 +269,7 @@ const SERVICE_IDS = Object.freeze({
   surfaceNegate: "service:sunegate",
   surfaceRandomPattern: "service:surndpat",
   surfaceSda: "service:susda",
+  groundRoundHill: "service:grroundhill",
   groundTextureDarkline: "service:vhgndtexturedarklinecommon",
   groundPostSurface: "service:vhgndpostsurfacecommon",
   spaceFade: "service:vhsfade",
@@ -296,12 +298,14 @@ const rasterAddressCaches = new WeakMap();
 const poly3dAddressCaches = new WeakMap();
 const polymapAddressCaches = new WeakMap();
 const landedTerrainAddressCaches = new WeakMap();
+const denseAtmosphereAddressCaches = new WeakMap();
 const rectangleAddressCaches = new WeakMap();
 const pixelEffectCaches = new WeakMap();
 const tgaAddressCaches = new WeakMap();
 const textAddressCaches = new WeakMap();
 const ekeyAddressCaches = new WeakMap();
 const surfaceBulkAddressCaches = new WeakMap();
+const groundRoundHillAddressCaches = new WeakMap();
 const groundTextureDarklineAddressCaches = new WeakMap();
 const groundPostSurfaceAddressCaches = new WeakMap();
 const spaceFadeAddressCaches = new WeakMap();
@@ -4490,6 +4494,145 @@ function groundCraterPower(machine, linked) {
   groundStoreFloat(machine, linked, "GRfy", result);
 }
 
+function groundRoundHill(machine, linked) {
+  const memory = machine.memory;
+  let p = groundRoundHillAddressCaches.get(linked);
+  if (!p) {
+    p = Object.fromEntries([
+      "nw", "RPSM", "SUia", "SUcxi", "SUcyi", "GRfv", "GRfht", "GRfhmt", "GRfcanyon",
+      "GRfrlo", "GRfrhi", "GRfrx", "GRfrz", "GRdxi", "GRdzi", "GRfdx", "GRfdz",
+      "GRfd", "GRfy", "GRfs0", "GRfs1", "GRptr", "GRsval", "GRfti", "MBptr", "MBval",
+    ].map((name) => [name, address(linked, name)]));
+    groundRoundHillAddressCaches.set(linked, p);
+  }
+
+  groundRoundHillRadius(machine, linked);
+  const radius = memory[p.SUia] & 0xffff;
+  memory[p.SUia] = radius;
+  const centerX = memory[p.SUcxi] | 0;
+  const centerZ = memory[p.SUcyi] | 0;
+  const firstX = (centerX - radius) & 0xffff;
+  const lastX = (centerX + radius) & 0xffff;
+  memory[p.GRfrlo] = firstX;
+  memory[p.GRfrhi] = lastX;
+  memory[p.GRfrx] = firstX;
+  machine.A = firstX;
+  machine.B = centerX;
+  machine.C = lastX;
+
+  const surface = p.nw + p.RPSM;
+  const profileCache = machine.noctisRoundHillCache ??= {
+    generation: 0,
+    stamp: new Uint32Array(80001),
+    distance: new Int32Array(80001),
+    scratchLow: new Int32Array(80001),
+    scratchHigh: new Int32Array(80001),
+    height: new Int32Array(80001),
+  };
+  profileCache.generation = (profileCache.generation + 1) >>> 0;
+  if (profileCache.generation === 0) {
+    profileCache.stamp.fill(0);
+    profileCache.generation = 1;
+  }
+  const profileGeneration = profileCache.generation;
+  const control = floatingPoint(machine).control;
+  const directProfile = (control & 0x0c00) === 0;
+  const profileDivisor = float32FromBits(memory[p.GRfv]);
+  const profileHeight = float32FromBits(memory[p.GRfht]);
+  let x = firstX;
+  for (; (x >>> 0) < (lastX >>> 0); x = (x + 1) | 0) {
+    memory[p.GRfrx] = x;
+    let z = (centerZ - radius) & 0xffff;
+    memory[p.GRfrz] = z;
+    machine.D = z;
+    for (;;) {
+      if (x >= 0 && x < 200 && z >= 0 && z < 200) {
+        const dx = (x - centerX) | 0;
+        const dz = (z - centerZ) | 0;
+        memory[p.GRdxi] = dx;
+        groundRoundHillDx(machine, linked);
+        memory[p.GRdzi] = dz;
+        const distanceSquared = Math.imul(dx, dx) + Math.imul(dz, dz);
+        if (profileCache.stamp[distanceSquared] === profileGeneration) {
+          memory[p.GRfdz] = float32Bits(dz);
+          memory[p.GRfd] = profileCache.distance[distanceSquared];
+          memory[p.GRfs0] = profileCache.scratchLow[distanceSquared];
+          memory[p.GRfs1] = profileCache.scratchHigh[distanceSquared];
+          memory[p.GRfy] = profileCache.height[distanceSquared];
+        } else {
+          if (directProfile) {
+            memory[p.GRfdz] = float32Bits(dz);
+            writeFloat64(memory, p.GRfs0, distanceSquared);
+            const distance = Math.fround(Math.sqrt(distanceSquared));
+            memory[p.GRfd] = float32Bits(distance);
+            const angle = distance / profileDivisor;
+            writeFloat64(memory, p.GRfs0, angle);
+            memory[p.GRfy] = float32Bits(Math.fround(Math.cos(angle) * profileHeight));
+          } else {
+            groundRoundHillProfile(machine, linked);
+          }
+          profileCache.stamp[distanceSquared] = profileGeneration;
+          profileCache.distance[distanceSquared] = memory[p.GRfd];
+          profileCache.scratchLow[distanceSquared] = memory[p.GRfs0];
+          profileCache.scratchHigh[distanceSquared] = memory[p.GRfs1];
+          profileCache.height[distanceSquared] = memory[p.GRfy];
+        }
+        machine.B = dz;
+
+        if ((memory[p.GRfy] & 0x80000000) === 0) {
+          const pointer = (Math.imul(z, 200) + x) | 0;
+          const byteAddress = surface + pointer;
+          const oldValue = memory[byteAddress] & 0xff;
+          memory[p.GRptr] = pointer;
+          memory[p.MBptr] = p.RPSM + pointer;
+          memory[p.MBval] = oldValue;
+          memory[p.GRsval] = oldValue;
+          if (directProfile) {
+            let height = Math.fround(float32FromBits(memory[p.GRfy]) + oldValue);
+            memory[p.GRfy] = float32Bits(height);
+            if ((memory[p.GRfcanyon] | 0) !== 0) {
+              writeFloat64(memory, p.GRfs0, height - 127);
+              if ((memory[p.GRfs1] & 0x80000000) === 0) {
+                height = Math.fround(254 - height);
+                memory[p.GRfy] = float32Bits(height);
+              }
+            } else {
+              const maximum = float32FromBits(memory[p.GRfhmt]);
+              writeFloat64(memory, p.GRfs0, height - maximum);
+              if ((memory[p.GRfs1] & 0x80000000) === 0) memory[p.GRfy] = memory[p.GRfhmt];
+            }
+          } else {
+            groundAddSurfaceValue(machine, linked);
+            if ((memory[p.GRfcanyon] | 0) !== 0) {
+              groundSubtractToScratch(machine, linked, "GRK127L");
+              if ((memory[p.GRfs1] & 0x80000000) === 0) groundMirror254(machine, linked);
+            } else {
+              groundSubtractMaximum(machine, linked);
+              if ((memory[p.GRfs1] & 0x80000000) === 0) memory[p.GRfy] = memory[p.GRfhmt];
+            }
+          }
+
+          groundChopHeight(machine, linked);
+          const stored = memory[p.GRfti] & 0xff;
+          memory[p.MBval] = stored;
+          memory[byteAddress] = stored;
+          machine.C = stored;
+        }
+      }
+
+      z = (z + 1) | 0;
+      memory[p.GRfrz] = z;
+      machine.A = z;
+      machine.B = (centerZ + radius) | 0;
+      if ((z >>> 0) >= (machine.B >>> 0)) break;
+    }
+  }
+
+  memory[p.GRfrx] = x;
+  machine.A = x;
+  machine.X = LINO_DONE;
+}
+
 function groundLimitFloat(machine, linked) {
   groundStoreFloat(machine, linked, "GRfy", value(machine.memory, linked, "GRfscl"));
 }
@@ -5293,6 +5436,52 @@ function waterBackdrop(machine, linked) {
   memory[p.VHGNDwatery] = 191;
   machine.A = 191;
   machine.C = memory[p.VHGNDwaterbase] | 0;
+  machine.X = LINO_DONE;
+}
+
+function denseAtmosphere(machine, linked) {
+  const memory = machine.memory;
+  let p = denseAtmosphereAddressCaches.get(linked);
+  if (!p) {
+    const names = ["nw", "RADPT", "SUsp", "SUsi", "VHGNDdensebase"];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    denseAtmosphereAddressCaches.set(linked, p);
+  }
+
+  const base = p.nw + p.RADPT + 2880;
+  let lastMasked = 0;
+  for (let index = 0; index < 58240; index += 1) {
+    lastMasked = memory[base + index] & 63;
+    memory[base + index] = lastMasked;
+  }
+  memory[p.SUsp] = base;
+  memory[p.VHGNDdensebase] = base;
+
+  for (let index = 320; index < 57280; index += 1) {
+    const pointer = base + index;
+    const total = (memory[pointer - 320] & 0xff)
+      + (memory[pointer - 319] & 0xff)
+      + (memory[pointer - 318] & 0xff)
+      + (memory[pointer - 317] & 0xff)
+      + (memory[pointer] & 0xff)
+      + (memory[pointer + 1] & 0xff)
+      + (memory[pointer + 2] & 0xff)
+      + (memory[pointer + 3] & 0xff)
+      + (memory[pointer + 320] & 0xff)
+      + (memory[pointer + 321] & 0xff)
+      + (memory[pointer + 322] & 0xff)
+      + (memory[pointer + 323] & 0xff)
+      + (memory[pointer + 640] & 0xff)
+      + (memory[pointer + 641] & 0xff)
+      + (memory[pointer + 642] & 0xff)
+      + (memory[pointer + 643] & 0xff);
+    memory[base + index] = total >>> 4;
+  }
+  memory[p.SUsi] = 57280;
+  machine.A = base;
+  machine.B = 0;
+  machine.C = lastMasked;
+  machine.D = base + 58240;
   machine.X = LINO_DONE;
 }
 
@@ -9460,6 +9649,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.terrainFacing]: terrainFacing,
     [SERVICE_IDS.terrainTraverse]: terrainTraverseFaithful,
     [SERVICE_IDS.waterBackdrop]: waterBackdrop,
+    [SERVICE_IDS.denseAtmosphere]: denseAtmosphere,
     [SERVICE_IDS.terrainRenderRandom]: terrainRenderRandom,
     [SERVICE_IDS.terrainVertexLoad]: landedVertexLoad,
     [SERVICE_IDS.rectangle]: rectangle,
@@ -9477,6 +9667,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.surfaceNegate]: surfaceNegate,
     [SERVICE_IDS.surfaceRandomPattern]: surfaceRandomPattern,
     [SERVICE_IDS.surfaceSda]: surfaceSda,
+    [SERVICE_IDS.groundRoundHill]: groundRoundHill,
     [SERVICE_IDS.groundTextureDarkline]: groundTextureDarkline,
     [SERVICE_IDS.groundPostSurface]: groundPostSurface,
     [SERVICE_IDS.spaceFade]: spaceFade,
