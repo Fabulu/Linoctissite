@@ -301,6 +301,7 @@ const SERVICE_IDS = Object.freeze({
 });
 
 const symbolCaches = new WeakMap();
+const codeHandleCaches = new WeakMap();
 const dataViewCaches = new WeakMap();
 const float64ViewCaches = new WeakMap();
 const rasterAddressCaches = new WeakMap();
@@ -391,15 +392,30 @@ function float64View(memory) {
 }
 
 function codeHandle(linked, name) {
-  const instruction = linked.labels.get(canonicalName(name.replace(/^service\s+/i, "")));
-  return instruction === undefined ? -1 : instruction + 1;
+  let cache = codeHandleCaches.get(linked);
+  if (!cache) {
+    cache = new Map();
+    codeHandleCaches.set(linked, cache);
+  }
+  let handle = cache.get(name);
+  if (handle === undefined) {
+    const instruction = linked.labels.get(canonicalName(name.replace(/^service\s+/i, "")));
+    handle = instruction === undefined ? -1 : instruction + 1;
+    cache.set(name, handle);
+  }
+  return handle;
 }
 
 function readFloat64(memory, unit) {
+  if ((unit & 1) === 0) return float64View(memory)[unit >>> 1];
   return dataView(memory).getFloat64(unit * 4, true);
 }
 
 function writeFloat64(memory, unit, number) {
+  if ((unit & 1) === 0) {
+    float64View(memory)[unit >>> 1] = number;
+    return;
+  }
   dataView(memory).setFloat64(unit * 4, number, true);
 }
 
@@ -2878,21 +2894,7 @@ function prepareMappedVectors(machine, linked, p, vertices, fast) {
   }
 }
 
-function prepareTerrainVectorsFast(machine, p, vertices) {
-  const memory = machine.memory;
-  const control = floatingPoint(machine).control;
-  const view = dataView(memory);
-  const floats = p.fw;
-  memory[p.PJdx] = vertices;
-  memory[p.PJthird0] = p.D64THLO;
-  memory[p.PJthird1] = p.D64THHI;
-  const factor = readFloat64View(view, p.PJthird0);
-  let lastNarrowed = 0;
-  const nearest = (control & 0x0c00) === 0;
-
-  if (vertices === 3 && nearest && (floats & 1) === 0) {
-    const qwords = float64View(memory);
-    const base = floats >>> 1;
+function prepareTerrainVectorsAligned(memory, p, qwords, base, factor) {
     const x0 = qwords[base + 32];
     const x1 = qwords[base + 33];
     const x2 = qwords[base + 34];
@@ -2953,7 +2955,23 @@ function prepareTerrainVectorsFast(machine, p, vertices) {
     qwords[base + 6] = g6; qwords[base + 7] = g7; qwords[base + 8] = g8;
     memory[p.FS0] = float32Bits(g8);
     if ((p.FA0 & 1) === 0) qwords[p.FA0 >>> 1] = g8;
-    else writeFloat64View(view, p.FA0, g8);
+    else writeFloat64View(dataView(memory), p.FA0, g8);
+}
+
+function prepareTerrainVectorsFast(machine, p, vertices) {
+  const memory = machine.memory;
+  const control = floatingPoint(machine).control;
+  const view = dataView(memory);
+  const floats = p.fw;
+  memory[p.PJdx] = vertices;
+  memory[p.PJthird0] = p.D64THLO;
+  memory[p.PJthird1] = p.D64THHI;
+  const factor = readFloat64View(view, p.PJthird0);
+  let lastNarrowed = 0;
+  const nearest = (control & 0x0c00) === 0;
+
+  if (vertices === 3 && nearest && (floats & 1) === 0) {
+    prepareTerrainVectorsAligned(memory, p, float64View(memory), floats >>> 1, factor);
     return;
   }
 
@@ -9497,14 +9515,15 @@ function terrainFacingDirect(machine, ground, triangle) {
   }
 
   const floats = memory[ground.PJfwbase] >>> 0;
-  const view = dataView(memory);
   const step = memory[ground.VHGNDlodstep] << 14;
   const vertexX = memory[ground.VHGNDx] << 14;
   const vertexY = -(memory[ground.VHGNDs4] << 11);
   const vertexZ = (memory[ground.VHGNDz] << 14) + step;
-  let dot = (readFloat64View(view, floats + 448) - vertexX) * normalX;
-  dot = (readFloat64View(view, floats + 450) - vertexY) * normalY + dot;
-  dot = (readFloat64View(view, floats + 452) - vertexZ) * normalZ + dot;
+  const qwords = float64View(memory);
+  const base = floats >>> 1;
+  let dot = (qwords[base + 224] - vertexX) * normalX;
+  dot = (qwords[base + 225] - vertexY) * normalY + dot;
+  dot = (qwords[base + 226] - vertexZ) * normalZ + dot;
   const facing = !Number.isNaN(dot) && dot >= 0;
   memory[ground.FCret] = facing ? 1 : 0;
   return facing;
@@ -9536,63 +9555,9 @@ function terrainTileShadeDirect(machine, p) {
   machine.D = high;
 }
 
-function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
+function landedTerrainTileOnScreen(machine, p, polygon, h1,
+  height0, height1, height2, height3) {
   const memory = machine.memory;
-  const p = landedTerrainAddresses(linked);
-  const done = p.VHGNDnativecomplete;
-  if ((memory[p.VHGNDmirror] | 0) !== 0
-      || (memory[p.VHGNDruinpass] | 0) !== 0) return;
-  if (manhattan > 90 || rawDepth > 64) {
-    memory[done] = 2;
-    return;
-  }
-
-  const depth = memory[p.VHGNDdepth] | 0;
-  terrainTileShadeDirect(machine, p);
-  let shade = (machine.C + 8 + (depth >> 1)) | 0;
-  if ((shade >>> 0) > 32) shade = 32;
-  memory[p.VHGNDshade] = shade;
-
-  const h1 = memory[p.VHGNDh1] | 0;
-  const surface = p.surface;
-  const height0 = memory[surface + h1] & 0xff;
-  const height1 = memory[surface + h1 + 1] & 0xff;
-  const height2 = memory[surface + h1 + 201] & 0xff;
-  const height3 = memory[surface + h1 + 200] & 0xff;
-  memory[p.VHGNDs1] = height0; memory[p.VHGNDs2] = height1;
-  memory[p.VHGNDs3] = height2; memory[p.VHGNDs4] = height3;
-  if ((memory[p.GRiptype] | 0) === 3
-      && (memory[p.VHGNDsctype] | 0) === 1
-      && height0 + height1 + height2 + height3 === 0) {
-    memory[done] = 2;
-    return;
-  }
-
-  let ruined = 0;
-  if ((memory[p.VHGNDruinanchor] | 0) !== 0
-      && ((memory[p.VHGNDruins + h1] | 0) !== 0
-        || (memory[p.VHGNDruins + h1 + 1] | 0) !== 0
-        || (memory[p.VHGNDruins + h1 + 201] | 0) !== 0
-        || (memory[p.VHGNDruins + h1 + 200] | 0) !== 0)) ruined = 1;
-  memory[p.VHGNDruined] = ruined;
-  const tint = ruined !== 0 ? ((shade & 63) + 64) : shade;
-  memory[p.SPtinta] = tint;
-  memory[p.DBcol] = tint;
-  if (ruined !== 0) {
-    const polygon = polymapAddresses(linked);
-    directPolyStoreWide(memory, polygon, polygon.FSTX, 512);
-    directPolyStoreWide(memory, polygon, polygon.FSTY, 512);
-    memory[p.VHGNDruindrawn] = (memory[p.VHGNDruindrawn] + 1) | 0;
-  }
-  memory[p.SPescr] = 0;
-  memory[p.DBflar] = 0;
-  memory[p.DBent] = 0;
-  const sctype = memory[p.VHGNDsctype] | 0;
-  memory[p.SPcull] = sctype === 3 ? (depth < 4 ? 1 : 0) : (depth >= 4 ? 1 : 0);
-  memory[p.VHGNDtilepolys] = 0;
-  memory[p.PJfwbase] = p.fw;
-
-  const polygon = polymapAddresses(linked);
   const x0 = memory[p.VHGNDx] << 14;
   const z0 = memory[p.VHGNDz] << 14;
   const step = memory[p.VHGNDlodstep] << 14;
@@ -9652,37 +9617,98 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
       || (bottom > 0 && bottom * bottom > radiusSquared * bottomNormSquared)
     );
   }
-  if (tileOnScreen) {
-    if ((memory[p.VHGNDvcstamp + corner0] | 0) !== generation) {
-      cacheTerrainWorldVertexDirect(machine, polygon, p, corner0, x0, y0, z0);
-    }
-    if ((memory[p.VHGNDvcstamp + corner1] | 0) !== generation) {
-      cacheTerrainWorldVertexDirect(machine, polygon, p, corner1, x1, y1, z0);
-    }
-    if ((memory[p.VHGNDvcstamp + corner2] | 0) !== generation) {
-      cacheTerrainWorldVertexDirect(machine, polygon, p, corner2, x1, y2, z1);
-    }
-    if ((memory[p.VHGNDvcstamp + corner3] | 0) !== generation) {
-      cacheTerrainWorldVertexDirect(machine, polygon, p, corner3, x0, y3, z1);
-    }
-    if ((memory[p.VHGNDvcvisible + corner0] | 0) !== 0
-        && (memory[p.VHGNDvcvisible + corner1] | 0) !== 0
-        && (memory[p.VHGNDvcvisible + corner2] | 0) !== 0
-        && (memory[p.VHGNDvcvisible + corner3] | 0) !== 0) {
-      const minX = Math.min(memory[p.VHGNDvcpx + corner0], memory[p.VHGNDvcpx + corner1],
-        memory[p.VHGNDvcpx + corner2], memory[p.VHGNDvcpx + corner3]);
-      const maxX = Math.max(memory[p.VHGNDvcpx + corner0], memory[p.VHGNDvcpx + corner1],
-        memory[p.VHGNDvcpx + corner2], memory[p.VHGNDvcpx + corner3]);
-      const minY = Math.min(memory[p.VHGNDvcpy + corner0], memory[p.VHGNDvcpy + corner1],
-        memory[p.VHGNDvcpy + corner2], memory[p.VHGNDvcpy + corner3]);
-      const maxY = Math.max(memory[p.VHGNDvcpy + corner0], memory[p.VHGNDvcpy + corner1],
-        memory[p.VHGNDvcpy + corner2], memory[p.VHGNDvcpy + corner3]);
-      tileOnScreen = minX <= polygon.PGUBX && maxX >= polygon.PGLBX
-        && minY <= polygon.PGUBY && maxY >= polygon.PGLBY;
-    }
+  if (!tileOnScreen) return false;
+
+  if ((memory[p.VHGNDvcstamp + corner0] | 0) !== generation) {
+    cacheTerrainWorldVertexDirect(machine, polygon, p, corner0, x0, y0, z0);
+  }
+  if ((memory[p.VHGNDvcstamp + corner1] | 0) !== generation) {
+    cacheTerrainWorldVertexDirect(machine, polygon, p, corner1, x1, y1, z0);
+  }
+  if ((memory[p.VHGNDvcstamp + corner2] | 0) !== generation) {
+    cacheTerrainWorldVertexDirect(machine, polygon, p, corner2, x1, y2, z1);
+  }
+  if ((memory[p.VHGNDvcstamp + corner3] | 0) !== generation) {
+    cacheTerrainWorldVertexDirect(machine, polygon, p, corner3, x0, y3, z1);
+  }
+  if ((memory[p.VHGNDvcvisible + corner0] | 0) !== 0
+      && (memory[p.VHGNDvcvisible + corner1] | 0) !== 0
+      && (memory[p.VHGNDvcvisible + corner2] | 0) !== 0
+      && (memory[p.VHGNDvcvisible + corner3] | 0) !== 0) {
+    const minX = Math.min(memory[p.VHGNDvcpx + corner0], memory[p.VHGNDvcpx + corner1],
+      memory[p.VHGNDvcpx + corner2], memory[p.VHGNDvcpx + corner3]);
+    const maxX = Math.max(memory[p.VHGNDvcpx + corner0], memory[p.VHGNDvcpx + corner1],
+      memory[p.VHGNDvcpx + corner2], memory[p.VHGNDvcpx + corner3]);
+    const minY = Math.min(memory[p.VHGNDvcpy + corner0], memory[p.VHGNDvcpy + corner1],
+      memory[p.VHGNDvcpy + corner2], memory[p.VHGNDvcpy + corner3]);
+    const maxY = Math.max(memory[p.VHGNDvcpy + corner0], memory[p.VHGNDvcpy + corner1],
+      memory[p.VHGNDvcpy + corner2], memory[p.VHGNDvcpy + corner3]);
+    return minX <= polygon.PGUBX && maxX >= polygon.PGLBX
+      && minY <= polygon.PGUBY && maxY >= polygon.PGLBY;
+  }
+  return true;
+}
+
+function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  const done = p.VHGNDnativecomplete;
+  if ((memory[p.VHGNDmirror] | 0) !== 0
+      || (memory[p.VHGNDruinpass] | 0) !== 0) return;
+  if (manhattan > 90 || rawDepth > 64) {
+    memory[done] = 2;
+    return;
   }
 
-  if (!tileOnScreen) {
+  const depth = memory[p.VHGNDdepth] | 0;
+  terrainTileShadeDirect(machine, p);
+  let shade = (machine.C + 8 + (depth >> 1)) | 0;
+  if ((shade >>> 0) > 32) shade = 32;
+  memory[p.VHGNDshade] = shade;
+
+  const h1 = memory[p.VHGNDh1] | 0;
+  const surface = p.surface;
+  const height0 = memory[surface + h1] & 0xff;
+  const height1 = memory[surface + h1 + 1] & 0xff;
+  const height2 = memory[surface + h1 + 201] & 0xff;
+  const height3 = memory[surface + h1 + 200] & 0xff;
+  memory[p.VHGNDs1] = height0; memory[p.VHGNDs2] = height1;
+  memory[p.VHGNDs3] = height2; memory[p.VHGNDs4] = height3;
+  if ((memory[p.GRiptype] | 0) === 3
+      && (memory[p.VHGNDsctype] | 0) === 1
+      && height0 + height1 + height2 + height3 === 0) {
+    memory[done] = 2;
+    return;
+  }
+
+  let ruined = 0;
+  if ((memory[p.VHGNDruinanchor] | 0) !== 0
+      && ((memory[p.VHGNDruins + h1] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + 1] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + 201] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + 200] | 0) !== 0)) ruined = 1;
+  memory[p.VHGNDruined] = ruined;
+  const tint = ruined !== 0 ? ((shade & 63) + 64) : shade;
+  memory[p.SPtinta] = tint;
+  memory[p.DBcol] = tint;
+  if (ruined !== 0) {
+    const polygon = polymapAddresses(linked);
+    directPolyStoreWide(memory, polygon, polygon.FSTX, 512);
+    directPolyStoreWide(memory, polygon, polygon.FSTY, 512);
+    memory[p.VHGNDruindrawn] = (memory[p.VHGNDruindrawn] + 1) | 0;
+  }
+  memory[p.SPescr] = 0;
+  memory[p.DBflar] = 0;
+  memory[p.DBent] = 0;
+  const sctype = memory[p.VHGNDsctype] | 0;
+  memory[p.SPcull] = sctype === 3 ? (depth < 4 ? 1 : 0) : (depth >= 4 ? 1 : 0);
+  memory[p.VHGNDtilepolys] = 0;
+  memory[p.PJfwbase] = p.fw;
+
+  const polygon = polymapAddresses(linked);
+  if (!landedTerrainTileOnScreen(
+    machine, p, polygon, h1, height0, height1, height2, height3,
+  )) {
     memory[p.VHGNDvctri] = 1;
     memory[done] = 1;
     return;
