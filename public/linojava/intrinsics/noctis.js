@@ -5962,6 +5962,102 @@ function mergeTreeCommandBounds(commands) {
   return bounds;
 }
 
+function indexTreeModelVertices(commands) {
+  const unique = new Map();
+  const vertices = [];
+  for (const command of commands) {
+    if (command.kind === "greenmush") continue;
+    const indices = new Int32Array(command.vertices);
+    const view = new DataView(command.coordinates.buffer,
+      command.coordinates.byteOffset, command.coordinates.byteLength);
+    for (let vertex = 0; vertex < command.vertices; vertex += 1) {
+      const words = [];
+      for (let axis = 0; axis < 3; axis += 1) {
+        const offset = (axis * command.vertices + vertex) * 2;
+        words.push(command.coordinates[offset] | 0, command.coordinates[offset + 1] | 0);
+      }
+      const key = words.join(":");
+      let index = unique.get(key);
+      if (index === undefined) {
+        index = vertices.length / 3;
+        unique.set(key, index);
+        for (let axis = 0; axis < 3; axis += 1) {
+          vertices.push(view.getFloat64((axis * command.vertices + vertex) * 8, true));
+        }
+      }
+      indices[vertex] = index;
+    }
+    command.vertexIndices = indices;
+  }
+  return {
+    vertices: Float64Array.from(vertices),
+    projectionSignature: [],
+    projection: null,
+  };
+}
+
+function projectTreeModelVertices(machine, tree, model) {
+  const memory = machine.memory;
+  const p = tree.p;
+  const control = floatingPoint(machine).control;
+  const signature = [
+    directPolySlot(memory, p, p.FSCAMX), directPolySlot(memory, p, p.FSCAMY),
+    directPolySlot(memory, p, p.FSCAMZ), directPolySlot(memory, p, p.FSTSB),
+    directPolySlot(memory, p, p.FSTCB), directPolySlot(memory, p, p.FSTSA),
+    directPolySlot(memory, p, p.FSTCA), directPolySlot(memory, p, p.FSUNEG),
+    directPolySlot(memory, p, p.FSDPP), directPolySlot(memory, p, p.FSXC),
+    directPolySlot(memory, p, p.FSYC), control,
+  ];
+  let changed = signature.length !== model.projectionSignature.length;
+  for (let index = 0; !changed && index < signature.length; index += 1) {
+    if (!Object.is(signature[index], model.projectionSignature[index])) changed = true;
+  }
+  if (!changed && model.projection) return model.projection;
+
+  const count = model.vertices.length / 3;
+  const projection = {
+    rx: new Float64Array(count), ry: new Float64Array(count),
+    rz: new Float64Array(count), px: new Int32Array(count),
+    py: new Int32Array(count), visible: new Uint8Array(count),
+  };
+  const cameraX = signature[0];
+  const cameraY = signature[1];
+  const cameraZ = signature[2];
+  const betaSin = signature[3];
+  const betaCos = signature[4];
+  const alphaSin = signature[5];
+  const alphaCos = signature[6];
+  const near = signature[7];
+  const distance = signature[8];
+  const centerX = signature[9];
+  const centerY = signature[10];
+  for (let index = 0; index < count; index += 1) {
+    const source = index * 3;
+    const z = roundFloat32(model.vertices[source + 2] - cameraZ, control);
+    const x = roundFloat32(model.vertices[source] - cameraX, control);
+    const y = roundFloat32(model.vertices[source + 1] - cameraY, control);
+    const rx = roundFloat32(x * betaCos + z * betaSin, control);
+    const z2 = roundFloat32(z * betaCos - x * betaSin, control);
+    const rotatedZWide = y * alphaSin + z2 * alphaCos;
+    const rz = roundFloat32(rotatedZWide, control);
+    const ry = roundFloat32(y * alphaCos - z2 * alphaSin, control);
+    projection.rx[index] = rx;
+    projection.ry[index] = ry;
+    projection.rz[index] = rz;
+    const visible = !Number.isNaN(rotatedZWide) && !Number.isNaN(near)
+      && rotatedZWide >= near;
+    projection.visible[index] = visible ? 1 : 0;
+    if (visible) {
+      const factor = distance / rz;
+      projection.px[index] = convertToInt32(factor * rx + centerX, control);
+      projection.py[index] = convertToInt32(factor * ry + centerY, control);
+    }
+  }
+  model.projectionSignature = signature;
+  model.projection = projection;
+  return projection;
+}
+
 function captureTreePolygon(machine, linked, faced, forcedVertices = 0) {
   const memory = machine.memory;
   const tree = landedTreeRenderAddresses(linked);
@@ -6002,7 +6098,7 @@ function captureTreePolygon(machine, linked, faced, forcedVertices = 0) {
   };
 }
 
-function restoreTreePolygon(machine, linked, command) {
+function restoreTreePolygon(machine, linked, command, projection = null) {
   const memory = machine.memory;
   const tree = landedTreeRenderAddresses(linked);
   const p = tree.p;
@@ -6023,6 +6119,49 @@ function restoreTreePolygon(machine, linked, command) {
   if (command.kind === "faced-polygon") {
     mappedFacing(machine, linked);
     if ((memory[address(linked, "FCret")] | 0) === 0) return;
+  }
+  if (projection && command.vertexIndices) {
+    let allVisible = true;
+    for (const index of command.vertexIndices) {
+      if (projection.visible[index] === 0) { allVisible = false; break; }
+    }
+    if (allVisible) {
+      let minX = 311;
+      let maxX = 5;
+      let minY = 190;
+      let maxY = 10;
+      for (let vertex = 0; vertex < command.vertices; vertex += 1) {
+        const index = command.vertexIndices[vertex];
+        writeFloat64(memory, p.fw + (p.FSRXF + vertex) * 2, projection.rx[index]);
+        writeFloat64(memory, p.fw + (p.FSRYF + vertex) * 2, projection.ry[index]);
+        writeFloat64(memory, p.fw + (p.FSRZF + vertex) * 2, projection.rz[index]);
+        memory[p.rwf + vertex] = 1;
+        const x = projection.px[index] | 0;
+        const y = projection.py[index] | 0;
+        memory[p.mp + vertex * 2] = x;
+        memory[p.mp + vertex * 2 + 1] = y;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+      if (command.vertices === 3) {
+        copyQword(memory, p.fw + (p.FSRXF + 2) * 2, p.fw + (p.FSRXF + 3) * 2);
+        copyQword(memory, p.fw + (p.FSRYF + 2) * 2, p.fw + (p.FSRYF + 3) * 2);
+        copyQword(memory, p.fw + (p.FSRZF + 2) * 2, p.fw + (p.FSRZF + 3) * 2);
+        memory[p.rwf + 3] = 1;
+        memory[p.mp + 6] = memory[p.mp + 4];
+        memory[p.mp + 7] = memory[p.mp + 5];
+      }
+      memory[p.PJdoflag] = 4;
+      memory[p.PJminx] = minX;
+      memory[p.PJmaxx] = maxX;
+      memory[p.BXminy] = minY;
+      memory[p.BXmaxy] = maxY;
+      memory[p.PJpreproject] = 1;
+      polymap(machine, linked, true);
+      return;
+    }
   }
   polymap(machine, linked);
 }
@@ -6128,11 +6267,13 @@ function terrainTree(machine, linked) {
   const model = machine.noctisTreeModels.get(key);
   if (model) {
     if (rockBoundsMayRender(machine, tree.p, model.bounds, 10)) {
+      const projection = machine.noctisDisableTreeProjectionCache
+        ? null : projectTreeModelVertices(machine, tree, model);
       for (const command of model.commands) {
         if (command.kind === "greenmush") {
           restoreAddressValues(machine.memory, tree.mushroomState, command.state);
           renderGreenmushDirect(machine, linked, tree);
-        } else restoreTreePolygon(machine, linked, command);
+        } else restoreTreePolygon(machine, linked, command, projection);
       }
     }
     restoreAddressValues(machine.memory, tree.finalState, model.finalState);
@@ -6150,6 +6291,7 @@ function terrainTree(machine, linked) {
     commands: recording.commands,
     bounds: mergeTreeCommandBounds(recording.commands),
     finalState: captureAddressValues(machine.memory, tree.finalState),
+    ...indexTreeModelVertices(recording.commands),
   });
   machine.X = LINO_DONE;
 }
