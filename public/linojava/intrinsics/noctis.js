@@ -3720,56 +3720,77 @@ function doublePolygonBasis(machine, linked) {
 function mappedFacing(machine, linked) {
   const memory = machine.memory;
   const floats = value(memory, linked, "PJfwbase") >>> 0;
-  const control = floatingPoint(machine).control;
-  const edge1 = [];
-  const edge2 = [];
-  for (const source of [504, 512, 520]) {
-    let result = ((readFloat64(memory, floats + source)) - (readFloat64(memory, floats + source + 4)));
-    writeScalarScratch(machine, linked, result);
-    result = narrowScalar(machine, linked, result);
-    edge1.push(result);
-    writeFloat64(memory, floats + 464 + edge1.length * 2 - 2, result);
+  let edge1x = readFloat64(memory, floats + 504) - readFloat64(memory, floats + 508);
+  writeScalarScratch(machine, linked, edge1x);
+  edge1x = narrowScalar(machine, linked, edge1x);
+  writeFloat64(memory, floats + 464, edge1x);
+  let edge2x = readFloat64(memory, floats + 506) - readFloat64(memory, floats + 508);
+  writeScalarScratch(machine, linked, edge2x);
+  edge2x = narrowScalar(machine, linked, edge2x);
+  writeFloat64(memory, floats + 458, edge2x);
 
-    result = ((readFloat64(memory, floats + source + 2)) - (readFloat64(memory, floats + source + 4)));
-    writeScalarScratch(machine, linked, result);
-    result = narrowScalar(machine, linked, result);
-    edge2.push(result);
-    writeFloat64(memory, floats + 458 + edge2.length * 2 - 2, result);
-  }
+  let edge1y = readFloat64(memory, floats + 512) - readFloat64(memory, floats + 516);
+  writeScalarScratch(machine, linked, edge1y);
+  edge1y = narrowScalar(machine, linked, edge1y);
+  writeFloat64(memory, floats + 466, edge1y);
+  let edge2y = readFloat64(memory, floats + 514) - readFloat64(memory, floats + 516);
+  writeScalarScratch(machine, linked, edge2y);
+  edge2y = narrowScalar(machine, linked, edge2y);
+  writeFloat64(memory, floats + 460, edge2y);
 
-  const crossTerms = [
-    [1, 2, 2, 1],
-    [2, 0, 0, 2],
-    [0, 1, 1, 0],
-  ];
-  const normal = [];
-  for (let axis = 0; axis < 3; axis += 1) {
-    const [a1, a2, b1, b2] = crossTerms[axis];
-    const first = ((edge1[a1]) * (edge2[a2]));
-    writeFloat64(memory, floats + 496, first);
-    let second = ((edge1[b1]) * (edge2[b2]));
-    writeScalarScratch(machine, linked, second);
-    second = ((first) - (second));
-    writeScalarScratch(machine, linked, second);
-    const component = narrowScalar(machine, linked, second);
-    normal.push(component);
-    writeFloat64(memory, floats + 470 + axis * 2, component);
-  }
+  let edge1z = readFloat64(memory, floats + 520) - readFloat64(memory, floats + 524);
+  writeScalarScratch(machine, linked, edge1z);
+  edge1z = narrowScalar(machine, linked, edge1z);
+  writeFloat64(memory, floats + 468, edge1z);
+  let edge2z = readFloat64(memory, floats + 522) - readFloat64(memory, floats + 524);
+  writeScalarScratch(machine, linked, edge2z);
+  edge2z = narrowScalar(machine, linked, edge2z);
+  writeFloat64(memory, floats + 462, edge2z);
 
-  let sum = 0;
-  for (let axis = 0; axis < 3; axis += 1) {
-    let difference = ((readFloat64(memory, floats + 448 + axis * 2)) - (readFloat64(memory, floats + 508 + axis * 8)));
-    writeScalarScratch(machine, linked, difference);
-    let product = ((difference) * (normal[axis]));
-    if (axis === 0) {
-      sum = product;
-      writeFloat64(memory, floats + 496, sum);
-    } else {
-      writeScalarScratch(machine, linked, product);
-      sum = ((product) + (sum));
-      if (axis === 1) writeFloat64(memory, floats + 496, sum);
-    }
-  }
+  let first = edge1y * edge2z;
+  writeFloat64(memory, floats + 496, first);
+  let second = edge1z * edge2y;
+  writeScalarScratch(machine, linked, second);
+  second = first - second;
+  writeScalarScratch(machine, linked, second);
+  const normalX = narrowScalar(machine, linked, second);
+  writeFloat64(memory, floats + 470, normalX);
+
+  first = edge1z * edge2x;
+  writeFloat64(memory, floats + 496, first);
+  second = edge1x * edge2z;
+  writeScalarScratch(machine, linked, second);
+  second = first - second;
+  writeScalarScratch(machine, linked, second);
+  const normalY = narrowScalar(machine, linked, second);
+  writeFloat64(memory, floats + 472, normalY);
+
+  first = edge1x * edge2y;
+  writeFloat64(memory, floats + 496, first);
+  second = edge1y * edge2x;
+  writeScalarScratch(machine, linked, second);
+  second = first - second;
+  writeScalarScratch(machine, linked, second);
+  const normalZ = narrowScalar(machine, linked, second);
+  writeFloat64(memory, floats + 474, normalZ);
+
+  let difference = readFloat64(memory, floats + 448) - readFloat64(memory, floats + 508);
+  writeScalarScratch(machine, linked, difference);
+  let sum = difference * normalX;
+  writeFloat64(memory, floats + 496, sum);
+
+  difference = readFloat64(memory, floats + 450) - readFloat64(memory, floats + 516);
+  writeScalarScratch(machine, linked, difference);
+  let product = difference * normalY;
+  writeScalarScratch(machine, linked, product);
+  sum = product + sum;
+  writeFloat64(memory, floats + 496, sum);
+
+  difference = readFloat64(memory, floats + 452) - readFloat64(memory, floats + 524);
+  writeScalarScratch(machine, linked, difference);
+  product = difference * normalZ;
+  writeScalarScratch(machine, linked, product);
+  sum = product + sum;
   writeScalarScratch(machine, linked, sum);
   const visible = !Number.isNaN(sum) && sum >= 0 ? 1 : 0;
   memory[address(linked, "FCret")] = visible;
