@@ -5835,6 +5835,13 @@ function landedTerrainAddresses(linked) {
     "VHGNDobjbyte", "VHGNDocount", "VHGNDobjid", "VHGNDobjclass",
     "VHGNDobjcachep", "VHGNDobjcachex", "VHGNDobjcachey", "VHGNDobjcachez",
     "VHGNDobjcacheseed", "VHGNDoox", "VHGNDooy", "VHGNDooz",
+    "VHGNDgrassdistant", "VHGNDgrassgroups", "VHGNDgrassfaces",
+    "VHGNDgrassrad", "VHGNDgrassrange", "VHGNDgrasstotal",
+    "VHGNDgrassbx", "VHGNDgrassby", "VHGNDgrassbz",
+    "VHGNDgrassax", "VHGNDgrassay", "VHGNDgrassaz",
+    "VHGNDmushx", "VHGNDmushy", "VHGNDmushz", "VHGNDmushmask1",
+    "VHGNDmushmask2", "VHGNDmushscale", "VHGNDmushbase",
+    "VHGNDmushcolmask", "VHGNDmushfloat",
   ];
   cached = { ...Object.fromEntries(names.map((name) => [name, address(linked, name)])) };
   cached.surface = noctisBuffer(linked, "RPSM");
@@ -7060,6 +7067,91 @@ function terrainRock(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function terrainVegetation(machine, linked, p) {
+  const memory = machine.memory;
+  const poly = polymapAddresses(linked);
+  const random = (mask) => {
+    memory[p.SUfmask] = mask;
+    return landedFastRandom(machine, linked, mask, p);
+  };
+  const scaledRandom = (scale) => Math.trunc(Math.imul(random(32767), scale | 0) / 32767) | 0;
+  const depth = memory[p.VHGNDdepth] | 0;
+  if (depth >= 4) {
+    machine.A = depth;
+    return;
+  }
+  if (depth === 3) {
+    memory[p.VHGNDmushx] = memory[p.VHGNDoox];
+    memory[p.VHGNDmushy] = ((memory[p.VHGNDooy] | 0) + 150) | 0;
+    memory[p.VHGNDmushz] = memory[p.VHGNDooz];
+    memory[p.VHGNDmushmask1] = 3;
+    memory[p.VHGNDmushmask2] = 7;
+    memory[p.VHGNDmushscale] = 1023;
+    memory[p.VHGNDmushbase] = 216;
+    memory[p.VHGNDmushcolmask] = 31;
+    memory[p.VHGNDmushfloat] = 0;
+    terrainGreenmush(machine, linked);
+    return;
+  }
+
+  memory[p.VHGNDgrassdistant] = 0;
+  memory[p.VHGNDgrassgroups] = 1;
+  memory[p.VHGNDgrassfaces] = 3;
+  memory[p.VHGNDgrassrad] = 250;
+  memory[p.VHGNDgrassrange] = 500;
+  if (depth !== 2) {
+    memory[p.VHGNDgrassgroups] = random(7) + 1;
+    memory[p.VHGNDgrassfaces] = depth === 1 ? 4 : 6;
+  }
+  memory[p.VHGNDgrasstotal] = Math.imul(
+    memory[p.VHGNDgrassgroups] | 0, memory[p.VHGNDgrassfaces] | 0,
+  );
+  memory[p.SPcull] = 0;
+  memory[p.DBflar] = 0;
+  memory[p.DBent] = 0;
+
+  const load = (vertex, slot, coordinate) => {
+    memory[p.VHGNDvi] = vertex;
+    memory[p.VHGNDvv] = coordinate;
+    memory[p.VHGNDvslot] = slot;
+    landedVertexLoad(machine, linked);
+  };
+  while ((memory[p.VHGNDgrasstotal] | 0) > 0) {
+    const baseX = memory[p.VHGNDoox] | 0;
+    const baseY = ((memory[p.VHGNDooy] | 0) + 150) | 0;
+    const baseZ = memory[p.VHGNDooz] | 0;
+    memory[p.VHGNDgrassbx] = baseX;
+    memory[p.VHGNDgrassby] = baseY;
+    memory[p.VHGNDgrassbz] = baseZ;
+
+    memory[p.VHGNDtmp] = (scaledRandom(memory[p.VHGNDgrassrange]) + baseX) | 0;
+    memory[p.VHGNDgrassax] = ((memory[p.VHGNDtmp] | 0)
+      - scaledRandom(memory[p.VHGNDgrassrange])) | 0;
+    memory[p.VHGNDtmp] = (scaledRandom(memory[p.VHGNDgrassrange]) + baseZ) | 0;
+    memory[p.VHGNDgrassaz] = ((memory[p.VHGNDtmp] | 0)
+      - scaledRandom(memory[p.VHGNDgrassrange])) | 0;
+    memory[p.VHGNDgrassay] = (baseY - scaledRandom(1000)) | 0;
+    machine.C = (random(31) + 216) | 0;
+    memory[p.DBcol] = machine.C;
+
+    const radius = memory[p.VHGNDgrassrad] | 0;
+    if (((memory[p.VHGNDgrasstotal] | 0) & 1) !== 0) {
+      load(0, poly.FSINX, baseX - radius); load(0, poly.FSINY, baseY); load(0, poly.FSINZ, baseZ);
+      load(1, poly.FSINX, baseX + radius); load(1, poly.FSINY, baseY); load(1, poly.FSINZ, baseZ);
+    } else {
+      load(0, poly.FSINX, baseX); load(0, poly.FSINY, baseY); load(0, poly.FSINZ, baseZ - radius);
+      load(1, poly.FSINX, baseX); load(1, poly.FSINY, baseY); load(1, poly.FSINZ, baseZ + radius);
+    }
+    load(2, poly.FSINX, memory[p.VHGNDgrassax] | 0);
+    load(2, poly.FSINY, memory[p.VHGNDgrassay] | 0);
+    load(2, poly.FSINZ, memory[p.VHGNDgrassaz] | 0);
+    memory[poly.PJnrv] = 3;
+    poly3d(machine, linked);
+    memory[p.VHGNDgrasstotal] = ((memory[p.VHGNDgrasstotal] | 0) - 1) | 0;
+  }
+  machine.A = 0;
+}
+
 function renderTerrainTileObjects(machine, linked, p, handles, x, z) {
   const memory = machine.memory;
   memory[p.VHGNDh1] = Math.imul(z, 200) + x;
@@ -7088,7 +7180,10 @@ function renderTerrainTileObjects(machine, linked, p, handles, x, z) {
 
     machine.A = memory[p.VHGNDobjclass] | 0;
     if (machine.A === 0) terrainRock(machine, linked);
-    else if (machine.A === 1) machine.callCode(handles.vegetation);
+    else if (machine.A === 1) {
+      if (machine.noctisDisableTerrainVegetation) machine.callCode(handles.vegetation);
+      else terrainVegetation(machine, linked, p);
+    }
     else if (machine.A === 2) {
       machine.A = memory[p.VHGNDooy] | 0;
       machine.C = -15000;
