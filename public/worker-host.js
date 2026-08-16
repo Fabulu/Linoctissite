@@ -169,10 +169,16 @@ function configureDisplay(width, height) {
 }
 
 function positionBrowserWindow(x, y) {
-  if (x === 1048577 || y === 1048577) return;
+  if (x === 1048577 || y === 1048577) return null;
+  if (!linoWindow.classList.contains("is-dormant")) {
+    const bounds = linoWindow.getBoundingClientRect();
+    x = Math.max(0, Math.min(Math.max(0, window.innerWidth - bounds.width), x | 0));
+    y = Math.max(0, Math.min(Math.max(0, window.innerHeight - bounds.height), y | 0));
+  }
   linoWindow.style.position = "fixed";
   linoWindow.style.left = `${x | 0}px`;
   linoWindow.style.top = `${y | 0}px`;
+  return { x: x | 0, y: y | 0 };
 }
 
 function present(frame) {
@@ -257,8 +263,8 @@ function movePointer(event, target) {
   if (linoWindowDrag && target === canvas) {
     const left = linoWindowDrag.left + event.clientX - linoWindowDrag.clientX;
     const top = linoWindowDrag.top + event.clientY - linoWindowDrag.clientY;
-    positionBrowserWindow(left, top);
-    worker.postMessage({ type: "displayPosition", x: Math.round(left), y: Math.round(top) });
+    const position = positionBrowserWindow(left, top);
+    if (position) worker.postMessage({ type: "displayPosition", ...position });
   }
   if (linoWindowResize) {
     linoWindowResize.queuedX += movement.deltaX;
@@ -403,7 +409,10 @@ worker.addEventListener("message", (event) => {
   }
   else if (message.type === "display") {
     configureDisplay(message.width | 0, message.height | 0);
-    positionBrowserWindow(message.x | 0, message.y | 0);
+    const position = positionBrowserWindow(message.x | 0, message.y | 0);
+    if (position && (position.x !== (message.x | 0) || position.y !== (message.y | 0))) {
+      worker.postMessage({ type: "displayPosition", ...position });
+    }
   } else if (message.type === "pointerMode") pointerMode = message.mode | 0;
   else if (message.type === "fileChanged") {
     const key = String(message.name).replaceAll("\\", "/").toLowerCase();

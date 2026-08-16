@@ -308,7 +308,12 @@ const host = {
   },
   syncDisplay({ width, height, x, y }) {
     configureDisplay(width, height);
-    positionBrowserWindow(x, y);
+    const position = positionBrowserWindow(x, y);
+    if (position) {
+      const symbols = program.linked.symbols;
+      program.machine.memory[symbols.get("displayxposition").value] = position.x;
+      program.machine.memory[symbols.get("displayyposition").value] = position.y;
+    }
   },
   monotonicMilliseconds() {
     return performance.now();
@@ -337,10 +342,16 @@ const program = await compileProject(entry, resolvers, {
 status.textContent = "Starting Noctis from its real Lino entry point...";
 
 function positionBrowserWindow(x, y) {
-  if (x === 1048577 || y === 1048577) return;
+  if (x === 1048577 || y === 1048577) return null;
+  if (!linoWindow.classList.contains("is-dormant")) {
+    const bounds = linoWindow.getBoundingClientRect();
+    x = Math.max(0, Math.min(Math.max(0, window.innerWidth - bounds.width), x | 0));
+    y = Math.max(0, Math.min(Math.max(0, window.innerHeight - bounds.height), y | 0));
+  }
   linoWindow.style.position = "fixed";
   linoWindow.style.left = `${x | 0}px`;
   linoWindow.style.top = `${y | 0}px`;
+  return { x: x | 0, y: y | 0 };
 }
 
 {
@@ -495,11 +506,13 @@ function movePointer(event, target) {
   if (linoWindowDrag && target === canvas) {
     const left = linoWindowDrag.left + event.clientX - linoWindowDrag.clientX;
     const top = linoWindowDrag.top + event.clientY - linoWindowDrag.clientY;
-    positionBrowserWindow(left, top);
+    const position = positionBrowserWindow(left, top);
     const symbols = program.linked.symbols;
     const memory = program.machine.memory;
-    memory[symbols.get("displayxposition").value] = Math.round(left) | 0;
-    memory[symbols.get("displayyposition").value] = Math.round(top) | 0;
+    if (position) {
+      memory[symbols.get("displayxposition").value] = position.x;
+      memory[symbols.get("displayyposition").value] = position.y;
+    }
   }
 }
 
