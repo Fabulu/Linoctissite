@@ -286,6 +286,7 @@ const SERVICE_IDS = Object.freeze({
   panelOrbitProject: "service:vhporbitproject",
   panelMoonProject: "service:vhpmoonproject",
   panelIntegerStick: "service:vhpintegerstick",
+  panelDigitPrepare: "service:vhpdigitprepare",
   panelMappedQuadLoad: "service:vhpmappedquadload",
   panelSystemOrbits: "service:vhpsystemorbits",
   panelMoonScoreBounds: "service:vhpmoonscorebounds",
@@ -321,6 +322,7 @@ const drawCupolaPanelAddressCaches = new WeakMap();
 const stick3dAddressCaches = new WeakMap();
 const flareDrawAddressCaches = new WeakMap();
 const panelRenderAddressCaches = new WeakMap();
+const panelDigitAddressCaches = new WeakMap();
 const panelMappedQuadAddressCaches = new WeakMap();
 const glassBubbleAddressCaches = new WeakMap();
 const bodyVectorAddressCaches = new WeakMap();
@@ -7548,6 +7550,69 @@ function panelIntegerStick(machine, linked) {
   machine.X = LINO_DONE;
 }
 
+function panelDigitPrepare(machine, linked) {
+  const memory = machine.memory;
+  let p = panelDigitAddressCaches.get(linked);
+  if (!p) {
+    const names = [
+      "VHPdigitskip", "VHPchar", "DGdigit", "DGcolor", "DGshader", "vhcpoly",
+      "VHPcx4", "VHPGR", "VHPGL", "VHPQTR", "VHPTX", "VHPTY", "fw",
+      "FSW0", "FSCAMX", "FSTX", "FSTY", "FI", "FA0", "FB0", "FS0", "PGFi", "PGFt",
+      "PGtexf", "SPsrc", "SPtinta", "SPescr", "SPflar", "SPcull", "SPhalf",
+      "VHPcol",
+    ];
+    p = Object.fromEntries(names.map((name) => [name, address(linked, name)]));
+    panelDigitAddressCaches.set(linked, p);
+  }
+  const character = memory[p.VHPchar] | 0;
+  memory[p.VHPdigitskip] = 1;
+  machine.A = character;
+  if ((character >>> 0) <= 32 || (character >>> 0) > 96) {
+    machine.X = LINO_DONE;
+    return;
+  }
+  memory[p.VHPdigitskip] = 0;
+  memory[p.DGdigit] = character;
+  memory[p.DGcolor] = 152;
+  memory[p.DGshader] = 0;
+  framebufferDigit(machine, linked);
+
+  memory[p.vhcpoly] = p.VHPGR;
+  memory[p.vhcpoly + 3] = p.VHPGR;
+  memory[p.vhcpoly + 6] = p.VHPGL;
+  memory[p.vhcpoly + 9] = p.VHPGL;
+  memory[p.vhcpoly + 2] = 0;
+  memory[p.vhcpoly + 5] = 0;
+  memory[p.vhcpoly + 8] = 0;
+  memory[p.vhcpoly + 11] = 0;
+
+  const control = floatingPoint(machine).control;
+  const cameraX = roundFloat32(
+    (memory[p.VHPcx4] | 0) * float32FromBits(p.VHPQTR),
+    control,
+  );
+  writeFloat64(memory, p.fw + p.FSW0 * 2, memory[p.VHPcx4] | 0);
+  writeFloat64(memory, p.FB0, memory[p.VHPcx4] | 0);
+  writeFloat64(memory, p.fw + p.FSCAMX * 2, cameraX);
+  writeFloat64(memory, p.fw + p.FSTX * 2, p.VHPTX | 0);
+  writeFloat64(memory, p.fw + p.FSTY * 2, p.VHPTY | 0);
+  memory[p.FS0] = float32Bits(cameraX);
+  memory[p.PGFt] = p.VHPQTR;
+  memory[p.FI] = p.VHPTY | 0;
+  writeFloat64(memory, p.FA0, p.VHPTY | 0);
+  memory[p.PGFi] = p.FSTY;
+  memory[p.PGtexf] = 4;
+  memory[p.SPsrc] = 1;
+  memory[p.SPtinta] = 128;
+  memory[p.SPescr] = 0;
+  memory[p.SPflar] = 2;
+  memory[p.SPcull] = 0;
+  memory[p.SPhalf] = 0;
+  memory[p.VHPcol] = 128;
+  machine.A = (p.fw + p.FSTY * 2) | 0;
+  machine.X = LINO_DONE;
+}
+
 function panelMappedQuadLoad(machine, linked) {
   const memory = machine.memory;
   let p = panelMappedQuadAddressCaches.get(linked);
@@ -10123,6 +10188,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.panelOrbitProject]: panelOrbitProject,
     [SERVICE_IDS.panelMoonProject]: panelMoonProject,
     [SERVICE_IDS.panelIntegerStick]: panelIntegerStick,
+    [SERVICE_IDS.panelDigitPrepare]: panelDigitPrepare,
     [SERVICE_IDS.panelMappedQuadLoad]: panelMappedQuadLoad,
     [SERVICE_IDS.panelSystemOrbits]: panelSystemOrbits,
     [SERVICE_IDS.panelMoonScoreBounds]: panelMoonScoreBounds,
