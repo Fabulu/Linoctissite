@@ -268,6 +268,7 @@ const SERVICE_IDS = Object.freeze({
   terrainRenderRandom: "service:vhgndrenderrandom",
   terrainVertexLoad: "service:vhgndvload",
   terrainEyeHeight: "service:vhgndeyeheight",
+  terrainTile: "service:vhgndtile",
   rectangle: "service:rectangle",
   surroundingBorder: "service:vhgndsurroundingborder",
   surroundingCompass: "service:vhgndcompass",
@@ -1134,15 +1135,26 @@ function alphaDimInline(destination, source) {
   }`;
 }
 
+function alphaDimPreparedInline(destination, sourceBlue, sourceGreen, sourceRed) {
+  return `{
+    const alphaDestination=(${destination})>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(${sourceBlue}),green=(current&65280)-(${sourceGreen}),red=(current&16711680)-(${sourceRed});
+    if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(${sourceRed})|0;D=green|0;E=red|0;
+  }`;
+}
+
 function antialiasingDimInline(linked) {
   const width = address(linked, "Display Width");
   return `{
     const origin=A|0,source=B|0,width=m[${width}]|0,neighbour=((source&15790320)>>>4)|0;
-    ${alphaDimInline("origin", "source")}
-    ${alphaDimInline("origin-1", "neighbour")}
-    ${alphaDimInline("origin+1", "neighbour")}
-    ${alphaDimInline("origin-width", "neighbour")}
-    ${alphaDimInline("origin+width", "neighbour")}
+    const sourceBlue=source&255,sourceGreen=source&65280,sourceRed=source&16711680;
+    const neighbourBlue=neighbour&255,neighbourGreen=neighbour&65280,neighbourRed=neighbour&16711680;
+    ${alphaDimPreparedInline("origin", "sourceBlue", "sourceGreen", "sourceRed")}
+    ${alphaDimPreparedInline("origin-1", "neighbourBlue", "neighbourGreen", "neighbourRed")}
+    ${alphaDimPreparedInline("origin+1", "neighbourBlue", "neighbourGreen", "neighbourRed")}
+    ${alphaDimPreparedInline("origin-width", "neighbourBlue", "neighbourGreen", "neighbourRed")}
+    ${alphaDimPreparedInline("origin+width", "neighbourBlue", "neighbourGreen", "neighbourRed")}
     A=origin;
   }`;
 }
@@ -5852,6 +5864,39 @@ function landedMushroomPixels(machine, linked, direct = null) {
   memory[maskAddress] = colorMask;
   if (direct) {
     let seed = memory[direct.SUfseed] >>> 0;
+    const baseColor = memory[baseAddress] | 0;
+    const patternKey = `${seed}:${remaining}:${colorMask}:${baseColor}`;
+    const patternCache = machine.noctisMushroomPixelPatterns ??= new Map();
+    const cachedPattern = patternCache.get(patternKey);
+    const screenOffset = Math.imul(memory[yAddress] | 0, 320)
+      + (memory[xAddress] | 0);
+    if (cachedPattern) {
+      const pixels = cachedPattern.pixels;
+      for (let index = 0; index < pixels.length; index += 2) {
+        const offset = screenOffset + pixels[index];
+        const color = pixels[index + 1];
+        memory[page + offset] = color;
+        memory[page + offset + 1] = color;
+        memory[page + offset - 1] = color;
+        memory[page + offset + 320] = color;
+        memory[page + offset - 320] = color;
+        memory[page + offset - 640] = color;
+      }
+      if (pixels.length !== 0) {
+        memory[offsetAddress] = screenOffset + pixels[pixels.length - 2];
+      }
+      memory[direct.SUfeax] = cachedPattern.raw;
+      memory[direct.SUfseed] = cachedPattern.seed;
+      memory[direct.SUfval] = cachedPattern.result;
+      memory[innerAddress] = 0;
+      machine.A = 0;
+      machine.B = cachedPattern.seed;
+      machine.C = cachedPattern.result;
+      machine.D = cachedPattern.high;
+      return;
+    }
+    const pixels = new Int32Array(remaining * 2);
+    let pixel = 0;
     let finalInputSeed = seed;
     let raw = 0;
     let result = 0;
@@ -5860,18 +5905,21 @@ function landedMushroomPixels(machine, linked, direct = null) {
       finalInputSeed = seed;
       raw = landedFastRandomRaw(seed);
       seed = (seed + (raw >>> 0)) >>> 0;
-      const y = (memory[yAddress] | 0) + (raw & 7);
+      const relativeY = raw & 7;
       finalInputSeed = seed;
       raw = landedFastRandomRaw(seed);
       seed = (seed + (raw >>> 0)) >>> 0;
-      const x = (memory[xAddress] | 0) + (raw & 7);
-      const offset = Math.imul(y, 320) + x;
+      const relativeOffset = Math.imul(relativeY, 320) + (raw & 7);
+      const offset = screenOffset + relativeOffset;
       finalOffset = offset;
       finalInputSeed = seed;
       raw = landedFastRandomRaw(seed);
       seed = (seed + (raw >>> 0)) >>> 0;
       result = raw & colorMask;
-      const color = result + (memory[baseAddress] | 0);
+      const color = result + baseColor;
+      pixels[pixel] = relativeOffset;
+      pixels[pixel + 1] = color;
+      pixel += 2;
       memory[page + offset] = color;
       memory[page + offset + 1] = color;
       memory[page + offset - 1] = color;
@@ -5888,7 +5936,12 @@ function landedMushroomPixels(machine, linked, direct = null) {
     machine.A = 0;
     machine.B = seed | 0;
     machine.C = result;
-    machine.D = landedFastRandomHigh(finalInputSeed);
+    const high = landedFastRandomHigh(finalInputSeed);
+    machine.D = high;
+    if (patternCache.size >= 16384) patternCache.clear();
+    patternCache.set(patternKey, {
+      pixels, raw, seed: seed | 0, result, high,
+    });
     return;
   }
   while (remaining !== 0) {
@@ -6330,6 +6383,7 @@ function landedTerrainAddresses(linked) {
   if (cached) return cached;
   const names = [
     "VHGNDnativecomplete", "VHGNDmirror", "VHGNDruinpass", "VHGNDruinanchor",
+    "VHGNDreflected", "VHGNDtscale",
     "VHGNDdepth", "VHGNDshade", "VHGNDh1", "VHGNDs1", "VHGNDs2", "VHGNDs3", "VHGNDs4",
     "GRiptype", "VHGNDsctype", "VHGNDruined", "VHGNDruindrawn", "VHGNDruins", "SPtinta", "DBcol", "SPescr", "DBflar", "DBent",
     "SPcull", "VHGNDtilepolys", "PJfwbase", "fw", "VHGNDvctri", "FCret", "PGtexf", "RPSM",
@@ -6346,7 +6400,7 @@ function landedTerrainAddresses(linked) {
     "VHGNDmii", "VHGNDbii", "VHGNDfaunamid", "VHGNDfaunabid", "SPskipmid",
     "VHGNDalpha", "VHGNDwaterhorizon", "VHGNDwaterden", "VHGNDwatery",
     "GRSKnightzone", "VHGNDwaterbase", "VHGNDwaterptr", "VHGNDwatercount",
-    "VHGNDmanhattan", "VHGNDrawdepth", "VHGNDvv",
+    "VHGNDmanhattan", "VHGNDrawdepth", "VHGNDdx", "VHGNDdz", "VHGNDvv",
     "VHGdrawhud", "VHGhudcount", "VHGNDsurlight", "VHGseamless",
     "VHGNDframei", "VHGNDframey", "VHGNDframecol", "VHGNDframeoff", "VHGNDframecount",
     "VHGmode", "VHGbeta", "VHGNDhudy", "VHGNDcompassrem", "VHGNDcompasspos",
@@ -8257,6 +8311,130 @@ function renderTerrainTileDetails(machine, linked, p, handles, x, z) {
     if (machine.noctisDisableTerrainTileObjects) machine.callCode(handles.objects);
     else renderTerrainTileObjects(machine, linked, p, handles, x, z);
   }
+}
+
+function terrainTileMirror(machine, linked) {
+  const memory = machine.memory;
+  const p = landedTerrainAddresses(linked);
+  if ((memory[p.VHGNDmirror] | 0) === 0 || (memory[p.VHGNDruinpass] | 0) !== 0) {
+    const source = codeHandle(linked, "VHGND tile");
+    if (typeof machine.callCode !== "function" || source < 1) {
+      throw new Error("Source terrain tile path requires nested Lino dispatch");
+    }
+    machine.callCode(source);
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  const x = memory[p.VHGNDx] | 0;
+  const z = memory[p.VHGNDz] | 0;
+  const step = memory[p.VHGNDlodstep] | 0;
+  const manhattan = Math.abs((memory[p.VHGNDcamtx] | 0) - x)
+    + Math.abs((memory[p.VHGNDcamtz] | 0) - z);
+  memory[p.VHGNDmanhattan] = manhattan;
+  if (manhattan > 90) {
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  const h1 = Math.imul(z, 200) + x;
+  memory[p.VHGNDh1] = h1;
+  const centerX = ((x << 14) + (step << 13)) | 0;
+  const centerZ = ((z << 14) + (step << 13)) | 0;
+  const dx = ((memory[p.VHGNDcamx] | 0) - centerX) | 0;
+  const dz = ((memory[p.VHGNDcamz] | 0) - centerZ) | 0;
+  memory[p.VHGNDdx] = dx;
+  memory[p.VHGNDdz] = dz;
+  const roundedDistance = landedDistance(machine, linked, dx, dz);
+  const rawDepth = roundedDistance >> 14;
+  const depth = Math.max(rawDepth - 1, 0);
+  memory[p.VHGNDrawdepth] = rawDepth;
+  memory[p.VHGNDdepth] = depth;
+  if (rawDepth > 64 || depth > (memory[p.VHGNDmaxdepth] | 0)) {
+    machine.X = LINO_DONE;
+    return;
+  }
+  const minimumDepth = memory[p.VHGNDmindepth] | 0;
+  if (minimumDepth >= 0 && (depth >>> 0) <= (minimumDepth >>> 0)) {
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  terrainTileShadeDirect(machine, p);
+  let shade = (machine.C + 8 + (depth >> 1)) | 0;
+  if ((shade >>> 0) > 32) shade = 32;
+  memory[p.VHGNDshade] = shade;
+
+  const rowStep = Math.imul(step, 200);
+  let height0 = memory[p.surface + h1] & 0xff;
+  let height1 = memory[p.surface + h1 + step] & 0xff;
+  let height2 = memory[p.surface + h1 + rowStep + step] & 0xff;
+  let height3 = memory[p.surface + h1 + rowStep] & 0xff;
+  if ((memory[p.GRiptype] | 0) === 3 && (memory[p.VHGNDsctype] | 0) === 1
+      && height0 + height1 + height2 + height3 === 0) {
+    machine.X = LINO_DONE;
+    return;
+  }
+
+  let ruined = 0;
+  if ((memory[p.VHGNDruinanchor] | 0) !== 0
+      && ((memory[p.VHGNDruins + h1] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + step] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + rowStep + step] | 0) !== 0
+        || (memory[p.VHGNDruins + h1 + rowStep] | 0) !== 0)) ruined = 1;
+  memory[p.VHGNDruined] = ruined;
+
+  height0 = -height0;
+  height1 = -height1;
+  height2 = -height2;
+  height3 = -height3;
+  memory[p.VHGNDs1] = height0;
+  memory[p.VHGNDs2] = height1;
+  memory[p.VHGNDs3] = height2;
+  memory[p.VHGNDs4] = height3;
+  memory[p.VHGNDreflected] = ((memory[p.VHGNDreflected] | 0) + 1) | 0;
+
+  const tint = ruined !== 0 ? ((shade & 63) + 64) : shade;
+  memory[p.SPtinta] = tint;
+  memory[p.DBcol] = tint;
+  const polygon = polymapAddresses(linked);
+  if (ruined !== 0) {
+    directPolyStoreWide(memory, polygon, polygon.FSTX, 512);
+    directPolyStoreWide(memory, polygon, polygon.FSTY, 512);
+  }
+  memory[p.SPescr] = 0;
+  memory[p.DBflar] = 0;
+  memory[p.DBent] = 0;
+  memory[p.SPcull] = 0;
+  memory[p.VHGNDtilepolys] = 0;
+  memory[p.PJfwbase] = p.fw;
+
+  for (let triangle = 0; triangle < 2; triangle += 1) {
+    memory[p.VHGNDvctri] = triangle;
+    landedTerrainTriangle(machine, linked);
+    terrainFacing(machine, linked);
+    if ((memory[p.FCret] | 0) !== 0) continue;
+    const heightSum = triangle === 0
+      ? height0 + height1 + height3 : height1 + height2 + height3;
+    if (heightSum === 0) continue;
+    memory[p.VHGNDtilepolys] = ((memory[p.VHGNDtilepolys] | 0) + 1) | 0;
+    if (step === 1) {
+      memory[p.PGtexf] = 5;
+      terrainMapped(machine, linked);
+    } else {
+      memory[p.PGtexf] = 0;
+      memory[polygon.PJnrv] = 3;
+      poly3d(machine, linked);
+    }
+  }
+
+  memory[p.VHGNDvctri] = 1;
+  if (ruined !== 0) {
+    const textureScale = Math.imul(memory[p.VHGNDtscale] | 0, 256);
+    directPolyStoreWide(memory, polygon, polygon.FSTX, textureScale);
+    directPolyStoreWide(memory, polygon, polygon.FSTY, textureScale);
+  }
+  machine.X = LINO_DONE;
 }
 
 function terrainTraversalPlan(machine, p, camtx, camtz, backspan, beta) {
@@ -11258,6 +11436,93 @@ function rectangle(machine, linked) {
   const channelByte = (channel) => Math.max(0, Math.min(255,
     nearestEven(Math.fround(channel * 255)),
   ));
+  const constantRectangle = constantRows
+    && verticalValues.every((channel) => channel === 0);
+  let cachedConstantLight = false;
+  let pendingLightCache = null;
+  if (constantRectangle && effectDescriptor.kind === "light") {
+    const color = (channelByte(start[0]) << 16)
+      | (channelByte(start[1]) << 8) | channelByte(start[2]);
+    if (!effectDescriptor.transparent
+        || color !== (memory[p.fxtransparentcolor] | 0)) {
+      const key = `${target}:${left}:${top}:${pixels}:${scanlines}:${alignment}:${effect}:${color}`;
+      const caches = machine.noctisRectangleLightCaches ??= new Map();
+      const cached = caches.get(key);
+      let inputMatches = Boolean(cached);
+      let inputIndex = 0;
+      for (let y = 0; inputMatches && y < scanlines; y += 1) {
+        const row = target + (top + y) * alignment + left;
+        for (let x = 0; x < pixels; x += 1, inputIndex += 1) {
+          if (memory[row + x] !== cached.input[inputIndex]) inputMatches = false;
+        }
+      }
+      if (inputMatches) {
+        for (let y = 0; y < scanlines; y += 1) {
+          const source = y * pixels;
+          const row = target + (top + y) * alignment + left;
+          memory.set(cached.output.subarray(source, source + pixels), row);
+        }
+        cachedConstantLight = true;
+      } else {
+        const input = new Int32Array(pixels * scanlines);
+        for (let y = 0; y < scanlines; y += 1) {
+          const source = target + (top + y) * alignment + left;
+          input.set(memory.subarray(source, source + pixels), y * pixels);
+        }
+        pendingLightCache = { caches, key, input };
+      }
+    }
+  }
+  let bulkDoubleAaDim = false;
+  if (constantRectangle && effectDescriptor.kind === "doubleAaDim") {
+    const color = (channelByte(start[0]) << 16)
+      | (channelByte(start[1]) << 8) | channelByte(start[2]);
+    if (!effectDescriptor.transparent
+        || color !== (memory[p.fxtransparentcolor] | 0)) {
+      const quarter = (color & 0xfcfcfc) >>> 2;
+      const half = (color & 0xfefefe) >>> 1;
+      const quarterNeighbour = (quarter & 0xf0f0f0) >>> 4;
+      const halfNeighbour = (half & 0xf0f0f0) >>> 4;
+      const center = quarter + Math.imul(halfNeighbour, 4);
+      const cardinal = quarterNeighbour + half;
+      const diagonal = halfNeighbour + halfNeighbour;
+      const kernel = [
+        [0, 0, center], [-1, 0, cardinal], [1, 0, cardinal],
+        [0, -1, cardinal], [0, 1, cardinal],
+        [-1, -1, diagonal], [1, -1, diagonal],
+        [-1, 1, diagonal], [1, 1, diagonal],
+        [-2, 0, halfNeighbour], [2, 0, halfNeighbour],
+        [0, -2, halfNeighbour], [0, 2, halfNeighbour],
+      ];
+      const right = left + pixels - 1;
+      const bottom = top + scanlines - 1;
+      for (let destinationY = top - 2; destinationY <= bottom + 2; destinationY += 1) {
+        for (let destinationX = left - 2; destinationX <= right + 2; destinationX += 1) {
+          let blueAmount = 0;
+          let greenAmount = 0;
+          let redAmount = 0;
+          for (const [offsetX, offsetY, amount] of kernel) {
+            const sourceX = destinationX - offsetX;
+            const sourceY = destinationY - offsetY;
+            if (sourceX < left || sourceX > right || sourceY < top || sourceY > bottom) continue;
+            blueAmount += amount & 0xff;
+            greenAmount += (amount >>> 8) & 0xff;
+            redAmount += (amount >>> 16) & 0xff;
+          }
+          const destination = target + destinationY * alignment + destinationX;
+          const current = memory[destination] | 0;
+          let outputBlue = (current & 0xff) - Math.min(blueAmount, 0xff);
+          let outputGreen = (current & 0xff00) - (Math.min(greenAmount, 0xff) << 8);
+          let outputRed = (current & 0xff0000) - (Math.min(redAmount, 0xff) << 16);
+          if (outputBlue < 0) outputBlue = 0;
+          if (outputGreen < 0) outputGreen = 0;
+          if (outputRed < 0) outputRed = 0;
+          memory[destination] = (outputBlue | outputGreen | outputRed) | 0;
+        }
+      }
+    }
+    bulkDoubleAaDim = true;
+  }
   for (let y = 0; y < scanlines; y += 1) {
     let red = verticalStart[0];
     let green = verticalStart[1];
@@ -11266,7 +11531,8 @@ function rectangle(machine, linked) {
     memory[p.recthstartred] = bits(red);
     memory[p.recthstartgreen] = bits(green);
     memory[p.recthstartblue] = bits(blue);
-    if (raw && constantRows) {
+    if (cachedConstantLight || bulkDoubleAaDim) pointer += pixels;
+    else if (raw && constantRows) {
       const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
       memory.fill(color, pointer, pointer + pixels);
       pointer += pixels;
@@ -11325,6 +11591,16 @@ function rectangle(machine, linked) {
     }
   }
   memory[p.rectdisplaypointer] = pointer;
+  if (pendingLightCache) {
+    const output = new Int32Array(pixels * scanlines);
+    for (let y = 0; y < scanlines; y += 1) {
+      const source = target + (top + y) * alignment + left;
+      output.set(memory.subarray(source, source + pixels), y * pixels);
+    }
+    pendingLightCache.caches.set(pendingLightCache.key, {
+      input: pendingLightCache.input, output,
+    });
+  }
   memory[p.rectpixels] = pixels;
   memory[p.rectscanlines] = 0;
   machine.X = LINO_DONE;
@@ -11761,63 +12037,72 @@ function standardText(machine, linked) {
   machine.X = LINO_DONE;
 }
 
-function terrainFacingDirect(machine, ground, triangle) {
+function terrainFacingPairDirect(machine, ground) {
   const memory = machine.memory;
   const h1 = memory[ground.VHGNDh1] | 0;
-  const index = Math.imul(h1, 2) + triangle;
-  memory[ground.VHGNDnormindex] = index;
+  const firstIndex = Math.imul(h1, 2);
   const generation = memory[ground.VHGNDnormgen] | 0;
-  let normalX;
-  let normalY;
-  let normalZ;
-  if ((memory[ground.VHGNDnormstamp + index] | 0) === generation) {
-    normalX = float32FromBits(memory[ground.VHGNDnormx + index]);
-    normalY = float32FromBits(memory[ground.VHGNDnormy + index]);
-    normalZ = float32FromBits(memory[ground.VHGNDnormz + index]);
-  } else {
-    const control = floatingPoint(machine).control;
-    const step = memory[ground.VHGNDlodstep] << 14;
-    const x0 = memory[ground.VHGNDx] << 14;
-    const z0 = memory[ground.VHGNDz] << 14;
-    const x1 = x0 + step;
-    const z1 = z0 + step;
-    const y0 = -((triangle === 0 ? memory[ground.VHGNDs1] : memory[ground.VHGNDs2]) << 11);
-    const y1 = -((triangle === 0 ? memory[ground.VHGNDs2] : memory[ground.VHGNDs3]) << 11);
-    const y2 = -(memory[ground.VHGNDs4] << 11);
-    const ax = triangle === 0 ? x0 : x1;
-    const az = z0;
-    const bx = x1;
-    const bz = triangle === 0 ? z0 : z1;
-    const cx = x0;
-    const cz = z1;
-    const edge1X = roundFloat32(ax - cx, control);
-    const edge1Y = roundFloat32(y0 - y2, control);
-    const edge1Z = roundFloat32(az - cz, control);
-    const edge2X = roundFloat32(bx - cx, control);
-    const edge2Y = roundFloat32(y1 - y2, control);
-    const edge2Z = roundFloat32(bz - cz, control);
-    normalX = roundFloat32(edge1Y * edge2Z - edge1Z * edge2Y, control);
-    normalY = roundFloat32(edge1Z * edge2X - edge1X * edge2Z, control);
-    normalZ = roundFloat32(edge1X * edge2Y - edge1Y * edge2X, control);
-    memory[ground.VHGNDnormx + index] = float32Bits(normalX);
-    memory[ground.VHGNDnormy + index] = float32Bits(normalY);
-    memory[ground.VHGNDnormz + index] = float32Bits(normalZ);
-    memory[ground.VHGNDnormstamp + index] = generation;
-  }
-
-  const floats = memory[ground.PJfwbase] >>> 0;
   const step = memory[ground.VHGNDlodstep] << 14;
-  const vertexX = memory[ground.VHGNDx] << 14;
+  const x0 = memory[ground.VHGNDx] << 14;
+  const z0 = memory[ground.VHGNDz] << 14;
+  const x1 = x0 + step;
+  const z1 = z0 + step;
+  const vertexX = x0;
   const vertexY = -(memory[ground.VHGNDs4] << 11);
-  const vertexZ = (memory[ground.VHGNDz] << 14) + step;
+  const vertexZ = z1;
   const qwords = machine.noctisFloat64Memory ??= float64View(memory);
-  const base = floats >>> 1;
-  let dot = (qwords[base + 224] - vertexX) * normalX;
-  dot = (qwords[base + 225] - vertexY) * normalY + dot;
-  dot = (qwords[base + 226] - vertexZ) * normalZ + dot;
-  const facing = !Number.isNaN(dot) && dot >= 0;
-  memory[ground.FCret] = facing ? 1 : 0;
-  return facing;
+  const base = (memory[ground.PJfwbase] >>> 0) >>> 1;
+  const cameraX = qwords[base + 224];
+  const cameraY = qwords[base + 225];
+  const cameraZ = qwords[base + 226];
+  let control;
+  let facingMask = 0;
+  for (let triangle = 0; triangle < 2; triangle += 1) {
+    memory[ground.VHGNDvctri] = triangle;
+    const index = firstIndex + triangle;
+    memory[ground.VHGNDnormindex] = index;
+    let normalX;
+    let normalY;
+    let normalZ;
+    if ((memory[ground.VHGNDnormstamp + index] | 0) === generation) {
+      normalX = float32FromBits(memory[ground.VHGNDnormx + index]);
+      normalY = float32FromBits(memory[ground.VHGNDnormy + index]);
+      normalZ = float32FromBits(memory[ground.VHGNDnormz + index]);
+    } else {
+      control ??= floatingPoint(machine).control;
+      const y0 = -((triangle === 0
+        ? memory[ground.VHGNDs1] : memory[ground.VHGNDs2]) << 11);
+      const y1 = -((triangle === 0
+        ? memory[ground.VHGNDs2] : memory[ground.VHGNDs3]) << 11);
+      const y2 = vertexY;
+      const ax = triangle === 0 ? x0 : x1;
+      const az = z0;
+      const bx = x1;
+      const bz = triangle === 0 ? z0 : z1;
+      const cx = x0;
+      const cz = z1;
+      const edge1X = roundFloat32(ax - cx, control);
+      const edge1Y = roundFloat32(y0 - y2, control);
+      const edge1Z = roundFloat32(az - cz, control);
+      const edge2X = roundFloat32(bx - cx, control);
+      const edge2Y = roundFloat32(y1 - y2, control);
+      const edge2Z = roundFloat32(bz - cz, control);
+      normalX = roundFloat32(edge1Y * edge2Z - edge1Z * edge2Y, control);
+      normalY = roundFloat32(edge1Z * edge2X - edge1X * edge2Z, control);
+      normalZ = roundFloat32(edge1X * edge2Y - edge1Y * edge2X, control);
+      memory[ground.VHGNDnormx + index] = float32Bits(normalX);
+      memory[ground.VHGNDnormy + index] = float32Bits(normalY);
+      memory[ground.VHGNDnormz + index] = float32Bits(normalZ);
+      memory[ground.VHGNDnormstamp + index] = generation;
+    }
+    let dot = (cameraX - vertexX) * normalX;
+    dot = (cameraY - vertexY) * normalY + dot;
+    dot = (cameraZ - vertexZ) * normalZ + dot;
+    const facing = !Number.isNaN(dot) && dot >= 0;
+    memory[ground.FCret] = facing ? 1 : 0;
+    if (facing) facingMask |= 1 << triangle;
+  }
+  return facingMask;
 }
 
 function terrainTileShadeDirect(machine, p) {
@@ -11996,10 +12281,9 @@ function landedTerrainTileCore(machine, linked, manhattan, rawDepth) {
   memory[p.VHGNDtilepolys] = 0;
   memory[p.PJfwbase] = p.fw;
 
-  memory[p.VHGNDvctri] = 0;
-  const facing0 = terrainFacingDirect(machine, p, 0);
-  memory[p.VHGNDvctri] = 1;
-  const facing1 = terrainFacingDirect(machine, p, 1);
+  const facingMask = terrainFacingPairDirect(machine, p);
+  const facing0 = (facingMask & 1) !== 0;
+  const facing1 = (facingMask & 2) !== 0;
   const facingCount = (facing0 ? 1 : 0) + (facing1 ? 1 : 0);
   memory[p.VHGNDtilepolys] = facingCount;
   if (facingCount === 0) {
@@ -13474,6 +13758,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.terrainRenderRandom]: terrainRenderRandom,
     [SERVICE_IDS.terrainVertexLoad]: landedVertexLoad,
     [SERVICE_IDS.terrainEyeHeight]: landedEyeHeight,
+    [SERVICE_IDS.terrainTile]: terrainTileMirror,
     [SERVICE_IDS.rectangle]: rectangle,
     [SERVICE_IDS.surroundingBorder]: surroundingBorder,
     [SERVICE_IDS.surroundingCompass]: surroundingCompass,

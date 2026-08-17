@@ -450,35 +450,37 @@ case 397: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set
 case 398: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (B) | 0; pc = 399; }
 case 399: {  {
     const origin=A|0,source=B|0,width=m[52451]|0,neighbour=((source&15790320)>>>4)|0;
+    const sourceBlue=source&255,sourceGreen=source&65280,sourceRed=source&16711680;
+    const neighbourBlue=neighbour&255,neighbourGreen=neighbour&65280,neighbourRed=neighbour&16711680;
     {
-    const alphaDestination=(origin)>>>0,alphaSource=(source)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(sourceBlue),green=(current&65280)-(sourceGreen),red=(current&16711680)-(sourceRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(sourceRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     A=origin;
   } pc=400; }
@@ -489,35 +491,37 @@ case 403: {  B = (((B) >>> ((1) & 31))) | 0; pc = 404; }
 case 404: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (B) | 0; pc = 405; }
 case 405: {  {
     const origin=A|0,source=B|0,width=m[52451]|0,neighbour=((source&15790320)>>>4)|0;
+    const sourceBlue=source&255,sourceGreen=source&65280,sourceRed=source&16711680;
+    const neighbourBlue=neighbour&255,neighbourGreen=neighbour&65280,neighbourRed=neighbour&16711680;
     {
-    const alphaDestination=(origin)>>>0,alphaSource=(source)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(sourceBlue),green=(current&65280)-(sourceGreen),red=(current&16711680)-(sourceRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(sourceRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     A=origin;
   } pc=406; }
@@ -525,35 +529,37 @@ case 406: {  A = (((A) + (2))) | 0; pc = 407; }
 case 407: {  B = ((s[(d - 1 - 0) | 0] | 0)) | 0; pc = 408; }
 case 408: {  {
     const origin=A|0,source=B|0,width=m[52451]|0,neighbour=((source&15790320)>>>4)|0;
+    const sourceBlue=source&255,sourceGreen=source&65280,sourceRed=source&16711680;
+    const neighbourBlue=neighbour&255,neighbourGreen=neighbour&65280,neighbourRed=neighbour&16711680;
     {
-    const alphaDestination=(origin)>>>0,alphaSource=(source)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(sourceBlue),green=(current&65280)-(sourceGreen),red=(current&16711680)-(sourceRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(sourceRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     A=origin;
   } pc=409; }
@@ -562,35 +568,37 @@ case 410: {  B = ((s[(d - 1 - 0) | 0] | 0)) | 0; pc = 411; }
 case 411: {  A = (((A) - ((m[(52451) >>> 0] | 0)))) | 0; pc = 412; }
 case 412: {  {
     const origin=A|0,source=B|0,width=m[52451]|0,neighbour=((source&15790320)>>>4)|0;
+    const sourceBlue=source&255,sourceGreen=source&65280,sourceRed=source&16711680;
+    const neighbourBlue=neighbour&255,neighbourGreen=neighbour&65280,neighbourRed=neighbour&16711680;
     {
-    const alphaDestination=(origin)>>>0,alphaSource=(source)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(sourceBlue),green=(current&65280)-(sourceGreen),red=(current&16711680)-(sourceRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(sourceRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     A=origin;
   } pc=413; }
@@ -600,35 +608,37 @@ case 415: {  A = (((A) + (C))) | 0; pc = 416; }
 case 416: {  d -= 2; if (d < 0) throw new RangeError("Lino stack underflow"); pc = 417; }
 case 417: {  {
     const origin=A|0,source=B|0,width=m[52451]|0,neighbour=((source&15790320)>>>4)|0;
+    const sourceBlue=source&255,sourceGreen=source&65280,sourceRed=source&16711680;
+    const neighbourBlue=neighbour&255,neighbourGreen=neighbour&65280,neighbourRed=neighbour&16711680;
     {
-    const alphaDestination=(origin)>>>0,alphaSource=(source)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(sourceBlue),green=(current&65280)-(sourceGreen),red=(current&16711680)-(sourceRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(sourceRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+1)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+1)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin-width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin-width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     {
-    const alphaDestination=(origin+width)>>>0,alphaSource=(neighbour)|0,current=m[alphaDestination]|0;
-    let blue=(current&255)-(alphaSource&255),green=(current&65280)-(alphaSource&65280),red=(current&16711680)-(alphaSource&16711680);
+    const alphaDestination=(origin+width)>>>0,current=m[alphaDestination]|0;
+    let blue=(current&255)-(neighbourBlue),green=(current&65280)-(neighbourGreen),red=(current&16711680)-(neighbourRed);
     if(blue<0)blue=0;if(green<0)green=0;if(red<0)red=0;
-    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=alphaSource&16711680;D=green|0;E=red|0;
+    C=(blue|green|red)|0;m[alphaDestination]=C;A=alphaDestination|0;B=(neighbourRed)|0;D=green|0;E=red|0;
   }
     A=origin;
   } pc=418; }
@@ -38992,7 +39002,7 @@ case 36952: {  A = (((A) + ((m[(6179) >>> 0] | 0)))) | 0; pc = 36953; }
 case 36953: {  A = (((A) + (200))) | 0; pc = 36954; }
 case 36954: {  A = ((m[(A) >>> 0] | 0)) | 0; pc = 36955; }
 case 36955: {  if ((((A) | 0) === ((0) | 0))) { pc = ((36958) - 1); continue runner; } pc = 36956; }
-case 36956: { if(executed!==0&&executed+1>maxInstructions){pc=36956;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36958) | 0; pc = (37302) - 1; continue runner; }
+case 36956: { if(executed!==0&&executed+1>maxInstructions){pc=36956;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; pc=36956; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36957; }
 case 36957: { if(executed!==0&&executed+3>maxInstructions){pc=36957;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; q = (6172) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 36958; }
 case 36958: {  A = ((m[(6172) >>> 0] | 0)) | 0; pc = 36959; }
 case 36959: {  if ((((A) >>> 0) <= (((m[(6175) >>> 0] | 0)) >>> 0))) { pc = ((36934) - 1); continue runner; } pc = 36960; }
@@ -39027,8 +39037,8 @@ case 36987: {  if ((((A) >>> 0) <= ((C) >>> 0))) { pc = ((36990) - 1); continue 
 case 36988: { if(executed!==0&&executed+1>maxInstructions){pc=36988;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; m[(6177) >>> 0] = (C) | 0; pc = 36989; }
 case 36989: { if(executed!==0&&executed+1>maxInstructions){pc=36989;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; m[(6173) >>> 0] = ((m[(6177) >>> 0] | 0)) | 0; pc = 36990; }
 case 36990: { if(executed!==0&&executed+1>maxInstructions){pc=36990;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; m[(6172) >>> 0] = ((m[(6174) >>> 0] | 0)) | 0; pc = 36991; }
-case 36991: { if(executed!==0&&executed+1>maxInstructions){pc=36991;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (36993) | 0; pc = (37302) - 1; continue runner; }
-case 36992: { if(executed!==0&&executed+4>maxInstructions){pc=36992;outputStatus="budget";outputInstructions=executed;break runner;}executed+=4; A = ((m[(6172) >>> 0] | 0)) | 0; pc = 36993; }
+case 36991: { if(executed!==0&&executed+5>maxInstructions){pc=36991;outputStatus="budget";outputInstructions=executed;break runner;}executed+=5; pc=36991; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=36992; }
+case 36992: {  A = ((m[(6172) >>> 0] | 0)) | 0; pc = 36993; }
 case 36993: {  A = (((A) + ((m[(6191) >>> 0] | 0)))) | 0; pc = 36994; }
 case 36994: {  m[(6172) >>> 0] = (A) | 0; pc = 36995; }
 case 36995: {  if ((((A) >>> 0) <= (((m[(6175) >>> 0] | 0)) >>> 0))) { pc = ((36992) - 1); continue runner; } pc = 36996; }
@@ -39095,15 +39105,15 @@ case 37055: { if(executed!==0&&executed+1>maxInstructions){pc=37055;outputStatus
 case 37056: { if(executed!==0&&executed+3>maxInstructions){pc=37056;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6172) >>> 0] | 0)) | 0; pc = 37057; }
 case 37057: {  C = ((m[(6214) >>> 0] | 0)) | 0; pc = 37058; }
 case 37058: {  if ((((A) | 0) >= ((C) | 0))) { pc = ((37063) - 1); continue runner; } pc = 37059; }
-case 37059: { if(executed!==0&&executed+1>maxInstructions){pc=37059;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37061) | 0; pc = (37302) - 1; continue runner; }
-case 37060: { if(executed!==0&&executed+2>maxInstructions){pc=37060;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; q = (6172) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37061; }
+case 37059: { if(executed!==0&&executed+3>maxInstructions){pc=37059;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; pc=37059; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37060; }
+case 37060: {  q = (6172) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37061; }
 case 37061: {  pc = (37057) - 1; continue runner; }
 case 37062: { if(executed!==0&&executed+1>maxInstructions){pc=37062;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; m[(6172) >>> 0] = ((m[(6175) >>> 0] | 0)) | 0; pc = 37063; }
 case 37063: { if(executed!==0&&executed+3>maxInstructions){pc=37063;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6172) >>> 0] | 0)) | 0; pc = 37064; }
 case 37064: {  C = ((m[(6214) >>> 0] | 0)) | 0; pc = 37065; }
 case 37065: {  if ((((A) | 0) < ((C) | 0))) { pc = ((37070) - 1); continue runner; } pc = 37066; }
-case 37066: { if(executed!==0&&executed+1>maxInstructions){pc=37066;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37068) | 0; pc = (37302) - 1; continue runner; }
-case 37067: { if(executed!==0&&executed+2>maxInstructions){pc=37067;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; q = (6172) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37068; }
+case 37066: { if(executed!==0&&executed+3>maxInstructions){pc=37066;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; pc=37066; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37067; }
+case 37067: {  q = (6172) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37068; }
 case 37068: {  pc = (37064) - 1; continue runner; }
 case 37069: { if(executed!==0&&executed+3>maxInstructions){pc=37069;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; q = (6173) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37070; }
 case 37070: {  A = ((m[(6173) >>> 0] | 0)) | 0; pc = 37071; }
@@ -39125,15 +39135,15 @@ case 37085: { if(executed!==0&&executed+1>maxInstructions){pc=37085;outputStatus
 case 37086: { if(executed!==0&&executed+3>maxInstructions){pc=37086;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6172) >>> 0] | 0)) | 0; pc = 37087; }
 case 37087: {  C = ((m[(6214) >>> 0] | 0)) | 0; pc = 37088; }
 case 37088: {  if ((((A) | 0) >= ((C) | 0))) { pc = ((37093) - 1); continue runner; } pc = 37089; }
-case 37089: { if(executed!==0&&executed+1>maxInstructions){pc=37089;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37091) | 0; pc = (37302) - 1; continue runner; }
-case 37090: { if(executed!==0&&executed+2>maxInstructions){pc=37090;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; q = (6172) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37091; }
+case 37089: { if(executed!==0&&executed+3>maxInstructions){pc=37089;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; pc=37089; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37090; }
+case 37090: {  q = (6172) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37091; }
 case 37091: {  pc = (37087) - 1; continue runner; }
 case 37092: { if(executed!==0&&executed+1>maxInstructions){pc=37092;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; m[(6172) >>> 0] = ((m[(6175) >>> 0] | 0)) | 0; pc = 37093; }
 case 37093: { if(executed!==0&&executed+3>maxInstructions){pc=37093;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6172) >>> 0] | 0)) | 0; pc = 37094; }
 case 37094: {  C = ((m[(6214) >>> 0] | 0)) | 0; pc = 37095; }
 case 37095: {  if ((((A) | 0) < ((C) | 0))) { pc = ((37100) - 1); continue runner; } pc = 37096; }
-case 37096: { if(executed!==0&&executed+1>maxInstructions){pc=37096;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37098) | 0; pc = (37302) - 1; continue runner; }
-case 37097: { if(executed!==0&&executed+2>maxInstructions){pc=37097;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; q = (6172) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37098; }
+case 37096: { if(executed!==0&&executed+3>maxInstructions){pc=37096;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; pc=37096; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37097; }
+case 37097: {  q = (6172) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37098; }
 case 37098: {  pc = (37094) - 1; continue runner; }
 case 37099: { if(executed!==0&&executed+3>maxInstructions){pc=37099;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; q = (6173) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37100; }
 case 37100: {  A = ((m[(6173) >>> 0] | 0)) | 0; pc = 37101; }
@@ -39155,15 +39165,15 @@ case 37115: { if(executed!==0&&executed+1>maxInstructions){pc=37115;outputStatus
 case 37116: { if(executed!==0&&executed+3>maxInstructions){pc=37116;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6173) >>> 0] | 0)) | 0; pc = 37117; }
 case 37117: {  C = ((m[(6215) >>> 0] | 0)) | 0; pc = 37118; }
 case 37118: {  if ((((A) | 0) <= ((C) | 0))) { pc = ((37123) - 1); continue runner; } pc = 37119; }
-case 37119: { if(executed!==0&&executed+1>maxInstructions){pc=37119;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37121) | 0; pc = (37302) - 1; continue runner; }
-case 37120: { if(executed!==0&&executed+2>maxInstructions){pc=37120;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; q = (6173) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37121; }
+case 37119: { if(executed!==0&&executed+3>maxInstructions){pc=37119;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; pc=37119; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37120; }
+case 37120: {  q = (6173) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37121; }
 case 37121: {  pc = (37117) - 1; continue runner; }
 case 37122: { if(executed!==0&&executed+1>maxInstructions){pc=37122;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; m[(6173) >>> 0] = ((m[(6176) >>> 0] | 0)) | 0; pc = 37123; }
 case 37123: { if(executed!==0&&executed+3>maxInstructions){pc=37123;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6173) >>> 0] | 0)) | 0; pc = 37124; }
 case 37124: {  C = ((m[(6215) >>> 0] | 0)) | 0; pc = 37125; }
 case 37125: {  if ((((A) | 0) > ((C) | 0))) { pc = ((37130) - 1); continue runner; } pc = 37126; }
-case 37126: { if(executed!==0&&executed+1>maxInstructions){pc=37126;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37128) | 0; pc = (37302) - 1; continue runner; }
-case 37127: { if(executed!==0&&executed+2>maxInstructions){pc=37127;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; q = (6173) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37128; }
+case 37126: { if(executed!==0&&executed+3>maxInstructions){pc=37126;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; pc=37126; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37127; }
+case 37127: {  q = (6173) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37128; }
 case 37128: {  pc = (37124) - 1; continue runner; }
 case 37129: { if(executed!==0&&executed+3>maxInstructions){pc=37129;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; q = (6172) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37130; }
 case 37130: {  A = ((m[(6172) >>> 0] | 0)) | 0; pc = 37131; }
@@ -39185,15 +39195,15 @@ case 37145: { if(executed!==0&&executed+1>maxInstructions){pc=37145;outputStatus
 case 37146: { if(executed!==0&&executed+3>maxInstructions){pc=37146;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6173) >>> 0] | 0)) | 0; pc = 37147; }
 case 37147: {  C = ((m[(6215) >>> 0] | 0)) | 0; pc = 37148; }
 case 37148: {  if ((((A) | 0) <= ((C) | 0))) { pc = ((37153) - 1); continue runner; } pc = 37149; }
-case 37149: { if(executed!==0&&executed+1>maxInstructions){pc=37149;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37151) | 0; pc = (37302) - 1; continue runner; }
-case 37150: { if(executed!==0&&executed+2>maxInstructions){pc=37150;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; q = (6173) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37151; }
+case 37149: { if(executed!==0&&executed+3>maxInstructions){pc=37149;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; pc=37149; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37150; }
+case 37150: {  q = (6173) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37151; }
 case 37151: {  pc = (37147) - 1; continue runner; }
 case 37152: { if(executed!==0&&executed+1>maxInstructions){pc=37152;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; m[(6173) >>> 0] = ((m[(6176) >>> 0] | 0)) | 0; pc = 37153; }
 case 37153: { if(executed!==0&&executed+3>maxInstructions){pc=37153;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; A = ((m[(6173) >>> 0] | 0)) | 0; pc = 37154; }
 case 37154: {  C = ((m[(6215) >>> 0] | 0)) | 0; pc = 37155; }
 case 37155: {  if ((((A) | 0) > ((C) | 0))) { pc = ((37160) - 1); continue runner; } pc = 37156; }
-case 37156: { if(executed!==0&&executed+1>maxInstructions){pc=37156;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (37158) | 0; pc = (37302) - 1; continue runner; }
-case 37157: { if(executed!==0&&executed+2>maxInstructions){pc=37157;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; q = (6173) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37158; }
+case 37156: { if(executed!==0&&executed+3>maxInstructions){pc=37156;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; pc=37156; machine.stack=s;machine.depth=d;machine.pc=pc;machine.A=A;machine.B=B;machine.C=C;machine.D=D;machine.E=E;machine.X=X;machine.halted=halted; native("service:vhgndtile", machine); m=machine.memory;md=machine.noctisDataView;if(!md||md.buffer!==m.buffer||md.byteOffset!==m.byteOffset||md.byteLength!==m.byteLength){md=new DataView(m.buffer,m.byteOffset,m.byteLength);machine.noctisDataView=md;} s=machine.stack; d=machine.depth|0; A=machine.A|0; B=machine.B|0; C=machine.C|0; D=machine.D|0; E=machine.E|0; X=machine.X|0; pc=37157; }
+case 37157: {  q = (6173) >>> 0; m[q] = (((m[q] | 0) + 1)) | 0; pc = 37158; }
 case 37158: {  pc = (37154) - 1; continue runner; }
 case 37159: { if(executed!==0&&executed+3>maxInstructions){pc=37159;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; q = (6172) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0; pc = 37160; }
 case 37160: {  A = ((m[(6172) >>> 0] | 0)) | 0; pc = 37161; }
