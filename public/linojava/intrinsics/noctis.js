@@ -32,6 +32,7 @@ const IDS = Object.freeze({
   transparentCullPixel: "native:pgtex.txt:d7cb2f13",
   duplicateHalfScan: "native:pgtex.txt:e4dc90b9",
   resetFloatingPoint: "native:vhgame.txt:9c6ea36c",
+  interiorSmooth64: "native:vhgame.txt:20a55af2",
   invertGroundSky: "native:vhground.txt:7200dd4e",
   clearGroundPage: "native:vhground.txt:73ab03f2",
   copyGroundBackground: "native:vhground.txt:f3ec1118",
@@ -235,6 +236,7 @@ const SERVICE_IDS = Object.freeze({
   copyLayerRegion: "service:copyl2lregion",
   compareFloat64: "service:fcmp",
   spaceClear: "service:vhgspaceclear",
+  interiorSmooth64: "service:vhginteriorsmooth64",
   scanNotEqual: "service:pgrepne",
   scanEqual: "service:pgrepe",
   databaseScan: "service:pgdbscan",
@@ -1134,6 +1136,21 @@ function spaceClear(machine, linked) {
   machine.A = (start + 58240) | 0;
   machine.B = 0;
   machine.C = 0;
+}
+
+function interiorSmooth64(machine, linked) {
+  const memory = machine.memory;
+  const base = value(memory, linked, "VHGsmoothbase") >>> 0;
+  const count = value(memory, linked, "VHGsmoothcount") >>> 0;
+  for (let index = 0; index < count; index += 1) {
+    const first = memory[base + index + 320] & 0xff;
+    const intensity = ((first & 0x3f)
+      + (memory[base + index + 321] & 0x3f)
+      + (memory[base + index + 640] & 0x3f)
+      + (memory[base + index + 641] & 0x3f)) >>> 2;
+    memory[base + index] = (first & 0xc0) | intensity;
+  }
+  machine.X = LINO_DONE;
 }
 
 function compareFloat64Service(machine, linked) {
@@ -12826,6 +12843,8 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.copyLayerRegion]: copyLayerRegion,
     [SERVICE_IDS.compareFloat64]: compareFloat64Service,
     [SERVICE_IDS.spaceClear]: spaceClear,
+    [SERVICE_IDS.interiorSmooth64]: interiorSmooth64,
+    [IDS.interiorSmooth64]: interiorSmooth64,
     [SERVICE_IDS.scanNotEqual]: (machine, linked) => scanService(machine, linked, false),
     [SERVICE_IDS.scanEqual]: (machine, linked) => scanService(machine, linked, true),
     [SERVICE_IDS.databaseScan]: databaseScan,
