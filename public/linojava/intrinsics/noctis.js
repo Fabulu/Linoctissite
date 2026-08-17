@@ -4265,24 +4265,25 @@ function mappedPixelLoop(machine, linked, p, count, culling, fast) {
   const dv = memory[p.SPsi] | 0;
   if (fast && (memory[p.SPterrain] | 0) !== 0) {
     const texture = p.nw + p.RPBG + (memory[p.PGtexoff] | 0);
+    const page = p.page;
     const tint = memory[p.SPtinta] | 0;
     if (culling) {
       for (let pixelIndex = 0; pixelIndex < count; pixelIndex += 1) {
-        di = (di + 2) & 0xffff;
+        di += 2;
         const index = ((v & 0xff00) | ((u >>> 8) & 0xff)) & 0xffff;
         const pixel = ((memory[texture + index] & 0xff) + tint) & 0xff;
         u = (u + du) & 0xffff;
-        memory[p.page + ((di + 2) & 0xffff)] = pixel;
-        memory[p.page + ((di + 3) & 0xffff)] = pixel;
+        memory[page + di + 2] = pixel;
+        memory[page + di + 3] = pixel;
         v = (v + dv) & 0xffff;
       }
     } else {
       for (let pixelIndex = 0; pixelIndex < count; pixelIndex += 1) {
-        di = (di + 1) & 0xffff;
+        di += 1;
         const index = ((v & 0xff00) | ((u >>> 8) & 0xff)) & 0xffff;
         const pixel = ((memory[texture + index] & 0xff) + tint) & 0xff;
         u = (u + du) & 0xffff;
-        memory[p.page + ((di + 3) & 0xffff)] = pixel;
+        memory[page + di + 3] = pixel;
         v = (v + dv) & 0xffff;
       }
     }
