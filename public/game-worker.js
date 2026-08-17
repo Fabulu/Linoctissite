@@ -19,6 +19,7 @@ let pointerDeltaX = 0;
 let pointerDeltaY = 0;
 let pointerMode = 0;
 const pointerTransitions = [];
+let activePointerTransition = null;
 const heldKeys = Object.create(null);
 const consoleInput = [];
 let pendingFrame = null;
@@ -78,7 +79,7 @@ function crashPacket(error, phase) {
 function publishPointerWorkspace() {
   if (!program) return;
   const memory = program.machine.memory;
-  const pending = pointerTransitions[0];
+  const pending = activePointerTransition ?? pointerTransitions[0];
   const write = (name, value) => {
     const symbol = program.linked.symbols.get(canonical(name));
     if (symbol) memory[symbol.value] = value | 0;
@@ -276,8 +277,16 @@ function runMachine() {
     const producedFrame = completedFrame;
     completedFrame = false;
     publishFrame(result, runnerMilliseconds, producedFrame);
+    const guiIdle = program.linked.labels.get("eclj25");
+    if (activePointerTransition && result.status === "yield"
+        && guiIdle !== undefined && program.machine.pc === guiIdle) {
+      // One browser edge remains the live pointer sample for one complete
+      // iGUI control-loop scan. Only expose the following edge at GUI idle.
+      activePointerTransition = null;
+      publishPointerWorkspace();
+    }
     if (pendingGuiMenu && result.status === "yield") {
-      const idle = program.linked.labels.get("eclj25");
+      const idle = guiIdle;
       const action = program.linked.labels.get("menubuttonaction");
       if (idle !== undefined && action !== undefined && program.machine.pc === idle) {
         const machine = program.machine;
@@ -367,10 +376,10 @@ async function initialize(message) {
         pointerMode = mode | 0;
         emitMessage({ type: "pointerMode", mode: pointerMode });
       }
-      const transition = pointerTransitions.shift();
-      if (transition && pointerTransitions.length > 0) {
-        queueMicrotask(publishPointerWorkspace);
+      if (!activePointerTransition && pointerTransitions.length > 0) {
+        activePointerTransition = pointerTransitions.shift();
       }
+      const transition = activePointerTransition;
       const deltaX = transition?.deltaX ?? pointerDeltaX;
       const deltaY = transition?.deltaY ?? pointerDeltaY;
       if (!transition) pointerDeltaX = pointerDeltaY = 0;

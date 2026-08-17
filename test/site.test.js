@@ -44,6 +44,8 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(gameWorker, /transition\?\.buttons \?\? pointerButtons/);
   assert.match(gameWorker, /transition\?\.x \?\? pointerX/);
   assert.match(gameWorker, /pointerTransitions\[0\]/);
+  assert.match(gameWorker, /activePointerTransition = pointerTransitions\.shift\(\)/);
+  assert.match(gameWorker, /program\.machine\.pc === guiIdle/);
   assert.match(gameWorker, /pendingGuiMenu && result\.status === "yield"/);
   assert.match(app, /pendingGuiMenu && result\.status === "yield"/);
   assert.match(app, /physicalWidth: Math\.max\(1, window\.innerWidth\)/);

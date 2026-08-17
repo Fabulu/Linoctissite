@@ -115,6 +115,7 @@ let pointerMode = 0;
 let pointerDeltaX = 0;
 let pointerDeltaY = 0;
 const pointerTransitions = [];
+let activePointerTransition = null;
 let pendingGuiMenu = false;
 let gameLeft = 0;
 let gameTop = 0;
@@ -327,9 +328,12 @@ const host = {
   },
   keys: heldKeys,
   consoleInput,
-  pointer({ mode }) {
+    pointer({ mode }) {
     pointerMode = mode | 0;
-    const transition = pointerTransitions.shift();
+      if (!activePointerTransition && pointerTransitions.length > 0) {
+        activePointerTransition = pointerTransitions.shift();
+      }
+      const transition = activePointerTransition;
     const deltaX = transition?.deltaX ?? pointerDeltaX;
     const deltaY = transition?.deltaY ?? pointerDeltaY;
     if (!transition) {
@@ -467,8 +471,13 @@ function runFrame() {
     const previousFrameCount = frameCount;
     const runnerStartedAt = performance.now();
     const result = program.run(250_000);
+    const guiIdle = program.linked.labels.get("eclj25");
+    if (activePointerTransition && result.status === "yield"
+        && guiIdle !== undefined && program.machine.pc === guiIdle) {
+      activePointerTransition = null;
+    }
     if (pendingGuiMenu && result.status === "yield") {
-      const idle = program.linked.labels.get("eclj25");
+      const idle = guiIdle;
       const action = program.linked.labels.get("menubuttonaction");
       if (idle !== undefined && action !== undefined && program.machine.pc === idle) {
         const machine = program.machine;
