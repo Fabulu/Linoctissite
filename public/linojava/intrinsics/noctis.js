@@ -2939,7 +2939,10 @@ const POLYGON_GRADIENTS = Object.freeze([
 
 function prepareMappedVectors(machine, linked, p, vertices, fast) {
   const memory = machine.memory;
-  if (fast && (memory[p.SPterrain] | 0) !== 0) {
+  const fusedTriangle = vertices === 3
+    && ((memory[p.SPterrain] | memory[p.SPtrifast]) !== 0);
+  const fusedQuad = vertices === 4 && (memory[p.SPmapfast] | 0) !== 0;
+  if (fast && (fusedTriangle || fusedQuad)) {
     prepareTerrainVectorsFast(machine, p, vertices);
     return;
   }
@@ -3036,8 +3039,8 @@ function prepareTerrainVectorsFast(machine, p, vertices) {
   const view = dataView(memory);
   const floats = p.fw;
   memory[p.PJdx] = vertices;
-  memory[p.PJthird0] = p.D64THLO;
-  memory[p.PJthird1] = p.D64THHI;
+  memory[p.PJthird0] = vertices === 3 ? p.D64THLO : p.D64QLO;
+  memory[p.PJthird1] = vertices === 3 ? p.D64THHI : p.D64QHI;
   const factor = readFloat64View(view, p.PJthird0);
   let lastNarrowed = 0;
   const nearest = (control & 0x0c00) === 0;
