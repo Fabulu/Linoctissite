@@ -4417,6 +4417,104 @@ function mappedPixelLoop(machine, linked, p, count, culling, fast) {
   }
 }
 
+function mappedTerrainScanline(machine, p) {
+  const memory = machine.memory;
+  const control = floatingPoint(machine).control;
+  let remaining = memory[p.SPsec] | 0;
+  const culling = (memory[p.SPcull] & 1) !== 0;
+  const blockSize = culling ? 32 : 16;
+  const qwords = machine.noctisFloat64Memory ??= float64View(memory);
+  const base = (memory[p.PGfwbase] >>> 0) >>> 1;
+  const texture = p.nw + p.RPBG + (memory[p.PGtexoff] | 0);
+  const page = p.page;
+  const tint = memory[p.SPtinta] | 0;
+
+  while (remaining > 0) {
+    let count = remaining > blockSize ? blockSize
+      : culling ? (remaining + 2) & 0xff : remaining & 0xff;
+    remaining = (remaining - blockSize) | 0;
+    memory[p.SPsec] = remaining;
+    if (culling) {
+      if (count < 2) continue;
+      count >>>= 1;
+    } else if (count === 0) continue;
+    memory[p.SPcl] = count;
+
+    let z = qwords[base + p.FSZ] + qwords[base + p.FSK3];
+    qwords[base + p.FSW0] = z;
+    z = Math.fround(z);
+    memory[p.PGUVZ] = float32Bits(z);
+    qwords[base + p.FSZ] = z;
+    let x = qwords[base + p.FSX] + qwords[base + p.FSK1];
+    qwords[base + p.FSW1] = x;
+    x = Math.fround(x);
+    memory[p.PGUVX] = float32Bits(x);
+    qwords[base + p.FSX] = x;
+    let y = qwords[base + p.FSY] + qwords[base + p.FSK2];
+    qwords[base + p.FSW2] = y;
+    y = Math.fround(y);
+    memory[p.PGUVY] = float32Bits(y);
+    qwords[base + p.FSY] = y;
+    let reciprocal = qwords[base + p.FSUNO] / z;
+    qwords[base + p.FSW3] = reciprocal;
+    reciprocal = Math.fround(reciprocal);
+    memory[p.PGUVK4] = float32Bits(reciprocal);
+    memory[p.FS0] = memory[p.PGUVK4];
+    qwords[base + p.FSK4] = reciprocal;
+    let result = x * qwords[base + p.FSTX];
+    qwords[base + p.FSW3] = result;
+    result *= reciprocal;
+    qwords[base + p.FSW3] = result;
+    const nextU = convertToInt32(result, control);
+    memory[p.SPun] = nextU;
+    result = y * qwords[base + p.FSTY];
+    qwords[base + p.FSW3] = result;
+    result *= reciprocal;
+    qwords[base + p.FSW3] = result;
+    const nextV = convertToInt32(result, control);
+    memory[p.SPvn] = nextV;
+
+    const du = ((nextU - (memory[p.SPu] | 0)) >> 4) & 0xffff;
+    const dv = ((nextV - (memory[p.SPv] | 0)) >> 4) & 0xffff;
+    memory[p.SPsi] = dv;
+    memory[p.SPbp] = du;
+    let u = memory[p.SPu] & 0xffff;
+    let v = memory[p.SPv] & 0xffff;
+    memory[p.SPax] = u;
+    memory[p.SPdx] = v;
+    memory[p.SPu] = nextU;
+    memory[p.SPv] = nextV;
+    let di = memory[p.SPdi] & 0xffff;
+    const start = di;
+    if (culling) memory[p.SPsave] = start;
+
+    if (culling) {
+      for (let pixelIndex = 0; pixelIndex < count; pixelIndex += 1) {
+        di += 2;
+        const index = ((v & 0xff00) | ((u >>> 8) & 0xff)) & 0xffff;
+        const pixel = ((memory[texture + index] & 0xff) + tint) & 0xff;
+        u = (u + du) & 0xffff;
+        memory[page + di + 2] = pixel;
+        memory[page + di + 3] = pixel;
+        v = (v + dv) & 0xffff;
+      }
+    } else {
+      for (let pixelIndex = 0; pixelIndex < count; pixelIndex += 1) {
+        di += 1;
+        const index = ((v & 0xff00) | ((u >>> 8) & 0xff)) & 0xffff;
+        const pixel = ((memory[texture + index] & 0xff) + tint) & 0xff;
+        u = (u + du) & 0xffff;
+        memory[page + di + 3] = pixel;
+        v = (v + dv) & 0xffff;
+      }
+    }
+    memory[p.SPdi] = culling ? (start + 32) & 0xffff : di;
+    memory[p.SPax] = u;
+    memory[p.SPdx] = v;
+    memory[p.SPcl] = 0;
+  }
+}
+
 function mappedScanline(machine, linked, p) {
   const memory = machine.memory;
   let remaining = memory[p.SPsec] | 0;
@@ -4492,6 +4590,9 @@ function mappedTrace(machine, linked, p) {
   let row = memory[p.BXminy] | 0;
   const maximum = memory[p.BXmaxy] | 0;
   const fastHalfScan = (memory[p.SPterrain] | memory[p.SPpixfast]) !== 0;
+  const fastTerrainScanline = (memory[p.SPterrain] | 0) !== 0
+    && (floatingPoint(machine).control & 0x0c00) === 0
+    && ((memory[p.PGfwbase] | 0) & 1) === 0;
   memory[p.SPi] = row;
   while (row <= maximum) {
     terrainTraceRow(machine, linked, p);
@@ -4499,7 +4600,8 @@ function mappedTrace(machine, linked, p) {
     const last = memory[p.fpart + row] | 0;
     memory[p.SPsec] = (last - first) | 0;
     memory[p.SPdi] = (Math.imul(row, 320) + first) & 0xffff;
-    mappedScanline(machine, linked, p);
+    if (fastTerrainScanline) mappedTerrainScanline(machine, p);
+    else mappedScanline(machine, linked, p);
     if ((memory[p.SPhalf] & 1) !== 0) {
       row += 1;
       memory[p.SPi] = row;
