@@ -259,6 +259,7 @@ const SERVICE_IDS = Object.freeze({
   denseAtmosphere: "service:vhgnddenseatmosphere",
   terrainRenderRandom: "service:vhgndrenderrandom",
   terrainVertexLoad: "service:vhgndvload",
+  terrainEyeHeight: "service:vhgndeyeheight",
   rectangle: "service:rectangle",
   surroundingBorder: "service:vhgndsurroundingborder",
   surroundingCompass: "service:vhgndcompass",
@@ -5311,6 +5312,17 @@ function landedHeightChop(machine, linked) {
     fpu.control,
   );
   fpu.control = value(memory, linked, "GRcwn") & 0xffff;
+}
+
+function landedEyeHeight(machine, linked) {
+  const memory = machine.memory;
+  const p = landedRockAddresses(linked);
+  const cameraX = memory[p.VHGNDcamx] | 0;
+  const cameraZ = memory[p.VHGNDcamz] | 0;
+  const height = landedEyeHeightAt(machine, linked, p, cameraX, cameraZ);
+  machine.A = height;
+  machine.C = (memory[p.VHGNDs4] & 0xff) << 11;
+  machine.X = LINO_DONE;
 }
 
 function landedDenseAverage(machine, linked) {
@@ -12642,6 +12654,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.denseAtmosphere]: denseAtmosphere,
     [SERVICE_IDS.terrainRenderRandom]: terrainRenderRandom,
     [SERVICE_IDS.terrainVertexLoad]: landedVertexLoad,
+    [SERVICE_IDS.terrainEyeHeight]: landedEyeHeight,
     [SERVICE_IDS.rectangle]: rectangle,
     [SERVICE_IDS.surroundingBorder]: surroundingBorder,
     [SERVICE_IDS.surroundingCompass]: surroundingCompass,
