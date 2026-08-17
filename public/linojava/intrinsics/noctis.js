@@ -965,13 +965,10 @@ function scale2x(machine, linked) {
       const offset = column << 1;
       memory[backdrop0 + offset] = pixel;
       memory[backdrop0 + offset + 1] = pixel;
-      memory[backdrop1 + offset] = pixel;
-      memory[backdrop1 + offset + 1] = pixel;
-      memory[primary0 + offset] = pixel;
-      memory[primary0 + offset + 1] = pixel;
-      memory[primary1 + offset] = pixel;
-      memory[primary1 + offset + 1] = pixel;
     }
+    memory.copyWithin(backdrop1, backdrop0, backdrop0 + 640);
+    memory.copyWithin(primary0, backdrop0, backdrop0 + 640);
+    memory.copyWithin(primary1, backdrop0, backdrop0 + 640);
     backdrop0 = (backdrop0 + 640 + rowGap) >>> 0;
     backdrop1 = (backdrop1 + 640 + rowGap) >>> 0;
     primary0 = (primary0 + 640 + rowGap) >>> 0;
@@ -3601,9 +3598,7 @@ function copyGroundBackground(machine, linked) {
   const source = value(memory, linked, "VHGNDbgcachefrom") >>> 0;
   const destination = value(memory, linked, "VHGNDbgcacheto") >>> 0;
   const count = value(memory, linked, "VHGNDbgcachecount") >>> 0;
-  for (let index = 0; index < count; index += 1) {
-    memory[destination + index] = memory[source + index];
-  }
+  memory.copyWithin(destination, source, source + count);
 }
 
 function drawGroundBackground(machine, linked) {
@@ -5719,7 +5714,7 @@ function groundPostSurface(machine, linked) {
   machine.X = LINO_DONE;
 }
 
-function landedFastRandomRaw(seed) {
+function landedFastRandomRaw(seed, highTarget = null) {
   const lowHalf = seed & 0xffff;
   const highHalf = seed >>> 16;
   const lowProduct = lowHalf * lowHalf;
@@ -5728,7 +5723,9 @@ function landedFastRandomRaw(seed) {
   const low = lowerWide | 0;
   const high = (highHalf * highHalf + Math.floor(middle / 0x10000)
     + Math.floor(lowerWide / 0x100000000)) | 0;
-  return (low & 0xffffff00) | (((low & 0xff) + (high & 0xff)) & 0xff);
+  const raw = (low & 0xffffff00) | (((low & 0xff) + (high & 0xff)) & 0xff);
+  if (highTarget) highTarget.D = high;
+  return raw;
 }
 
 function landedFastRandomHigh(seed) {
@@ -5747,7 +5744,7 @@ function landedFastRandom(machine, linked, mask, direct = null) {
   const eaxAddress = direct?.SUfeax ?? address(linked, "SUfeax");
   const valueAddress = direct?.SUfval ?? address(linked, "SUfval");
   const seed = memory[seedAddress] >>> 0;
-  const raw = landedFastRandomRaw(seed);
+  const raw = landedFastRandomRaw(seed, machine);
   const nextSeed = (seed + (raw >>> 0)) | 0;
   const result = raw & mask;
   memory[eaxAddress] = raw;
@@ -5756,7 +5753,6 @@ function landedFastRandom(machine, linked, mask, direct = null) {
   machine.A = raw;
   machine.B = nextSeed;
   machine.C = result;
-  machine.D = landedFastRandomHigh(seed);
   return result;
 }
 
@@ -7192,6 +7188,20 @@ function restoreAddressValues(memory, addresses, values) {
   }
 }
 
+function restorePendingTreeInputs(memory, p, command, greenmushAfter) {
+  const firstVertex = greenmushAfter ? 1 : 0;
+  const stopVertex = command.vertices === 3 ? 2 : command.vertices;
+  for (let axis = 0; axis < 3; axis += 1) {
+    const slot = axis === 0 ? p.FSINX : axis === 1 ? p.FSINY : p.FSINZ;
+    for (let vertex = firstVertex; vertex < stopVertex; vertex += 1) {
+      const input = (axis * command.vertices + vertex) * 2;
+      const destination = p.fw + (slot + vertex) * 2;
+      memory[destination] = command.coordinates[input];
+      memory[destination + 1] = command.coordinates[input + 1];
+    }
+  }
+}
+
 function mergeTreeCommandBounds(commands) {
   const bounds = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
   for (const command of commands) {
@@ -7407,7 +7417,8 @@ function captureTreePolygon(machine, linked, faced, forcedVertices = 0) {
   return command;
 }
 
-function restoreTreePolygon(machine, linked, command, projection = null) {
+function restoreTreePolygon(machine, linked, command, projection = null,
+  skipProjectedInputs = false) {
   const memory = machine.memory;
   const tree = landedTreeRenderAddresses(linked);
   const p = tree.p;
@@ -7417,16 +7428,37 @@ function restoreTreePolygon(machine, linked, command, projection = null) {
     memory[tree.treepx] = float32Bits(currentWind.x);
     memory[tree.treepz] = float32Bits(currentWind.z);
   }
-  let input = 0;
-  for (const slot of [p.FSINX, p.FSINY, p.FSINZ]) {
-    for (let vertex = 0; vertex < command.vertices; vertex += 1) {
-      const destination = p.fw + (slot + vertex) * 2;
-      if (currentWind && vertex === 2 && (slot === p.FSINX || slot === p.FSINZ)) {
-        writeFloat64(memory, destination, slot === p.FSINX ? currentWind.x : currentWind.z);
-        input += 2;
+  let projectedInputs = false;
+  if (skipProjectedInputs && command.kind === "polygon" && projection && command.vertexIndices) {
+    projectedInputs = true;
+    for (const index of command.vertexIndices) {
+      if (projection.visible[index] === 0) { projectedInputs = false; break; }
+    }
+  }
+  if (projectedInputs && command.vertices === 3) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      const slot = axis === 0 ? p.FSINX : axis === 1 ? p.FSINY : p.FSINZ;
+      const destination = p.fw + (slot + 2) * 2;
+      if (currentWind && (axis === 0 || axis === 2)) {
+        writeFloat64(memory, destination, axis === 0 ? currentWind.x : currentWind.z);
       } else {
-        memory[destination] = command.coordinates[input++];
-        memory[destination + 1] = command.coordinates[input++];
+        const input = (axis * command.vertices + 2) * 2;
+        memory[destination] = command.coordinates[input];
+        memory[destination + 1] = command.coordinates[input + 1];
+      }
+    }
+  } else if (!projectedInputs) {
+    let input = 0;
+    for (const slot of [p.FSINX, p.FSINY, p.FSINZ]) {
+      for (let vertex = 0; vertex < command.vertices; vertex += 1) {
+        const destination = p.fw + (slot + vertex) * 2;
+        if (currentWind && vertex === 2 && (slot === p.FSINX || slot === p.FSINZ)) {
+          writeFloat64(memory, destination, slot === p.FSINX ? currentWind.x : currentWind.z);
+          input += 2;
+        } else {
+          memory[destination] = command.coordinates[input++];
+          memory[destination + 1] = command.coordinates[input++];
+        }
       }
     }
   }
@@ -7437,12 +7469,15 @@ function restoreTreePolygon(machine, linked, command, projection = null) {
   memory[p.PJnrv] = command.vertices;
   if (command.kind === "faced-polygon") {
     mappedFacing(machine, linked);
-    if ((memory[p.FCret] | 0) === 0) return;
+    if ((memory[p.FCret] | 0) === 0) return false;
   }
   if (projection && command.vertexIndices) {
-    let allVisible = true;
-    for (const index of command.vertexIndices) {
-      if (projection.visible[index] === 0) { allVisible = false; break; }
+    let allVisible = projectedInputs;
+    if (!allVisible) {
+      allVisible = true;
+      for (const index of command.vertexIndices) {
+        if (projection.visible[index] === 0) { allVisible = false; break; }
+      }
     }
     if (allVisible) {
       let minX = 311;
@@ -7479,10 +7514,11 @@ function restoreTreePolygon(machine, linked, command, projection = null) {
       memory[p.BXmaxy] = maxY;
       memory[p.PJpreproject] = 1;
       polymap(machine, linked, true);
-      return;
+      return projectedInputs;
     }
   }
   polymap(machine, linked);
+  return false;
 }
 
 function greenmushProjectionContext(machine, tree) {
@@ -7637,10 +7673,10 @@ function projectGreenmushPoint(machine, tree, context, inputX, inputY, inputZ) {
   return true;
 }
 
-function renderGreenmushDirect(machine, linked, tree) {
+function renderGreenmushDirect(machine, linked, tree, sharedProjection = null) {
   const memory = machine.memory;
   const state = tree.mushroomState;
-  const projection = greenmushProjectionContext(machine, tree);
+  const projection = sharedProjection ?? greenmushProjectionContext(machine, tree);
   const scale = memory[state[5]] | 0;
   const halfScale = scale >> 1;
   memory[tree.VHGNDtmp] = halfScale;
@@ -7789,9 +7825,12 @@ function terrainTree(machine, linked) {
   const models = objectScope ?? machine.noctisTreeModels;
   const model = models.get(key);
   if (model) {
+    let pendingInputCommand = null;
+    let greenmushAfterPendingInputs = false;
     if (rockBoundsMayRender(machine, tree.p, currentTreeModelBounds(machine, tree, model), 10)) {
       const projection = machine.noctisDisableTreeProjectionCache
         ? null : projectTreeModelVertices(machine, tree, model);
+      const greenProjection = greenmushProjectionContext(machine, tree);
       for (const command of model.commands) {
         if (command.kind === "greenmush") {
           if (!machine.noctisDisableGreenmushCommandCull
@@ -7803,9 +7842,22 @@ function terrainTree(machine, linked) {
             machine.memory[tree.mushroomState[9]] = float32Bits(current.x);
             machine.memory[tree.mushroomState[11]] = float32Bits(current.z);
           }
-          renderGreenmushDirect(machine, linked, tree);
-        } else restoreTreePolygon(machine, linked, command, projection);
+          renderGreenmushDirect(machine, linked, tree, greenProjection);
+          if (pendingInputCommand) greenmushAfterPendingInputs = true;
+        } else {
+          const skipped = restoreTreePolygon(
+            machine, linked, command, projection,
+            !model.dynamicWind && !machine.noctisDisableTreeInputSkip,
+          );
+          pendingInputCommand = skipped ? command : null;
+          greenmushAfterPendingInputs = false;
+        }
       }
+    }
+    if (pendingInputCommand) {
+      restorePendingTreeInputs(
+        machine.memory, tree.p, pendingInputCommand, greenmushAfterPendingInputs,
+      );
     }
     if (model.dynamicWind) {
       restoreAddressValues(machine.memory, tree.polygonState, model.finalState);
@@ -11218,6 +11270,44 @@ function rectangle(machine, linked) {
       const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
       memory.fill(color, pointer, pointer + pixels);
       pointer += pixels;
+    } else if (constantRows && effectDescriptor.kind === "dim") {
+      const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
+      if (!effectDescriptor.transparent
+          || color !== (memory[p.fxtransparentcolor] | 0)) {
+        const sourceBlue = color & 0xff;
+        const sourceGreen = color & 0xff00;
+        const sourceRed = color & 0xff0000;
+        const end = pointer + pixels;
+        for (; pointer < end; pointer += 1) {
+          const current = memory[pointer] | 0;
+          let outputBlue = (current & 0xff) - sourceBlue;
+          let outputGreen = (current & 0xff00) - sourceGreen;
+          let outputRed = (current & 0xff0000) - sourceRed;
+          outputBlue = Math.max(outputBlue, 0);
+          outputGreen = Math.max(outputGreen, 0);
+          outputRed = Math.max(outputRed, 0);
+          memory[pointer] = (outputBlue | outputGreen | outputRed) | 0;
+        }
+      } else pointer += pixels;
+    } else if (constantRows && effectDescriptor.kind === "light") {
+      const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
+      if (!effectDescriptor.transparent
+          || color !== (memory[p.fxtransparentcolor] | 0)) {
+        const sourceBlue = color & 0xff;
+        const sourceGreen = color & 0xff00;
+        const sourceRed = color & 0xff0000;
+        const end = pointer + pixels;
+        for (; pointer < end; pointer += 1) {
+          const current = memory[pointer] | 0;
+          let outputBlue = (current & 0xff) + sourceBlue;
+          let outputGreen = (current & 0xff00) + sourceGreen;
+          let outputRed = (current & 0xff0000) + sourceRed;
+          outputBlue = Math.min(outputBlue, 0xff);
+          outputGreen = Math.min(outputGreen, 0xff00);
+          outputRed = Math.min(outputRed, 0xff0000);
+          memory[pointer] = (outputBlue | outputGreen | outputRed) | 0;
+        }
+      } else pointer += pixels;
     } else {
       for (let x = 0; x < pixels; x += 1) {
         const color = (channelByte(red) << 16) | (channelByte(green) << 8) | channelByte(blue);
