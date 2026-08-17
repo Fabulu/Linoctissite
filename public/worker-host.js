@@ -253,7 +253,7 @@ function animationFrame(now) {
     displayRate = displayTicks * 1000 / elapsed;
     const displayPerTick = displayMilliseconds / Math.max(1, displayTicks);
     if (lastMetrics) {
-      status.textContent = `Noctis / ${lastMetrics.renderedFrames} presentations / ${lastMetrics.renderedFps.toFixed(1)} FPS rendered / ${displayRate.toFixed(1)} Hz display / render ${lastMetrics.runnerMillisecondsPerFrame.toFixed(1)} ms + display ${displayPerTick.toFixed(1)} ms / ${(lastMetrics.instructionsPerFrame / 1_000_000).toFixed(2)}M ops / ${lastMetrics.status}`;
+      status.textContent = `Noctis / ${lastMetrics.gameFrames ?? 0} game frames / ${lastMetrics.renderedFps.toFixed(1)} FPS gameplay / ${displayRate.toFixed(1)} Hz display / render ${lastMetrics.runnerMillisecondsPerFrame.toFixed(1)} ms + display ${displayPerTick.toFixed(1)} ms / ${(lastMetrics.instructionsPerFrame / 1_000_000).toFixed(2)}M ops / ${lastMetrics.status}`;
     }
     displayTicks = 0;
     displayMilliseconds = 0;

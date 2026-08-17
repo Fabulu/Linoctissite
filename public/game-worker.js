@@ -32,13 +32,18 @@ let runQueued = false;
 let delayedRun = 0;
 let pendingGuiMenu = false;
 let renderedFrames = 0;
+let gameFrames = 0;
 let rateStartedAt = performance.now();
-let rateStartedFrame = 0;
+let rateStartedGameFrame = 0;
 let rateRunnerMilliseconds = 0;
 let rateInstructions = 0;
 let renderedFps = 0;
 let runnerMillisecondsPerFrame = 0;
 let instructionsPerFrame = 0;
+let pendingRunnerMilliseconds = 0;
+let pendingInstructions = 0;
+let gameTimingAddress = -1;
+let lastGameTimingCount = 0;
 let pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, paused: false };
 const recentInputEvents = [];
 
@@ -231,22 +236,25 @@ function queueRun(delay = 0, yieldToHost = false) {
   } else runChannel.port2.postMessage(0);
 }
 
-function publishFrame(result, runnerMilliseconds, producedFrame) {
+function publishFrame(result, runnerMilliseconds, instructions, producedFrame) {
   if (!producedFrame) return;
   renderedFrames += 1;
+  if (gameTimingAddress >= 0) {
+    gameFrames = program.machine.memory[gameTimingAddress] | 0;
+  }
   rateRunnerMilliseconds += runnerMilliseconds;
-  rateInstructions += result.instructions;
+  rateInstructions += instructions;
   const now = performance.now();
   const elapsed = now - rateStartedAt;
   if (elapsed >= 1000) {
-    const frames = renderedFrames - rateStartedFrame;
+    const frames = gameFrames - rateStartedGameFrame;
     if (frames > 0) {
       renderedFps = frames * 1000 / elapsed;
       runnerMillisecondsPerFrame = rateRunnerMilliseconds / frames;
       instructionsPerFrame = rateInstructions / frames;
     }
     rateStartedAt = now;
-    rateStartedFrame = renderedFrames;
+    rateStartedGameFrame = gameFrames;
     rateRunnerMilliseconds = 0;
     rateInstructions = 0;
   }
@@ -259,7 +267,7 @@ function publishFrame(result, runnerMilliseconds, producedFrame) {
     { fullbuttonhotspot: 4, titlebarbounds: 4, sizebuttonhotspot: 4, menubuttonhotspot: 5 },
   );
   frame.metrics = {
-    renderedFrames, renderedFps, runnerMillisecondsPerFrame, instructionsPerFrame,
+    renderedFrames, gameFrames, renderedFps, runnerMillisecondsPerFrame, instructionsPerFrame,
     status: result.status,
   };
   emitMessage(frame, [frame.pixels.buffer]);
@@ -274,9 +282,26 @@ function runMachine() {
     // are split so a pointer release cannot wait behind a giant Lino slice.
     const result = program.run(10_000);
     const runnerMilliseconds = performance.now() - started;
-    const producedFrame = completedFrame;
+    pendingRunnerMilliseconds += runnerMilliseconds;
+    pendingInstructions += result.instructions;
+    let producedFrame = completedFrame;
     completedFrame = false;
-    publishFrame(result, runnerMilliseconds, producedFrame);
+    if (producedFrame && pendingFrame?.sourcePaced) {
+      // A Noctis game loop first retraces the changed work area, then iGUI
+      // composes and retraces the pointer. VHGtimingcalls changes between the
+      // preceding loop and this first partial update, so it is a reliable
+      // marker for the intermediate page. Keep it inside the worker and send
+      // only the immediately following, fully composed page to the browser.
+      const intermediate = pendingFrame;
+      pendingFrame = null;
+      if (!intermediate.borrowed) frameBuffers.push(intermediate.pixels);
+      producedFrame = false;
+    }
+    publishFrame(result, pendingRunnerMilliseconds, pendingInstructions, producedFrame);
+    if (producedFrame) {
+      pendingRunnerMilliseconds = 0;
+      pendingInstructions = 0;
+    }
     const guiIdle = program.linked.labels.get("eclj25");
     if (activePointerTransition && result.status === "yield"
         && guiIdle !== undefined && program.machine.pc === guiIdle) {
@@ -400,6 +425,9 @@ async function initialize(message) {
     monotonicMilliseconds: () => performance.now(),
     retrace(origin, width, height, memory) {
       completedFrame = true;
+      const timingCount = gameTimingAddress >= 0 ? memory[gameTimingAddress] | 0 : 0;
+      const sourcePaced = gameTimingAddress >= 0 && timingCount !== lastGameTimingCount;
+      lastGameTimingCount = timingCount;
       if (frameCredits > 0) {
         frameCredits -= 1;
         const count = width * height;
@@ -412,8 +440,14 @@ async function initialize(message) {
         }
         pendingFrame = {
           type: "frame", width, height,
-          pixels, borrowed: foregroundRuntime,
+          pixels, borrowed: foregroundRuntime, sourcePaced,
         };
+        // VHG timing step has already paced this gameplay frame. Keep one
+        // scheduler credit inside the worker so requestAnimationFrame only
+        // samples completed pages instead of becoming a second frame clock.
+        // GUI-only redraws do not increment VHGtimingcalls and therefore keep
+        // the ordinary presentation-credit backpressure.
+        if (sourcePaced) frameCredits = Math.min(maxFrameCredits, frameCredits + 1);
         if (frameCredits === 0) waitingForFrameCredit = true;
       } else waitingForFrameCredit = true;
       return true;
@@ -432,6 +466,9 @@ async function initialize(message) {
     physicalHeight: Math.max(1, message.physicalHeight | 0),
     audioPlayback: Boolean(message.audioPlayback),
   });
+  gameTimingAddress = program.linked.symbols.get("vhgtimingcalls")?.value ?? -1;
+  lastGameTimingCount = gameTimingAddress >= 0
+    ? program.machine.memory[gameTimingAddress] | 0 : 0;
   const bounds = message.windowBounds;
   if (bounds) {
     const x = program.linked.symbols.get("displayxposition");
