@@ -115,6 +115,7 @@ let pointerMode = 0;
 let pointerDeltaX = 0;
 let pointerDeltaY = 0;
 const pointerTransitions = [];
+let pendingGuiMenu = false;
 let gameLeft = 0;
 let gameTop = 0;
 let gameWidth = 320;
@@ -423,16 +424,10 @@ async function requestGameFullscreen() {
 }
 
 function scheduleLinoMenuAction() {
-  const instruction = program.linked.labels.get("menubuttonaction");
-  if (instruction === undefined) throw new ReferenceError("Missing Lino menu action");
-  const machine = program.machine;
-  if (machine.depth === machine.stack.length) {
-    const grown = new Int32Array(machine.stack.length * 2);
-    grown.set(machine.stack);
-    machine.stack = grown;
-  }
-  machine.stack[machine.depth++] = (machine.pc | 0) + 1;
-  machine.pc = instruction;
+  // A browser event can arrive at any VM yield. Wait for the actual GUI idle
+  // continuation before entering the menu service so no renderer stack frame
+  // is overwritten.
+  pendingGuiMenu = true;
   queueAnimationFrame();
 }
 
@@ -472,6 +467,21 @@ function runFrame() {
     const previousFrameCount = frameCount;
     const runnerStartedAt = performance.now();
     const result = program.run(250_000);
+    if (pendingGuiMenu && result.status === "yield") {
+      const idle = program.linked.labels.get("eclj25");
+      const action = program.linked.labels.get("menubuttonaction");
+      if (idle !== undefined && action !== undefined && program.machine.pc === idle) {
+        const machine = program.machine;
+        if (machine.depth === machine.stack.length) {
+          const grown = new Int32Array(machine.stack.length * 2);
+          grown.set(machine.stack);
+          machine.stack = grown;
+        }
+        machine.stack[machine.depth++] = (machine.pc | 0) + 1;
+        machine.pc = action;
+        pendingGuiMenu = false;
+      }
+    }
     const now = performance.now();
     rateRunnerMilliseconds += now - runnerStartedAt;
     rateInstructions += result.instructions;

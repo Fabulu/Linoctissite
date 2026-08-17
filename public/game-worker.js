@@ -29,6 +29,7 @@ const frameBuffers = [];
 let waitingForFrameCredit = false;
 let runQueued = false;
 let delayedRun = 0;
+let pendingGuiMenu = false;
 let renderedFrames = 0;
 let rateStartedAt = performance.now();
 let rateStartedFrame = 0;
@@ -77,16 +78,18 @@ function crashPacket(error, phase) {
 function publishPointerWorkspace() {
   if (!program) return;
   const memory = program.machine.memory;
+  const pending = pointerTransitions[0];
   const write = (name, value) => {
     const symbol = program.linked.symbols.get(canonical(name));
     if (symbol) memory[symbol.value] = value | 0;
   };
-  // Pointer state is live OS state in Lino's native host. Publishing it when
-  // an event arrives prevents a release from waiting behind a long game
-  // control-loop slice with the menu button left permanently pressed.
-  write("Pointer Status", 3 | pointerButtons);
-  write("Pointer X Coordinate", pointerX);
-  write("Pointer Y Coordinate", pointerY);
+  // Pointer state is live OS state in Lino's native host, but queued browser
+  // edges must be consumed in order. A browser can deliver a complete
+  // press/release pair before the next Lino GUI scan; publishing the newest
+  // state here would erase the press and leave an iGUI option merely hovered.
+  write("Pointer Status", 3 | (pending?.buttons ?? pointerButtons));
+  write("Pointer X Coordinate", pending?.x ?? pointerX);
+  write("Pointer Y Coordinate", pending?.y ?? pointerY);
 }
 
 function isolatedNoctisIntrinsics() {
@@ -273,6 +276,23 @@ function runMachine() {
     const producedFrame = completedFrame;
     completedFrame = false;
     publishFrame(result, runnerMilliseconds, producedFrame);
+    if (pendingGuiMenu && result.status === "yield") {
+      const idle = program.linked.labels.get("eclj25");
+      const action = program.linked.labels.get("menubuttonaction");
+      if (idle !== undefined && action !== undefined && program.machine.pc === idle) {
+        const machine = program.machine;
+        if (machine.depth === machine.stack.length) {
+          const grown = new Int32Array(machine.stack.length * 2);
+          grown.set(machine.stack);
+          machine.stack = grown;
+        }
+        // A code handle is instruction index + 1. Resume at the idle
+        // continuation after the service returns, exactly like a Lino call.
+        machine.stack[machine.depth++] = (machine.pc | 0) + 1;
+        machine.pc = action;
+        pendingGuiMenu = false;
+      }
+    }
     if (program.machine.halted) {
       running = false;
       emitMessage({ type: "stopped", status: result.status });
@@ -440,7 +460,6 @@ function handleMessage(message) {
     pointerX = message.x | 0;
     pointerY = message.y | 0;
     pointerButtons = message.buttons | 0;
-    publishPointerWorkspace();
     if (message.transition) pointerTransitions.push({
       x: pointerX, y: pointerY, buttons: pointerButtons,
       deltaX: message.deltaX | 0, deltaY: message.deltaY | 0,
@@ -449,6 +468,7 @@ function handleMessage(message) {
       pointerDeltaX = (pointerDeltaX + (message.deltaX | 0)) | 0;
       pointerDeltaY = (pointerDeltaY + (message.deltaY | 0)) | 0;
     }
+    publishPointerWorkspace();
   } else if (message.type === "physical" && program) {
     const width = program.linked.symbols.get("displayphysicalwidth");
     const height = program.linked.symbols.get("displayphysicalheight");
@@ -460,23 +480,9 @@ function handleMessage(message) {
     if (x) program.machine.memory[x.value] = message.x | 0;
     if (y) program.machine.memory[y.value] = message.y | 0;
   } else if (message.type === "guiAction" && program && message.name === "menu") {
-    try {
-      const instruction = program.linked.labels.get("menubuttonaction");
-      if (instruction === undefined) throw new ReferenceError("Missing Lino menu action");
-      const machine = program.machine;
-      if (machine.depth === machine.stack.length) {
-        const grown = new Int32Array(machine.stack.length * 2);
-        grown.set(machine.stack);
-        machine.stack = grown;
-      }
-      machine.stack[machine.depth++] = (machine.pc | 0) + 1;
-      machine.pc = instruction;
-      if (running && !runQueued && delayedRun === 0) queueRun(0, true);
-    } catch (error) {
-      running = false;
-      emitMessage({ type: "error", message: error?.stack || error?.message || String(error),
-        packet: crashPacket(error, "guiAction:menu") });
-    }
+    // Never splice a service into an arbitrary running Lino stack. The next
+    // GUI-idle yield will schedule the action as an ordinary nested call.
+    pendingGuiMenu = true;
   }
 }
 
