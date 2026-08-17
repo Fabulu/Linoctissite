@@ -57,3 +57,14 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(app, /presentations/);
   assert.match(app, /toFixed\(1\).*FPS/);
 });
+
+test("deployment rejects stale pinned runtime artifacts", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8",
+  );
+  assert.match(workflow, /Verify the pinned build is the checked-in runtime/);
+  assert.match(
+    workflow,
+    /git diff --exit-code -- public\/noctis-runners\.js public\/linojava/,
+  );
+});
