@@ -5356,6 +5356,7 @@ function landedMushroomPixels(machine, linked, direct = null) {
     let finalInputSeed = seed;
     let raw = 0;
     let result = 0;
+    let finalOffset;
     while (remaining !== 0) {
       finalInputSeed = seed;
       raw = landedFastRandomRaw(seed);
@@ -5366,7 +5367,7 @@ function landedMushroomPixels(machine, linked, direct = null) {
       seed = (seed + (raw >>> 0)) >>> 0;
       const x = (memory[xAddress] | 0) + (raw & 7);
       const offset = Math.imul(y, 320) + x;
-      memory[offsetAddress] = offset;
+      finalOffset = offset;
       finalInputSeed = seed;
       raw = landedFastRandomRaw(seed);
       seed = (seed + (raw >>> 0)) >>> 0;
@@ -5380,6 +5381,7 @@ function landedMushroomPixels(machine, linked, direct = null) {
       memory[page + offset - 640] = color;
       remaining -= 1;
     }
+    if (finalOffset !== undefined) memory[offsetAddress] = finalOffset;
     memory[direct.SUfeax] = raw;
     memory[direct.SUfseed] = seed;
     memory[direct.SUfval] = result;
@@ -6974,33 +6976,120 @@ function restoreTreePolygon(machine, linked, command, projection = null) {
   polymap(machine, linked);
 }
 
-function projectGreenmushPoint(machine, linked, tree) {
+function greenmushProjectionContext(machine, tree) {
   const memory = machine.memory;
   const p = tree.p;
   const view = machine.noctisDataView ??= dataView(memory);
+  return {
+    view,
+    control: floatingPoint(machine).control,
+    cameraX: directPolySlotView(view, p, p.FSCAMX),
+    cameraY: directPolySlotView(view, p, p.FSCAMY),
+    cameraZ: directPolySlotView(view, p, p.FSCAMZ),
+    betaSin: directPolySlotView(view, p, p.FSTSB),
+    betaCos: directPolySlotView(view, p, p.FSTCB),
+    alphaCos: directPolySlotView(view, p, p.FSTCA),
+    alphaSin: directPolySlotView(view, p, p.FSTSA),
+    near: directPolySlotView(view, p, p.FSUNEG),
+    dpp: directPolySlotView(view, p, p.FSDPP),
+    centerX: directPolySlotView(view, p, p.FSXC),
+    centerY: directPolySlotView(view, p, p.FSYC),
+  };
+}
+
+function projectGreenmushPoint(machine, tree, context, inputX, inputY, inputZ) {
+  const memory = machine.memory;
+  const p = tree.p;
+  const { view, control } = context;
   memory[p.PJnrv] = 1;
   memory[p.PJmode] = 1;
-  polyRotateDirect(machine, linked, p);
+  memory[p.PJvr] = 0;
+  memory[p.PJdoflag] = 0;
+
+  const z = directPolyStoreNarrowView(
+    memory, view, p, p.FSZZ, inputZ - context.cameraZ, control,
+  );
+  const relativeX = directPolyStoreNarrowView(
+    memory, view, p, p.FSXX, inputX - context.cameraX, control,
+  );
+  const relativeY = directPolyStoreNarrowView(
+    memory, view, p, p.FSYY, inputY - context.cameraY, control,
+  );
+
+  let work = z * context.betaSin;
+  directPolyStoreWideView(view, p, p.FSW0, work);
+  const rotatedX = directPolyStoreNarrowView(
+    memory, view, p, p.FSRXF, relativeX * context.betaCos + work, control,
+  );
+
+  work = z * context.betaCos;
+  directPolyStoreWideView(view, p, p.FSW0, work);
+  const z2 = directPolyStoreNarrowView(
+    memory, view, p, p.FSZ2, work - relativeX * context.betaSin, control,
+  );
+
+  work = z2 * context.alphaCos;
+  directPolyStoreWideView(view, p, p.FSW0, work);
+  const rotatedZWide = relativeY * context.alphaSin + work;
+  directPolyStoreWideView(view, p, p.FSW1, rotatedZWide);
+  const rotatedZ = directPolyStoreNarrowView(
+    memory, view, p, p.FSRZF, rotatedZWide, control,
+  );
+  const status = Number.isNaN(rotatedZWide) || Number.isNaN(context.near)
+    ? 17664 : rotatedZWide < context.near ? 256 : rotatedZWide === context.near ? 16384 : 0;
+  memory[p.FSW] = status;
+  floatingPoint(machine).status = status;
+  let comparison;
+  if ((status & 1024) !== 0) {
+    memory[p.FFLG] |= 1;
+    memory[p.FI] = 2;
+    comparison = 2;
+  } else if ((status & 16384) !== 0) {
+    memory[p.FI] = 0;
+    comparison = 0;
+  } else if ((status & 256) !== 0) {
+    memory[p.FI] = -1;
+    comparison = -1;
+  } else {
+    memory[p.FI] = 1;
+    comparison = 1;
+  }
+  const visible = comparison !== 2 && comparison >= 0 ? 1 : 0;
+  memory[p.rwf] = visible;
+  memory[p.PJdoflag] = visible;
+
+  work = relativeY * context.alphaCos;
+  directPolyStoreWideView(view, p, p.FSW0, work);
+  const finalSecond = z2 * context.alphaSin;
+  const rotatedY = directPolyStoreNarrowView(
+    memory, view, p, p.FSRYF, work - finalSecond, control,
+  );
+  memory[p.PJvr] = 1;
+  memory[p.PGFi] = p.FSRYF;
+  writeFloat64View(view, p.FA0, rotatedY);
+  writeFloat64View(view, p.FB0, finalSecond);
+  writeFloat64(memory, p.FT0, finalSecond);
+  machine.A = (p.fw + p.FSRYF * 2) | 0;
+  machine.C = 1;
+
   memory[tree.GCret] = 0;
-  if ((memory[p.rwf] | 0) === 0) return false;
-  const control = floatingPoint(machine).control;
-  let factor = directPolySlotView(view, p, p.FSDPP)
-    / directPolySlotView(view, p, p.FSRZF);
+  if (visible === 0) return false;
+  let factor = context.dpp / rotatedZ;
   directPolyStoreWideView(view, p, p.FSW3, factor);
-  let projected = factor * directPolySlotView(view, p, p.FSRXF);
+  let projected = factor * rotatedX;
   writeFloat64View(view, p.FA0, projected);
-  projected += directPolySlotView(view, p, p.FSXC);
+  projected += context.centerX;
   writeFloat64View(view, p.FA0, projected);
-  const x = convertToInt32(projected, control);
-  memory[tree.GCx] = x;
-  factor = directPolySlotView(view, p, p.FSW3);
-  projected = factor * directPolySlotView(view, p, p.FSRYF);
+  const screenX = convertToInt32(projected, control);
+  memory[tree.GCx] = screenX;
+  projected = factor * rotatedY;
   writeFloat64View(view, p.FA0, projected);
-  projected += directPolySlotView(view, p, p.FSYC);
+  projected += context.centerY;
   writeFloat64View(view, p.FA0, projected);
-  const y = convertToInt32(projected, control);
-  memory[tree.GCy] = y;
-  if (x <= p.PGLBX || x >= p.PGUBX || y <= p.PGLBY || y >= p.PGUBY) return false;
+  const screenY = convertToInt32(projected, control);
+  memory[tree.GCy] = screenY;
+  if (screenX <= p.PGLBX || screenX >= p.PGUBX
+      || screenY <= p.PGLBY || screenY >= p.PGUBY) return false;
   memory[tree.GCret] = 1;
   return true;
 }
@@ -7008,6 +7097,7 @@ function projectGreenmushPoint(machine, linked, tree) {
 function renderGreenmushDirect(machine, linked, tree) {
   const memory = machine.memory;
   const state = tree.mushroomState;
+  const projection = greenmushProjectionContext(machine, tree);
   const scale = memory[state[5]] | 0;
   const halfScale = scale >> 1;
   memory[tree.VHGNDtmp] = halfScale;
@@ -7048,6 +7138,9 @@ function renderGreenmushDirect(machine, linked, tree) {
   memory[tree.mushouter] = outer;
   while (outer > 0) {
     memory[tree.SUfmask] = scale;
+    let pointX;
+    let pointY;
+    let pointZ;
     if (floating) {
       const control = floatingPoint(machine).control;
       const view = machine.noctisDataView ??= dataView(memory);
@@ -7065,6 +7158,9 @@ function renderGreenmushDirect(machine, linked, tree) {
         result = roundFloat32(result, control);
         memory[destinations[axis]] = float32Bits(result);
         writeFloat64View(view, floats + slots[axis], result);
+        if (axis === 0) pointZ = result;
+        else if (axis === 1) pointY = result;
+        else pointX = result;
       }
       memory[tree.VHGNDvi] = 0;
     }
@@ -7072,13 +7168,14 @@ function renderGreenmushDirect(machine, linked, tree) {
       const z = ((memory[state[2]] | 0) - landedFastRandom(machine, linked, scale, tree)) | 0;
       const y = ((memory[state[1]] | 0) - landedFastRandom(machine, linked, scale, tree)) | 0;
       const x = ((memory[state[0]] | 0) - landedFastRandom(machine, linked, scale, tree)) | 0;
+      pointX = x; pointY = y; pointZ = z;
       memory[tree.mushpz] = z; memory[tree.mushpy] = y; memory[tree.mushpx] = x;
       writeFloat64(memory, tree.p.fw + tree.p.FSINX * 2, Math.fround(x));
       writeFloat64(memory, tree.p.fw + tree.p.FSINY * 2, Math.fround(y));
       writeFloat64(memory, tree.p.fw + tree.p.FSINZ * 2, Math.fround(z));
       memory[tree.VHGNDvi] = 3;
     }
-    if (projectGreenmushPoint(machine, linked, tree)) {
+    if (projectGreenmushPoint(machine, tree, projection, pointX, pointY, pointZ)) {
       const innerMask = memory[state[4]] | 0;
       memory[tree.SUfmask] = innerMask;
       const inner = landedFastRandom(machine, linked, innerMask, tree) + 1;
