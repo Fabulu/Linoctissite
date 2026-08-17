@@ -45,4 +45,9 @@ npx serve public
 Set `LINOJAVA_DIR` or `LINO_SOURCE_DIR` to use different checkouts. The build
 copies only the transitive Noctis source and stockfile closure into `public`.
 Cloudflare Pages checks out pinned revisions of both repositories before it
-builds and deploys.
+builds and deploys. CI also rebuilds the checked-in runtime and rejects any
+diff, so stale pins cannot silently replace a newer tested browser image.
+
+When the repository has no Cloudflare secrets, CI performs that complete build
+and consistency check but does not publish. An authenticated maintainer can
+publish the same pinned image with `npm run deploy`.
