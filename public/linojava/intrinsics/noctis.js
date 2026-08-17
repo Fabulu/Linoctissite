@@ -6698,6 +6698,17 @@ function currentTreeModelBounds(machine, tree, model) {
   ];
 }
 
+function currentGreenmushBounds(machine, tree, command) {
+  if (!command.wind) return command.bounds;
+  const current = currentTreeLeafWind(machine, tree, command.wind);
+  const dx = current.x - command.wind.x;
+  const dz = current.z - command.wind.z;
+  return [
+    command.bounds[0] + dx, command.bounds[1], command.bounds[2] + dz,
+    command.bounds[3] + dx, command.bounds[4], command.bounds[5] + dz,
+  ];
+}
+
 function indexTreeModelVertices(commands) {
   const unique = new Map();
   const vertices = [];
@@ -7115,6 +7126,9 @@ function terrainTree(machine, linked) {
         ? null : projectTreeModelVertices(machine, tree, model);
       for (const command of model.commands) {
         if (command.kind === "greenmush") {
+          if (!machine.noctisDisableGreenmushCommandCull
+              && !rockBoundsMayRender(machine, tree.p,
+                currentGreenmushBounds(machine, tree, command), 10)) continue;
           restoreAddressValues(machine.memory, tree.mushroomState, command.state);
           if (command.wind) {
             const current = currentTreeLeafWind(machine, tree, command.wind);
