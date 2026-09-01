@@ -7,6 +7,7 @@ const compilerRoot = resolve(process.env.LINOJAVA_DIR ?? "../linojava");
 const linoRoot = resolve(process.env.LINO_SOURCE_DIR ?? "../linoleum");
 const compilerPath = resolve(compilerRoot, "src/compiler.js");
 const entryPath = resolve(linoRoot, "work/vhgame.txt");
+const structuredSelfBackedgeLabels = ["VHGUI compose pixel", "VHGUI 2x pixel"];
 const namedFilePaths = new Map([
   ["digimap2.bin", resolve(linoRoot, "work/digimap2.bin")],
   ["STARMAP.BIN", resolve(linoRoot, "work/STARMAP.BIN")],
@@ -99,7 +100,10 @@ for (const module of project.modules) {
   });
 }
 const linked = linkProject(project);
-const runnerSource = emitStaticRunnerModule(linked, createNoctisIntrinsics(), { regionSize: 1024 });
+const runnerSource = emitStaticRunnerModule(linked, createNoctisIntrinsics(), {
+  regionSize: 1024,
+  structuredSelfBackedgeLabels,
+});
 const runtimeId = createHash("sha256").update(runnerSource).digest("hex").slice(0, 24);
 await writeFile(
   resolve(sourcePath, "manifest.json"),

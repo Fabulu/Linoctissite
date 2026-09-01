@@ -53482,7 +53482,7 @@ case 50606: {  C = (((C) + (271084))) | 0; pc = 50607; }
 case 50607: {  D = (A) | 0; pc = 50608; }
 case 50608: {  D = (((D) + (23201406))) | 0; pc = 50609; }
 case 50609: {  m[(7312) >>> 0] = (80) | 0; pc = 50610; }
-case 50610: { if(executed!==0&&executed+17>maxInstructions){pc=50610;outputStatus="budget";outputInstructions=executed;break runner;}executed+=17; A = ((m[(C) >>> 0] | 0)) | 0; pc = 50611; }
+case 50610: { selfBackedge50610:while(true){if(executed!==0&&executed+17>maxInstructions){pc=50610;outputStatus="budget";outputInstructions=executed;break runner;}executed+=17;A = ((m[(C) >>> 0] | 0)) | 0;A = (((A) + (1947896))) | 0;m[(D) >>> 0] = ((m[(A) >>> 0] | 0)) | 0;A = ((m[(((C) + (1) | 0)) >>> 0] | 0)) | 0;A = (((A) + (1947896))) | 0;m[(((D) + (1) | 0)) >>> 0] = ((m[(A) >>> 0] | 0)) | 0;A = ((m[(((C) + (2) | 0)) >>> 0] | 0)) | 0;A = (((A) + (1947896))) | 0;m[(((D) + (2) | 0)) >>> 0] = ((m[(A) >>> 0] | 0)) | 0;A = ((m[(((C) + (3) | 0)) >>> 0] | 0)) | 0;A = (((A) + (1947896))) | 0;m[(((D) + (3) | 0)) >>> 0] = ((m[(A) >>> 0] | 0)) | 0;C = (((C) + (4))) | 0;D = (((D) + (4))) | 0;q = (7312) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0;A = ((m[(7312) >>> 0] | 0)) | 0;if((((A) | 0) != ((0) | 0))){pc=50610;continue selfBackedge50610;}pc=50627;break selfBackedge50610;}continue runner; }
 case 50611: {  A = (((A) + (1947896))) | 0; pc = 50612; }
 case 50612: {  m[(D) >>> 0] = ((m[(A) >>> 0] | 0)) | 0; pc = 50613; }
 case 50613: {  A = ((m[(((C) + (1) | 0)) >>> 0] | 0)) | 0; pc = 50614; }
@@ -53556,7 +53556,7 @@ case 50680: {  D = (((D) + (666999))) | 0; pc = 50681; }
 case 50681: {  E = (D) | 0; pc = 50682; }
 case 50682: {  E = (((E) + ((m[(53525) >>> 0] | 0)))) | 0; pc = 50683; }
 case 50683: {  m[(7312) >>> 0] = (80) | 0; pc = 50684; }
-case 50684: { if(executed!==0&&executed+26>maxInstructions){pc=50684;outputStatus="budget";outputInstructions=executed;break runner;}executed+=26; A = ((m[(C) >>> 0] | 0)) | 0; pc = 50685; }
+case 50684: { selfBackedge50684:while(true){if(executed!==0&&executed+26>maxInstructions){pc=50684;outputStatus="budget";outputInstructions=executed;break runner;}executed+=26;A = ((m[(C) >>> 0] | 0)) | 0;m[(D) >>> 0] = (A) | 0;m[(((D) + (1) | 0)) >>> 0] = (A) | 0;m[(E) >>> 0] = (A) | 0;m[(((E) + (1) | 0)) >>> 0] = (A) | 0;A = ((m[(((C) + (1) | 0)) >>> 0] | 0)) | 0;m[(((D) + (2) | 0)) >>> 0] = (A) | 0;m[(((D) + (3) | 0)) >>> 0] = (A) | 0;m[(((E) + (2) | 0)) >>> 0] = (A) | 0;m[(((E) + (3) | 0)) >>> 0] = (A) | 0;A = ((m[(((C) + (2) | 0)) >>> 0] | 0)) | 0;m[(((D) + (4) | 0)) >>> 0] = (A) | 0;m[(((D) + (5) | 0)) >>> 0] = (A) | 0;m[(((E) + (4) | 0)) >>> 0] = (A) | 0;m[(((E) + (5) | 0)) >>> 0] = (A) | 0;A = ((m[(((C) + (3) | 0)) >>> 0] | 0)) | 0;m[(((D) + (6) | 0)) >>> 0] = (A) | 0;m[(((D) + (7) | 0)) >>> 0] = (A) | 0;m[(((E) + (6) | 0)) >>> 0] = (A) | 0;m[(((E) + (7) | 0)) >>> 0] = (A) | 0;C = (((C) + (4))) | 0;D = (((D) + (8))) | 0;E = (((E) + (8))) | 0;q = (7312) >>> 0; m[q] = (((m[q] | 0) - 1)) | 0;A = ((m[(7312) >>> 0] | 0)) | 0;if((((A) | 0) != ((0) | 0))){pc=50684;continue selfBackedge50684;}pc=50710;break selfBackedge50684;}continue runner; }
 case 50685: {  m[(D) >>> 0] = (A) | 0; pc = 50686; }
 case 50686: {  m[(((D) + (1) | 0)) >>> 0] = (A) | 0; pc = 50687; }
 case 50687: {  m[(E) >>> 0] = (A) | 0; pc = 50688; }
