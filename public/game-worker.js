@@ -47,6 +47,7 @@ let runnerMillisecondsPerPresentation = 0;
 let instructionsPerPresentation = 0;
 let pendingRunnerMilliseconds = 0;
 let pendingInstructions = 0;
+let instructionProfileNestedInstructions = 0;
 let gameTimingAddress = -1;
 let lastGameTimingCount = 0;
 let lastRun = null;
@@ -216,6 +217,79 @@ function symbolValues(names, lengths = {}) {
       : Array.from(memory.subarray(symbol.value, symbol.value + length), (value) => value | 0);
   }
   return output;
+}
+
+function instructionProfileRuntimeSample() {
+  return {
+    sampledAtMilliseconds: performance.now(),
+    presentationFrames,
+    simulationTicks: gameTimingAddress >= 0
+      ? program.machine.memory[gameTimingAddress] | 0
+      : simulationTicks,
+    cumulativeRunnerMilliseconds:
+      cumulativeRunnerMilliseconds + pendingRunnerMilliseconds,
+    cumulativeInstructions:
+      cumulativeInstructions + pendingInstructions
+      + instructionProfileNestedInstructions,
+  };
+}
+
+function rankedProfileTotals(totals, limit = 24) {
+  return [...totals].map(([name, count]) => ({ name, count }))
+    .sort((left, right) => right.count - left.count)
+    .slice(0, limit);
+}
+
+function instructionProfileSummary(limit = 50) {
+  const counts = program?.machine.profile;
+  if (!counts) return null;
+  const aliases = new Map();
+  for (const alias of program.linked.aliases) {
+    const names = aliases.get(alias.instruction) ?? [];
+    names.push(alias.name);
+    aliases.set(alias.instruction, names);
+  }
+  const byLabel = new Map();
+  const byModule = new Map();
+  const byOperation = new Map();
+  const topInstructions = [];
+  let activeInstructions = 0;
+  let currentLabel = "(entry)";
+  let totalInstructions = 0;
+  for (let index = 0; index < counts.length; index += 1) {
+    const labels = aliases.get(index);
+    if (labels) currentLabel = labels.join(" / ");
+    const count = counts[index] >>> 0;
+    if (count === 0) continue;
+    activeInstructions += 1;
+    totalInstructions += count;
+    const instruction = program.linked.instructions[index];
+    const moduleId = instruction?.moduleId ?? instruction?.sourceId ?? "(unknown)";
+    const operation = instruction?.op ?? "(unknown)";
+    byLabel.set(currentLabel, (byLabel.get(currentLabel) ?? 0) + count);
+    byModule.set(moduleId, (byModule.get(moduleId) ?? 0) + count);
+    byOperation.set(operation, (byOperation.get(operation) ?? 0) + count);
+    topInstructions.push({
+      index,
+      count,
+      operation,
+      ownerLabel: currentLabel,
+      labels: labels ?? [],
+      sourceId: instruction?.sourceId ?? null,
+      line: instruction?.line ?? null,
+      text: instruction?.text ?? null,
+    });
+  }
+  topInstructions.sort((left, right) => right.count - left.count);
+  return {
+    schema: 1,
+    totalInstructions,
+    activeInstructions,
+    byLabel: rankedProfileTotals(byLabel),
+    byModule: rankedProfileTotals(byModule),
+    byOperation: rankedProfileTotals(byOperation),
+    topInstructions: topInstructions.slice(0, limit),
+  };
 }
 
 const runChannel = workerScope ? new MessageChannel() : null;
@@ -511,10 +585,12 @@ async function initialize(message) {
     },
     pcm: pcmCommand,
   };
+  const profileInstructions = message.instructionProfile === true;
   program = await compileProject(entry, resolvers, {
     host,
     intrinsics: isolatedNoctisIntrinsics(),
-    precompiledRunners: {
+    profileInstructions,
+    precompiledRunners: profileInstructions ? undefined : {
       create: createNoctisRunners,
       instructionCount: noctisInstructionCount,
       regionSize: noctisRegionSize,
@@ -523,6 +599,14 @@ async function initialize(message) {
     physicalHeight: Math.max(1, message.physicalHeight | 0),
     audioPlayback: Boolean(message.audioPlayback),
   });
+  if (profileInstructions) {
+    const callCode = program.machine.callCode;
+    program.machine.callCode = (...args) => {
+      const executed = callCode(...args);
+      instructionProfileNestedInstructions += executed;
+      return executed;
+    };
+  }
   gameTimingAddress = program.linked.symbols.get("vhgtimingcalls")?.value ?? -1;
   lastGameTimingCount = gameTimingAddress >= 0
     ? program.machine.memory[gameTimingAddress] | 0 : 0;
@@ -582,6 +666,19 @@ function handleMessage(message) {
     const y = program.linked.symbols.get("displayyposition");
     if (x) program.machine.memory[x.value] = message.x | 0;
     if (y) program.machine.memory[y.value] = message.y | 0;
+  } else if (message.type === "instructionProfileReset" && program?.machine.profile) {
+    program.machine.profile.fill(0);
+    emitMessage({
+      type: "instructionProfileReset",
+      sample: instructionProfileRuntimeSample(),
+    });
+  } else if (message.type === "instructionProfileSnapshot" && program?.machine.profile) {
+    running = false;
+    emitMessage({
+      type: "instructionProfileSnapshot",
+      sample: instructionProfileRuntimeSample(),
+      profile: instructionProfileSummary(),
+    });
   } else if (message.type === "runtimeSnapshot" && program) {
     const pc = program.machine.pc | 0;
     emitMessage({
@@ -596,6 +693,7 @@ function handleMessage(message) {
         delayedRun: Boolean(delayedRun),
         yieldedRun,
         budgetYieldStrategy,
+        instructionProfile: Boolean(program.machine.profile),
         waitingForFrameCredit,
         fastBootstrap,
         frameCredits,

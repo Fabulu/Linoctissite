@@ -583,7 +583,11 @@ worker.addEventListener("message", (event) => {
     });
   } else if (message.type === "pcm") pcmHost.command(message);
   else if (message.type === "runtimeSnapshot") globalThis.__linoWorkerSnapshot = message.state;
-  else if (message.type === "stopped") status.textContent = `Lino stopped: ${message.status}`;
+  else if (message.type === "instructionProfileReset") {
+    globalThis.__linoInstructionProfileReset = message;
+  } else if (message.type === "instructionProfileSnapshot") {
+    globalThis.__linoInstructionProfile = message;
+  } else if (message.type === "stopped") status.textContent = `Lino stopped: ${message.status}`;
   else if (message.type === "error") {
     status.textContent = `Lino stopped: ${message.message}`;
     showCrash(message);
@@ -600,6 +604,7 @@ worker.postMessage({
   type: "init", sourceRoot: sourceRoot.href, files: savedFiles, globalK: savedGlobalK,
   runtimeId, clockSeconds: fixedClockSeconds,
   fastBootstrap: runtimeOptions.get("profile") === "1",
+  instructionProfile: runtimeOptions.get("instructionProfile") === "1",
   physicalWidth: Math.max(1, window.innerWidth), physicalHeight: Math.max(1, window.innerHeight),
   audioPlayback: pcmHost.supported, windowBounds: { x: windowBounds.left, y: windowBounds.top },
 });

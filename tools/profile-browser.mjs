@@ -23,7 +23,7 @@ const MIME_TYPES = new Map([
 
 function usage(message) {
   if (message) console.error(message);
-  console.error("Usage: node tools/profile-browser.mjs --checkpoint FILE [--duration SECONDS] [--output FILE] [--force] [--headed]");
+  console.error("Usage: node tools/profile-browser.mjs --checkpoint FILE [--duration SECONDS] [--output FILE] [--instruction-profile] [--force] [--headed]");
   process.exitCode = 2;
   return null;
 }
@@ -35,6 +35,7 @@ function parseArguments(argv) {
     durationSeconds: 20,
     force: false,
     headed: false,
+    instructionProfile: false,
     linoJavaRoot: resolve(SITE_ROOT, "../linojava"),
     linoRoot: resolve(SITE_ROOT, "../linoleum"),
     output: resolve(SITE_ROOT, "build/browser-profile/surface/report.json"),
@@ -44,6 +45,7 @@ function parseArguments(argv) {
     const argument = argv[index];
     if (argument === "--force") options.force = true;
     else if (argument === "--headed") options.headed = true;
+    else if (argument === "--instruction-profile") options.instructionProfile = true;
     else {
       const value = argv[index + 1];
       if (value === undefined) return usage(`Missing value for ${argument}`);
@@ -211,7 +213,8 @@ async function runProfile(options) {
 
     await seedCheckpoint(page, baseUrl, checkpoint);
     const startupStartedAt = performance.now();
-    await page.goto(`${baseUrl}/?clock=${options.clockSeconds}&profile=1`, { waitUntil: "domcontentloaded" });
+    const instructionProfileQuery = options.instructionProfile ? "&instructionProfile=1" : "";
+    await page.goto(`${baseUrl}/?clock=${options.clockSeconds}&profile=1${instructionProfileQuery}`, { waitUntil: "domcontentloaded" });
     try {
       await page.waitForFunction(() => {
         const crashed = !document.querySelector("#crash-panel")?.hidden;
@@ -255,8 +258,24 @@ async function runProfile(options) {
     if (readyState.worker?.budgetYieldStrategy !== "scheduler-yield") {
       throw new Error(`profile used ${readyState.worker?.budgetYieldStrategy ?? "unknown"} budget yielding`);
     }
+    if (Boolean(readyState.worker?.instructionProfile) !== options.instructionProfile) {
+      throw new Error("instruction profiling mode did not match the request");
+    }
 
     await page.locator("#game").focus();
+    let instructionProfileReset = null;
+    if (options.instructionProfile) {
+      await page.evaluate(() => {
+        globalThis.__linoInstructionProfileReset = null;
+        globalThis.__linoRuntime.postMessage({ type: "instructionProfileReset" });
+      });
+      await page.waitForFunction(() => globalThis.__linoInstructionProfileReset !== null, null, {
+        timeout: 10_000,
+      });
+      instructionProfileReset = await page.evaluate(
+        () => globalThis.__linoInstructionProfileReset,
+      );
+    }
     const started = await page.evaluate(() => globalThis.__linoSnapshot());
     const measurementStartedAt = performance.now();
     const warmupSeconds = 1;
@@ -272,6 +291,47 @@ async function runProfile(options) {
       - (performance.now() - measurementStartedAt);
     if (remainingMilliseconds > 0) {
       await new Promise((resolveWait) => setTimeout(resolveWait, remainingMilliseconds));
+    }
+    let instructionProfile = null;
+    if (options.instructionProfile) {
+      await page.evaluate(() => {
+        globalThis.__linoInstructionProfile = null;
+        globalThis.__linoRuntime.postMessage({ type: "instructionProfileSnapshot" });
+      });
+      await page.waitForFunction(() => globalThis.__linoInstructionProfile !== null, null, {
+        timeout: 30_000,
+      });
+      instructionProfile = await page.evaluate(() => globalThis.__linoInstructionProfile);
+      const profileStarted = instructionProfileReset?.sample;
+      const profileEnded = instructionProfile.sample;
+      if (!profileStarted || !profileEnded) {
+        throw new Error("instruction profile did not retain exact worker samples");
+      }
+      const accountedInstructions = difference(
+        profileEnded, profileStarted, "cumulativeInstructions",
+      );
+      const countedInstructions = instructionProfile.profile?.totalInstructions;
+      const counterDifference = countedInstructions - accountedInstructions;
+      if (!Number.isSafeInteger(countedInstructions)
+          || Math.abs(counterDifference) > 100_000) {
+        throw new Error(
+          `instruction counters retained ${countedInstructions} `
+          + `against ${accountedInstructions} runner-accounted instructions`,
+        );
+      }
+      instructionProfile.interval = {
+        started: profileStarted,
+        ended: profileEnded,
+        elapsedMilliseconds:
+          profileEnded.sampledAtMilliseconds - profileStarted.sampledAtMilliseconds,
+        runnerMilliseconds: difference(
+          profileEnded, profileStarted, "cumulativeRunnerMilliseconds",
+        ),
+        instructions: countedInstructions,
+        runnerAccountedInstructions: accountedInstructions,
+        counterDifference,
+        counterDifferenceRatio: counterDifference / countedInstructions,
+      };
     }
     const ended = await page.evaluate(() => globalThis.__linoSnapshot());
     const elapsedMilliseconds = ended.sampledAtMilliseconds - started.sampledAtMilliseconds;
@@ -308,6 +368,7 @@ async function runProfile(options) {
         defaultModuleWorker: true,
         fastBootstrapEndedBeforeMeasurement: true,
         budgetYieldStrategy: readyState.worker.budgetYieldStrategy,
+        instructionProfile: options.instructionProfile,
         runtimeId: String(manifest.runtimeId ?? "unversioned"),
         checkpointPath: options.checkpoint,
         checkpoint: checkpointRecord,
@@ -338,6 +399,7 @@ async function runProfile(options) {
         instructionsPerPresentedFrame: instructions / presentations,
         instructionsPerProducedFrame: instructions / producedPresentations,
       },
+      instructionProfile,
       failures: { consoleErrors, failedRequests, pageErrors },
     };
   } finally {

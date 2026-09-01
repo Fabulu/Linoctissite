@@ -76,6 +76,8 @@ test("browser profiler uses the deterministic shared-Lino worker scene", async (
   assert.match(gameWorker, /date: fixedDateMilliseconds === null \? undefined/);
   assert.match(gameWorker, /browserScheduler\.yield\(\)\.then/);
   assert.match(gameWorker, /budgetYieldStrategy/);
+  assert.match(gameWorker, /profileInstructions/);
+  assert.match(gameWorker, /cumulativeInstructions \+ pendingInstructions/);
   assert.match(workerHost, /clockSeconds: fixedClockSeconds/);
   assert.match(workerHost, /globalThis\.__linoSnapshot = runtimeMetrics/);
   assert.match(profiler, /store\.put\(Uint8Array\.from\(units\), "current\.lin"\)/);
@@ -84,6 +86,9 @@ test("browser profiler uses the deterministic shared-Lino worker scene", async (
   assert.match(profiler, /producedPresentationHz/);
   assert.match(profiler, /simulationHz/);
   assert.match(profiler, /cumulativeRunnerMilliseconds/);
+  assert.match(profiler, /--instruction-profile/);
+  assert.match(profiler, /instructionProfileSnapshot/);
+  assert.match(profiler, /instruction counters retained/);
 });
 
 test("deployment rejects stale pinned runtime artifacts", async () => {
