@@ -5286,25 +5286,69 @@ case 4919: {  B = (((B) >>> ((16) & 31))) | 0; pc = 4920; }
 case 4920: {  A = (((A) + (B))) | 0; pc = 4921; }
 case 4921: {  m[(2492) >>> 0] = (A) | 0; pc = 4922; }
 case 4922: {  X = 1685024357; if (d === 0) { pc = 4922; halted = true; outputStatus="halted";outputInstructions=executed;break runner; } pc = (s[--d] | 0) - 1; continue runner; }
-case 4923: { if(executed!==0&&executed+3>maxInstructions){pc=4923;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(2489) >>> 0] = ((m[(2465) >>> 0] | 0)) | 0; pc = 4924; }
+case 4923: { if(executed!==0&&executed+27>maxInstructions){pc=4923;outputStatus="budget";outputInstructions=executed;break runner;}executed+=27; m[(2489) >>> 0] = ((m[(2465) >>> 0] | 0)) | 0; pc = 4924; }
 case 4924: {  m[(2490) >>> 0] = ((m[(2469) >>> 0] | 0)) | 0; pc = 4925; }
-case 4925: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (4927) | 0; pc = (4867) - 1; continue runner; }
-case 4926: { if(executed!==0&&executed+5>maxInstructions){pc=4926;outputStatus="budget";outputInstructions=executed;break runner;}executed+=5; m[(2476) >>> 0] = ((m[(2491) >>> 0] | 0)) | 0; pc = 4927; }
+case 4925: {  {
+    const xmulUa=m[2489]>>>0,xmulUb=m[2490]>>>0;
+    const xmulL0=xmulUa&65535,xmulH0=xmulUa>>>16,xmulL1=xmulUb&65535,xmulH1=xmulUb>>>16;
+    const xmulP0=Math.imul(xmulL0,xmulL1)|0,xmulP1=Math.imul(xmulL0,xmulH1)|0,xmulP2=Math.imul(xmulH0,xmulL1)|0,xmulP3=Math.imul(xmulH0,xmulH1)|0;
+    const xmulMid=((xmulP2&65535)+(xmulP1&65535)+(xmulP0>>>16))|0;
+    const xmulTmp=((xmulMid&65535)<<16)|0,xmulLow=((xmulP0&65535)|xmulTmp)|0;
+    const xmulHigh=(xmulP3+(xmulP1>>>16)+(xmulP2>>>16)+(xmulMid>>>16))|0;
+    m[2493]=xmulL0;m[2494]=xmulH0;m[2495]=xmulL1;m[2496]=xmulH1;
+    m[2497]=xmulP0;m[2498]=xmulP1;m[2499]=xmulP2;m[2500]=xmulP3;
+    m[2502]=xmulTmp;m[2501]=xmulMid;m[2491]=xmulLow;m[2492]=xmulHigh;
+    A=xmulHigh;B=xmulMid>>>16;X=1685024357;
+  } pc=4926; }
+case 4926: {  m[(2476) >>> 0] = ((m[(2491) >>> 0] | 0)) | 0; pc = 4927; }
 case 4927: {  m[(2477) >>> 0] = ((m[(2492) >>> 0] | 0)) | 0; pc = 4928; }
 case 4928: {  m[(2489) >>> 0] = ((m[(2465) >>> 0] | 0)) | 0; pc = 4929; }
 case 4929: {  m[(2490) >>> 0] = ((m[(2468) >>> 0] | 0)) | 0; pc = 4930; }
-case 4930: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (4932) | 0; pc = (4867) - 1; continue runner; }
-case 4931: { if(executed!==0&&executed+5>maxInstructions){pc=4931;outputStatus="budget";outputInstructions=executed;break runner;}executed+=5; m[(2478) >>> 0] = ((m[(2491) >>> 0] | 0)) | 0; pc = 4932; }
+case 4930: {  {
+    const xmulUa=m[2489]>>>0,xmulUb=m[2490]>>>0;
+    const xmulL0=xmulUa&65535,xmulH0=xmulUa>>>16,xmulL1=xmulUb&65535,xmulH1=xmulUb>>>16;
+    const xmulP0=Math.imul(xmulL0,xmulL1)|0,xmulP1=Math.imul(xmulL0,xmulH1)|0,xmulP2=Math.imul(xmulH0,xmulL1)|0,xmulP3=Math.imul(xmulH0,xmulH1)|0;
+    const xmulMid=((xmulP2&65535)+(xmulP1&65535)+(xmulP0>>>16))|0;
+    const xmulTmp=((xmulMid&65535)<<16)|0,xmulLow=((xmulP0&65535)|xmulTmp)|0;
+    const xmulHigh=(xmulP3+(xmulP1>>>16)+(xmulP2>>>16)+(xmulMid>>>16))|0;
+    m[2493]=xmulL0;m[2494]=xmulH0;m[2495]=xmulL1;m[2496]=xmulH1;
+    m[2497]=xmulP0;m[2498]=xmulP1;m[2499]=xmulP2;m[2500]=xmulP3;
+    m[2502]=xmulTmp;m[2501]=xmulMid;m[2491]=xmulLow;m[2492]=xmulHigh;
+    A=xmulHigh;B=xmulMid>>>16;X=1685024357;
+  } pc=4931; }
+case 4931: {  m[(2478) >>> 0] = ((m[(2491) >>> 0] | 0)) | 0; pc = 4932; }
 case 4932: {  m[(2479) >>> 0] = ((m[(2492) >>> 0] | 0)) | 0; pc = 4933; }
 case 4933: {  m[(2489) >>> 0] = ((m[(2464) >>> 0] | 0)) | 0; pc = 4934; }
 case 4934: {  m[(2490) >>> 0] = ((m[(2469) >>> 0] | 0)) | 0; pc = 4935; }
-case 4935: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (4937) | 0; pc = (4867) - 1; continue runner; }
-case 4936: { if(executed!==0&&executed+5>maxInstructions){pc=4936;outputStatus="budget";outputInstructions=executed;break runner;}executed+=5; m[(2480) >>> 0] = ((m[(2491) >>> 0] | 0)) | 0; pc = 4937; }
+case 4935: {  {
+    const xmulUa=m[2489]>>>0,xmulUb=m[2490]>>>0;
+    const xmulL0=xmulUa&65535,xmulH0=xmulUa>>>16,xmulL1=xmulUb&65535,xmulH1=xmulUb>>>16;
+    const xmulP0=Math.imul(xmulL0,xmulL1)|0,xmulP1=Math.imul(xmulL0,xmulH1)|0,xmulP2=Math.imul(xmulH0,xmulL1)|0,xmulP3=Math.imul(xmulH0,xmulH1)|0;
+    const xmulMid=((xmulP2&65535)+(xmulP1&65535)+(xmulP0>>>16))|0;
+    const xmulTmp=((xmulMid&65535)<<16)|0,xmulLow=((xmulP0&65535)|xmulTmp)|0;
+    const xmulHigh=(xmulP3+(xmulP1>>>16)+(xmulP2>>>16)+(xmulMid>>>16))|0;
+    m[2493]=xmulL0;m[2494]=xmulH0;m[2495]=xmulL1;m[2496]=xmulH1;
+    m[2497]=xmulP0;m[2498]=xmulP1;m[2499]=xmulP2;m[2500]=xmulP3;
+    m[2502]=xmulTmp;m[2501]=xmulMid;m[2491]=xmulLow;m[2492]=xmulHigh;
+    A=xmulHigh;B=xmulMid>>>16;X=1685024357;
+  } pc=4936; }
+case 4936: {  m[(2480) >>> 0] = ((m[(2491) >>> 0] | 0)) | 0; pc = 4937; }
 case 4937: {  m[(2481) >>> 0] = ((m[(2492) >>> 0] | 0)) | 0; pc = 4938; }
 case 4938: {  m[(2489) >>> 0] = ((m[(2464) >>> 0] | 0)) | 0; pc = 4939; }
 case 4939: {  m[(2490) >>> 0] = ((m[(2468) >>> 0] | 0)) | 0; pc = 4940; }
-case 4940: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (4942) | 0; pc = (4867) - 1; continue runner; }
-case 4941: { if(executed!==0&&executed+9>maxInstructions){pc=4941;outputStatus="budget";outputInstructions=executed;break runner;}executed+=9; m[(2482) >>> 0] = ((m[(2491) >>> 0] | 0)) | 0; pc = 4942; }
+case 4940: {  {
+    const xmulUa=m[2489]>>>0,xmulUb=m[2490]>>>0;
+    const xmulL0=xmulUa&65535,xmulH0=xmulUa>>>16,xmulL1=xmulUb&65535,xmulH1=xmulUb>>>16;
+    const xmulP0=Math.imul(xmulL0,xmulL1)|0,xmulP1=Math.imul(xmulL0,xmulH1)|0,xmulP2=Math.imul(xmulH0,xmulL1)|0,xmulP3=Math.imul(xmulH0,xmulH1)|0;
+    const xmulMid=((xmulP2&65535)+(xmulP1&65535)+(xmulP0>>>16))|0;
+    const xmulTmp=((xmulMid&65535)<<16)|0,xmulLow=((xmulP0&65535)|xmulTmp)|0;
+    const xmulHigh=(xmulP3+(xmulP1>>>16)+(xmulP2>>>16)+(xmulMid>>>16))|0;
+    m[2493]=xmulL0;m[2494]=xmulH0;m[2495]=xmulL1;m[2496]=xmulH1;
+    m[2497]=xmulP0;m[2498]=xmulP1;m[2499]=xmulP2;m[2500]=xmulP3;
+    m[2502]=xmulTmp;m[2501]=xmulMid;m[2491]=xmulLow;m[2492]=xmulHigh;
+    A=xmulHigh;B=xmulMid>>>16;X=1685024357;
+  } pc=4941; }
+case 4941: {  m[(2482) >>> 0] = ((m[(2491) >>> 0] | 0)) | 0; pc = 4942; }
 case 4942: {  m[(2483) >>> 0] = ((m[(2492) >>> 0] | 0)) | 0; pc = 4943; }
 case 4943: {  A = ((m[(2476) >>> 0] | 0)) | 0; pc = 4944; }
 case 4944: {  m[(2484) >>> 0] = (A) | 0; pc = 4945; }

@@ -235,6 +235,7 @@ const SERVICE_IDS = Object.freeze({
   copyLayer: "service:copyl2l",
   copyLayerRegion: "service:copyl2lregion",
   uafCopyCommon: "service:uafcopycommon",
+  xMul32u: "service:xmul32u",
   compareFloat64: "service:fcmp",
   spaceClear: "service:vhgspaceclear",
   interiorSmooth64: "service:vhginteriorsmooth64",
@@ -341,6 +342,7 @@ const tgaAddressCaches = new WeakMap();
 const textAddressCaches = new WeakMap();
 const ekeyAddressCaches = new WeakMap();
 const surfaceBulkAddressCaches = new WeakMap();
+const xMul32uAddressCaches = new WeakMap();
 const paletteShadeAddressCaches = new WeakMap();
 const paletteTavolaAddressCaches = new WeakMap();
 const groundRoundHillAddressCaches = new WeakMap();
@@ -1417,6 +1419,79 @@ function compareFloat64Inline(linked) {
   }`;
 }
 
+
+function xMul32uAddresses(linked) {
+  let cached = xMul32uAddressCaches.get(linked);
+  if (cached) return cached;
+  cached = {
+    xua: address(linked, "xua"),
+    xub: address(linked, "xub"),
+    xul0: address(linked, "xul0"),
+    xuh0: address(linked, "xuh0"),
+    xul1: address(linked, "xul1"),
+    xuh1: address(linked, "xuh1"),
+    xup0: address(linked, "xup0"),
+    xup1: address(linked, "xup1"),
+    xup2: address(linked, "xup2"),
+    xup3: address(linked, "xup3"),
+    xutmp: address(linked, "xutmp"),
+    xumid: address(linked, "xumid"),
+    xulo: address(linked, "xulo"),
+    xuhi: address(linked, "xuhi"),
+  };
+  xMul32uAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function xMul32u(machine, linked) {
+  const memory = machine.memory;
+  const p = xMul32uAddresses(linked);
+  const ua = memory[p.xua] >>> 0;
+  const ub = memory[p.xub] >>> 0;
+  const l0 = ua & 0xffff;
+  const h0 = ua >>> 16;
+  const l1 = ub & 0xffff;
+  const h1 = ub >>> 16;
+  const p0 = Math.imul(l0, l1) | 0;
+  const p1 = Math.imul(l0, h1) | 0;
+  const p2 = Math.imul(h0, l1) | 0;
+  const p3 = Math.imul(h0, h1) | 0;
+  const middle = ((p2 & 0xffff) + (p1 & 0xffff) + (p0 >>> 16)) | 0;
+  const temporary = ((middle & 0xffff) << 16) | 0;
+  const low = ((p0 & 0xffff) | temporary) | 0;
+  const high = (p3 + (p1 >>> 16) + (p2 >>> 16) + (middle >>> 16)) | 0;
+  memory[p.xul0] = l0;
+  memory[p.xuh0] = h0;
+  memory[p.xul1] = l1;
+  memory[p.xuh1] = h1;
+  memory[p.xup0] = p0;
+  memory[p.xup1] = p1;
+  memory[p.xup2] = p2;
+  memory[p.xup3] = p3;
+  memory[p.xutmp] = temporary;
+  memory[p.xumid] = middle;
+  memory[p.xulo] = low;
+  memory[p.xuhi] = high;
+  machine.A = high;
+  machine.B = middle >>> 16;
+  machine.X = LINO_DONE;
+}
+
+function xMul32uInline(linked) {
+  const p = xMul32uAddresses(linked);
+  return `{
+    const xmulUa=m[${p.xua}]>>>0,xmulUb=m[${p.xub}]>>>0;
+    const xmulL0=xmulUa&65535,xmulH0=xmulUa>>>16,xmulL1=xmulUb&65535,xmulH1=xmulUb>>>16;
+    const xmulP0=Math.imul(xmulL0,xmulL1)|0,xmulP1=Math.imul(xmulL0,xmulH1)|0,xmulP2=Math.imul(xmulH0,xmulL1)|0,xmulP3=Math.imul(xmulH0,xmulH1)|0;
+    const xmulMid=((xmulP2&65535)+(xmulP1&65535)+(xmulP0>>>16))|0;
+    const xmulTmp=((xmulMid&65535)<<16)|0,xmulLow=((xmulP0&65535)|xmulTmp)|0;
+    const xmulHigh=(xmulP3+(xmulP1>>>16)+(xmulP2>>>16)+(xmulMid>>>16))|0;
+    m[${p.xul0}]=xmulL0;m[${p.xuh0}]=xmulH0;m[${p.xul1}]=xmulL1;m[${p.xuh1}]=xmulH1;
+    m[${p.xup0}]=xmulP0;m[${p.xup1}]=xmulP1;m[${p.xup2}]=xmulP2;m[${p.xup3}]=xmulP3;
+    m[${p.xutmp}]=xmulTmp;m[${p.xumid}]=xmulMid;m[${p.xulo}]=xmulLow;m[${p.xuhi}]=xmulHigh;
+    A=xmulHigh;B=xmulMid>>>16;X=${LINO_DONE};
+  }`;
+}
 
 function multiplyUnsigned(machine) {
   const product = BigInt(machine.A >>> 0) * BigInt(machine.B >>> 0);
@@ -13670,6 +13745,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.copyLayer]: copyLayer,
     [SERVICE_IDS.copyLayerRegion]: copyLayerRegion,
     [SERVICE_IDS.uafCopyCommon]: uafCopyCommon,
+    [SERVICE_IDS.xMul32u]: xMul32u,
     [SERVICE_IDS.compareFloat64]: compareFloat64Service,
     [SERVICE_IDS.spaceClear]: spaceClear,
     [SERVICE_IDS.interiorSmooth64]: interiorSmooth64,
@@ -14012,6 +14088,9 @@ export function createNoctisIntrinsics(overrides = {}) {
   }
   if (!Object.hasOwn(overrides, SERVICE_IDS.compareFloat64)) {
     implementations[SERVICE_IDS.compareFloat64].inline = compareFloat64Inline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.xMul32u)) {
+    implementations[SERVICE_IDS.xMul32u].inline = xMul32uInline;
   }
   if (!Object.hasOwn(overrides, SERVICE_IDS.alphaDim)) {
     implementations[SERVICE_IDS.alphaDim].inline = () => alphaDimInline("A", "B");
