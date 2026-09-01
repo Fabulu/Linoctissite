@@ -9,6 +9,8 @@ const compilerPath = resolve(compilerRoot, "src/compiler.js");
 const entryPath = resolve(linoRoot, "work/vhgame.txt");
 const namedFilePaths = new Map([
   ["digimap2.bin", resolve(linoRoot, "work/digimap2.bin")],
+  ["STARMAP.BIN", resolve(linoRoot, "work/STARMAP.BIN")],
+  ["GUIDE.BIN", resolve(linoRoot, "work/GUIDE.BIN")],
   ["globes.map", resolve(linoRoot, "work/globes.map")],
   ["offsets.map", resolve(linoRoot, "work/offsets.map")],
   ["vehicle.ncc", resolve(linoRoot, "work/vehicle.ncc")],

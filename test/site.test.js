@@ -4,6 +4,7 @@ import test from "node:test";
 
 test("ships the real linked Noctis project and visible fullscreen exits", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
+  const build = await readFile(new URL("../build.mjs", import.meta.url), "utf8");
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
   const workerHost = await readFile(new URL("../public/worker-host.js", import.meta.url), "utf8");
   const gameWorker = await readFile(new URL("../public/game-worker.js", import.meta.url), "utf8");
@@ -13,6 +14,8 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(html, /rel="icon" href="\.\/favicon\.svg"/);
   assert.match(html, /width="400" height="300"/);
   assert.match(html, /Lino-rendered Noctis/);
+  assert.match(build, /\["STARMAP\.BIN", resolve\(linoRoot, "work\/STARMAP\.BIN"\)\]/);
+  assert.match(build, /\["GUIDE\.BIN", resolve\(linoRoot, "work\/GUIDE\.BIN"\)\]/);
   assert.match(app, /compileProject/);
   assert.match(app, /work\/vhgame\.txt/);
   assert.match(app, /createNoctisIntrinsics/);
