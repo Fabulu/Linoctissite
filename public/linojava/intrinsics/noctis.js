@@ -234,6 +234,7 @@ const SERVICE_IDS = Object.freeze({
   clearLayerRegion: "service:clearl2lregion",
   copyLayer: "service:copyl2l",
   copyLayerRegion: "service:copyl2lregion",
+  uafCopyCommon: "service:uafcopycommon",
   compareFloat64: "service:fcmp",
   spaceClear: "service:vhgspaceclear",
   interiorSmooth64: "service:vhginteriorsmooth64",
@@ -1251,6 +1252,33 @@ function copyLayerRegion(machine, linked) {
     }
     source = (source + region.width) | 0;
     destination = (destination + region.width) | 0;
+  }
+  machine.A = source;
+  machine.B = destination;
+  machine.C = rowWidth;
+  machine.D = 0;
+  machine.E = pointer;
+}
+
+function uafCopyCommon(machine, linked) {
+  const memory = machine.memory;
+  const pointer = value(memory, linked, "L2L Region") | 0;
+  const left = memory[pointer >>> 0] | 0;
+  const top = memory[(pointer + 1) >>> 0] | 0;
+  const right = memory[(pointer + 2) >>> 0] | 0;
+  const bottom = memory[(pointer + 3) >>> 0] | 0;
+  const displayWidth = value(memory, linked, "Display Width") | 0;
+  const rowWidth = (right - left + 1) | 0;
+  const rows = (bottom - top + 1) | 0;
+  const rowOffset = (Math.imul(top, displayWidth) + left) | 0;
+  let source = (address(linked, "Backdrop Layer") + rowOffset) | 0;
+  let destination = (address(linked, "Primary Display") + rowOffset) | 0;
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < rowWidth; column += 1) {
+      memory[(destination + column) >>> 0] = memory[(source + column) >>> 0];
+    }
+    source = (source + displayWidth) | 0;
+    destination = (destination + displayWidth) | 0;
   }
   machine.A = source;
   machine.B = destination;
@@ -13613,6 +13641,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.clearLayerRegion]: clearLayerRegion,
     [SERVICE_IDS.copyLayer]: copyLayer,
     [SERVICE_IDS.copyLayerRegion]: copyLayerRegion,
+    [SERVICE_IDS.uafCopyCommon]: uafCopyCommon,
     [SERVICE_IDS.compareFloat64]: compareFloat64Service,
     [SERVICE_IDS.spaceClear]: spaceClear,
     [SERVICE_IDS.interiorSmooth64]: interiorSmooth64,
