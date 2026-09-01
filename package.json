@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node ./build.mjs",
     "test": "node --test",
+    "profile:browser": "node ./tools/profile-browser.mjs",
     "deploy": "npm run build && npx wrangler pages deploy public --project-name=linoctis --branch=main"
   },
   "engines": {

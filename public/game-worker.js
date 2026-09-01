@@ -8,6 +8,7 @@ import {
 const workerScope = typeof WorkerGlobalScope !== "undefined"
   && globalThis instanceof WorkerGlobalScope;
 let foregroundRuntime = false;
+let fastBootstrap = false;
 let emitMessage = (message, transfer = []) => globalThis.postMessage(message, transfer);
 
 let program = null;
@@ -48,6 +49,7 @@ let pendingRunnerMilliseconds = 0;
 let pendingInstructions = 0;
 let gameTimingAddress = -1;
 let lastGameTimingCount = 0;
+let lastRun = null;
 let pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, paused: false };
 const recentInputEvents = [];
 
@@ -245,6 +247,7 @@ function publishFrame(result, runnerMilliseconds, instructions, producedFrame) {
   if (!producedFrame) return;
   if (gameTimingAddress >= 0) {
     simulationTicks = program.machine.memory[gameTimingAddress] | 0;
+    if (simulationTicks > 0) fastBootstrap = false;
   }
   rateRunnerMilliseconds += runnerMilliseconds;
   rateInstructions += instructions;
@@ -285,6 +288,7 @@ function publishFrame(result, runnerMilliseconds, instructions, producedFrame) {
     instructionsPerPresentation,
     cumulativeRunnerMilliseconds,
     cumulativeInstructions,
+    sleepMilliseconds: result.sleepMilliseconds,
     status: result.status,
   };
   emitMessage(frame, [frame.pixels.buffer]);
@@ -299,6 +303,13 @@ function runMachine() {
     // are split so a pointer release cannot wait behind a giant Lino slice.
     const result = program.run(10_000);
     const runnerMilliseconds = performance.now() - started;
+    lastRun = {
+      status: result.status,
+      sleepMilliseconds: result.sleepMilliseconds ?? 0,
+      instructions: result.instructions,
+      runnerMilliseconds,
+      pc: program.machine.pc | 0,
+    };
     pendingRunnerMilliseconds += runnerMilliseconds;
     pendingInstructions += result.instructions;
     let producedFrame = completedFrame;
@@ -357,7 +368,8 @@ function runMachine() {
     // presentation. Yield through the worker event loop between those slices
     // so pointer releases and other host messages cannot be starved by our
     // private MessageChannel queue.
-    if (!waitingForFrameCredit) queueRun(delay, !producedFrame && result.status === "budget");
+    const yieldToHost = !producedFrame && result.status === "budget" && !fastBootstrap;
+    if (!waitingForFrameCredit) queueRun(delay, yieldToHost);
   } catch (error) {
     running = false;
     emitMessage({ type: "error", message: error?.stack || error?.message || String(error),
@@ -366,6 +378,7 @@ function runMachine() {
 }
 
 async function initialize(message) {
+  fastBootstrap = message.fastBootstrap === true;
   const sourceRoot = new URL(message.sourceRoot);
   const entry = new URL("work/vhgame.txt", sourceRoot).href;
   const manifest = await fetch(new URL("manifest.json", sourceRoot)).then((response) => response.json());
@@ -393,6 +406,8 @@ async function initialize(message) {
       return fetchFirst(projectCandidates(sourceRoot, specifier, importer, ["", ".tga"]), "stockfile");
     },
   };
+  const fixedDateMilliseconds = Number.isSafeInteger(message.clockSeconds)
+    ? message.clockSeconds * 1000 : null;
   const host = {
     directory: ".",
     files: namedFiles,
@@ -440,6 +455,7 @@ async function initialize(message) {
       emitMessage({ type: "display", width, height, x, y });
     },
     monotonicMilliseconds: () => performance.now(),
+    date: fixedDateMilliseconds === null ? undefined : () => new Date(fixedDateMilliseconds),
     retrace(origin, width, height, memory) {
       completedFrame = true;
       const timingCount = gameTimingAddress >= 0 ? memory[gameTimingAddress] | 0 : 0;
@@ -542,6 +558,29 @@ function handleMessage(message) {
     const y = program.linked.symbols.get("displayyposition");
     if (x) program.machine.memory[x.value] = message.x | 0;
     if (y) program.machine.memory[y.value] = message.y | 0;
+  } else if (message.type === "runtimeSnapshot" && program) {
+    const pc = program.machine.pc | 0;
+    emitMessage({
+      type: "runtimeSnapshot",
+      state: {
+        running,
+        halted: program.machine.halted,
+        pc,
+        labels: program.linked.aliases
+          .filter((item) => item.instruction === pc).map((item) => item.name),
+        runQueued,
+        delayedRun: Boolean(delayedRun),
+        waitingForFrameCredit,
+        fastBootstrap,
+        frameCredits,
+        pendingFrame: Boolean(pendingFrame),
+        completedFrame,
+        lastRun,
+        presentationFrames,
+        simulationTicks,
+        values: symbolValues(["vhsvok", "vhgmode", "vhglanded", "vhgtimingcalls"]),
+      },
+    });
   } else if (message.type === "guiAction" && program && message.name === "menu") {
     // Never splice a service into an arbitrary running Lino stack. The next
     // GUI-idle yield will schedule the action as an ordinary nested call.

@@ -69,6 +69,21 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   }
 });
 
+test("browser profiler uses the deterministic shared-Lino worker scene", async () => {
+  const gameWorker = await readFile(new URL("../public/game-worker.js", import.meta.url), "utf8");
+  const workerHost = await readFile(new URL("../public/worker-host.js", import.meta.url), "utf8");
+  const profiler = await readFile(new URL("../tools/profile-browser.mjs", import.meta.url), "utf8");
+  assert.match(gameWorker, /date: fixedDateMilliseconds === null \? undefined/);
+  assert.match(workerHost, /clockSeconds: fixedClockSeconds/);
+  assert.match(workerHost, /globalThis\.__linoSnapshot = runtimeMetrics/);
+  assert.match(profiler, /store\.put\(Uint8Array\.from\(units\), "current\.lin"\)/);
+  assert.match(profiler, /globalThis\.__linoRuntime instanceof Worker/);
+  assert.match(profiler, /await page\.keyboard\.down\("w"\)/);
+  assert.match(profiler, /producedPresentationHz/);
+  assert.match(profiler, /simulationHz/);
+  assert.match(profiler, /cumulativeRunnerMilliseconds/);
+});
+
 test("deployment rejects stale pinned runtime artifacts", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8",

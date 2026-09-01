@@ -17,6 +17,10 @@ const runtimeManifest = await fetch(new URL("manifest.json", sourceRoot)).then((
   return response.json();
 });
 const runtimeId = String(runtimeManifest.runtimeId ?? "unversioned");
+const runtimeOptions = new URLSearchParams(location.search);
+const clockOption = runtimeOptions.get("clock");
+const fixedClockSeconds = clockOption !== null && /^\d+$/.test(clockOption)
+  && Number.isSafeInteger(Number(clockOption)) ? Number(clockOption) : null;
 
 async function openPersistence() {
   if (!window.indexedDB) return null;
@@ -126,7 +130,7 @@ const savedGlobalK = (await readPersistenceStore(persistence, "globalK"))
     ? record.units : new Int32Array(record.units)])
   .filter(([, units]) => units.length === 255);
 const pcmHost = createPcmHost();
-const worker = new URLSearchParams(location.search).get("runtime") === "foreground"
+const worker = runtimeOptions.get("runtime") === "foreground"
   ? createForegroundRuntime()
   : new Worker(new URL("./game-worker.js", import.meta.url), { type: "module" });
 globalThis.__linoRuntime = worker;
@@ -154,6 +158,7 @@ let presentedFps = 0;
 let displayStartedFrame = 0;
 let displayStartedAt = performance.now();
 let displayMilliseconds = 0;
+let cumulativeDisplayMilliseconds = 0;
 let lastMetrics = null;
 globalThis.__linoMetrics = null;
 
@@ -239,9 +244,35 @@ function present(frame) {
     fullscreenContext.drawImage(canvas, gameLeft, gameTop, gameWidth, gameHeight, 0, 0, gameWidth, gameHeight);
   }
   lastMetrics = frame.metrics;
-  displayMilliseconds += performance.now() - started;
+  const elapsed = performance.now() - started;
+  displayMilliseconds += elapsed;
+  cumulativeDisplayMilliseconds += elapsed;
   presentedFrames += 1;
 }
+
+function runtimeMetrics(now = performance.now()) {
+  if (!lastMetrics) return null;
+  return {
+    schema: 1,
+    runtimeId,
+    sampledAtMilliseconds: now,
+    presentedFrames,
+    presentedFps,
+    producedPresentationFrames: lastMetrics.presentationFrames,
+    producedPresentationFps: lastMetrics.presentationFps,
+    simulationTicks: lastMetrics.simulationTicks,
+    simulationFps: lastMetrics.simulationFps,
+    cumulativeRunnerMilliseconds: lastMetrics.cumulativeRunnerMilliseconds,
+    cumulativeDisplayMilliseconds,
+    cumulativeInstructions: lastMetrics.cumulativeInstructions,
+    runnerMillisecondsPerPresentation: lastMetrics.runnerMillisecondsPerPresentation,
+    instructionsPerPresentation: lastMetrics.instructionsPerPresentation,
+    sleepMilliseconds: lastMetrics.sleepMilliseconds,
+    status: lastMetrics.status,
+  };
+}
+
+globalThis.__linoSnapshot = runtimeMetrics;
 
 function animationFrame(now) {
   animationTicks += 1;
@@ -260,21 +291,9 @@ function animationFrame(now) {
     const displayMillisecondsPerPresentation = displayMilliseconds / Math.max(1, presentations);
     if (lastMetrics) {
       globalThis.__linoMetrics = {
-        schema: 1,
-        runtimeId,
-        presentedFrames,
-        presentedFps,
-        producedPresentationFrames: lastMetrics.presentationFrames,
-        producedPresentationFps: lastMetrics.presentationFps,
-        simulationTicks: lastMetrics.simulationTicks,
-        simulationFps: lastMetrics.simulationFps,
-        cumulativeRunnerMilliseconds: lastMetrics.cumulativeRunnerMilliseconds,
-        cumulativeInstructions: lastMetrics.cumulativeInstructions,
-        runnerMillisecondsPerPresentation: lastMetrics.runnerMillisecondsPerPresentation,
-        instructionsPerPresentation: lastMetrics.instructionsPerPresentation,
+        ...runtimeMetrics(now),
         displayMillisecondsPerPresentation,
         animationHz,
-        status: lastMetrics.status,
       };
       status.textContent = `Noctis / ${presentedFrames} presentations / ${presentedFps.toFixed(1)} FPS presented / ${lastMetrics.presentationFps.toFixed(1)} FPS produced / ${lastMetrics.simulationFps.toFixed(1)} Hz simulation / JS ${lastMetrics.runnerMillisecondsPerPresentation.toFixed(1)} ms + display ${displayMillisecondsPerPresentation.toFixed(1)} ms / ${(lastMetrics.instructionsPerPresentation / 1_000_000).toFixed(2)}M ops / ${lastMetrics.status}`;
     }
@@ -563,6 +582,7 @@ worker.addEventListener("message", (event) => {
       runtimeId, units: new Int32Array(message.units),
     });
   } else if (message.type === "pcm") pcmHost.command(message);
+  else if (message.type === "runtimeSnapshot") globalThis.__linoWorkerSnapshot = message.state;
   else if (message.type === "stopped") status.textContent = `Lino stopped: ${message.status}`;
   else if (message.type === "error") {
     status.textContent = `Lino stopped: ${message.message}`;
@@ -578,7 +598,8 @@ status.textContent = "Compiling the real 73-module Noctis project in JavaScript.
 const windowBounds = linoWindow.getBoundingClientRect();
 worker.postMessage({
   type: "init", sourceRoot: sourceRoot.href, files: savedFiles, globalK: savedGlobalK,
-  runtimeId,
+  runtimeId, clockSeconds: fixedClockSeconds,
+  fastBootstrap: runtimeOptions.get("profile") === "1",
   physicalWidth: Math.max(1, window.innerWidth), physicalHeight: Math.max(1, window.innerHeight),
   audioPlayback: pcmHost.supported, windowBounds: { x: windowBounds.left, y: windowBounds.top },
 });
