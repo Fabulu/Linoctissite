@@ -81,9 +81,10 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   try {
     await page.waitForFunction(() => {
       const match = document.querySelector("#status")?.textContent
-        ?.match(/^Noctis \/ (\d+) game frames/);
+        ?.match(/^Noctis \/ (\d+) presentations/);
       const crashed = !document.querySelector("#crash-panel")?.hidden;
-      return crashed || (match && Number(match[1]) > 0);
+      return crashed || (match && Number(match[1]) > 0
+        && globalThis.__linoMetrics?.simulationTicks > 0);
     }, null, { timeout: 240_000 });
   } catch (error) {
     const diagnostic = await page.evaluate(() => ({
@@ -116,6 +117,7 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
       crash: document.querySelector("#crash-report").textContent,
       crashHidden: document.querySelector("#crash-panel").hidden,
       height: canvas.height,
+      metrics: globalThis.__linoMetrics,
       nonUniform,
       realWorker: globalThis.__linoRuntime instanceof Worker,
       stageVisible: !document.querySelector("#game-stage").hidden,
@@ -132,9 +134,20 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   assert.equal(state.crashHidden, true, state.crash);
   assert.ok(state.width >= 320 && state.height >= 200);
   assert.equal(state.nonUniform, true);
-  assert.match(state.status, /^Noctis \/ [1-9]\d* game frames/);
+  assert.match(state.status, /^Noctis \/ [1-9]\d* presentations/);
+  assert.equal(state.metrics?.schema, 1);
+  assert.ok(state.metrics.presentedFrames > 0);
+  assert.ok(state.metrics.producedPresentationFrames > 0);
+  assert.ok(state.metrics.simulationTicks > 0);
+  assert.ok(state.metrics.presentedFps > 0);
+  assert.ok(state.metrics.producedPresentationFps > 0);
+  assert.ok(state.metrics.simulationFps > 0);
+  assert.ok(state.metrics.cumulativeRunnerMilliseconds > 0);
+  assert.ok(state.metrics.cumulativeInstructions > 0);
+  assert.ok(state.metrics.runnerMillisecondsPerPresentation >= 0);
+  assert.ok(state.metrics.instructionsPerPresentation > 0);
 
-  const initialFrames = Number(state.status.match(/^Noctis \/ (\d+) game frames/)[1]);
+  const initialFrames = Number(state.status.match(/^Noctis \/ (\d+) presentations/)[1]);
   await page.evaluate(() => {
     const runtime = globalThis.__linoRuntime;
     const postMessage = runtime.postMessage.bind(runtime);
@@ -171,7 +184,7 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   await page.keyboard.type("x");
   await page.waitForFunction((minimum) => {
     const match = document.querySelector("#status")?.textContent
-      ?.match(/^Noctis \/ (\d+) game frames/);
+      ?.match(/^Noctis \/ (\d+) presentations/);
     return match && Number(match[1]) > minimum;
   }, initialFrames, { timeout: 30_000 });
 

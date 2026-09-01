@@ -31,15 +31,19 @@ let waitingForFrameCredit = false;
 let runQueued = false;
 let delayedRun = 0;
 let pendingGuiMenu = false;
-let renderedFrames = 0;
-let gameFrames = 0;
+let presentationFrames = 0;
+let simulationTicks = 0;
 let rateStartedAt = performance.now();
-let rateStartedGameFrame = 0;
+let rateStartedPresentationFrame = 0;
+let rateStartedSimulationTick = 0;
 let rateRunnerMilliseconds = 0;
 let rateInstructions = 0;
-let renderedFps = 0;
-let runnerMillisecondsPerFrame = 0;
-let instructionsPerFrame = 0;
+let cumulativeRunnerMilliseconds = 0;
+let cumulativeInstructions = 0;
+let presentationFps = 0;
+let simulationFps = 0;
+let runnerMillisecondsPerPresentation = 0;
+let instructionsPerPresentation = 0;
 let pendingRunnerMilliseconds = 0;
 let pendingInstructions = 0;
 let gameTimingAddress = -1;
@@ -68,7 +72,8 @@ function crashPacket(error, phase) {
     occurredAt: new Date().toISOString(),
     phase,
     message: error?.stack || error?.message || String(error),
-    renderedFrames,
+    presentationFrames,
+    simulationTicks,
     pc,
     instruction: pc === null ? null : program.linked.instructions[pc] ?? null,
     labels: pc === null ? [] : program.linked.aliases
@@ -238,23 +243,28 @@ function queueRun(delay = 0, yieldToHost = false) {
 
 function publishFrame(result, runnerMilliseconds, instructions, producedFrame) {
   if (!producedFrame) return;
-  renderedFrames += 1;
   if (gameTimingAddress >= 0) {
-    gameFrames = program.machine.memory[gameTimingAddress] | 0;
+    simulationTicks = program.machine.memory[gameTimingAddress] | 0;
   }
   rateRunnerMilliseconds += runnerMilliseconds;
   rateInstructions += instructions;
+  cumulativeRunnerMilliseconds += runnerMilliseconds;
+  cumulativeInstructions += instructions;
+  if (pendingFrame) presentationFrames += 1;
   const now = performance.now();
   const elapsed = now - rateStartedAt;
   if (elapsed >= 1000) {
-    const frames = gameFrames - rateStartedGameFrame;
-    if (frames > 0) {
-      renderedFps = frames * 1000 / elapsed;
-      runnerMillisecondsPerFrame = rateRunnerMilliseconds / frames;
-      instructionsPerFrame = rateInstructions / frames;
+    const presentations = presentationFrames - rateStartedPresentationFrame;
+    const simulations = simulationTicks - rateStartedSimulationTick;
+    if (presentations > 0) {
+      presentationFps = presentations * 1000 / elapsed;
+      runnerMillisecondsPerPresentation = rateRunnerMilliseconds / presentations;
+      instructionsPerPresentation = rateInstructions / presentations;
     }
+    simulationFps = simulations * 1000 / elapsed;
     rateStartedAt = now;
-    rateStartedGameFrame = gameFrames;
+    rateStartedPresentationFrame = presentationFrames;
+    rateStartedSimulationTick = simulationTicks;
     rateRunnerMilliseconds = 0;
     rateInstructions = 0;
   }
@@ -267,7 +277,14 @@ function publishFrame(result, runnerMilliseconds, instructions, producedFrame) {
     { fullbuttonhotspot: 4, titlebarbounds: 4, sizebuttonhotspot: 4, menubuttonhotspot: 5 },
   );
   frame.metrics = {
-    renderedFrames, gameFrames, renderedFps, runnerMillisecondsPerFrame, instructionsPerFrame,
+    presentationFrames,
+    simulationTicks,
+    presentationFps,
+    simulationFps,
+    runnerMillisecondsPerPresentation,
+    instructionsPerPresentation,
+    cumulativeRunnerMilliseconds,
+    cumulativeInstructions,
     status: result.status,
   };
   emitMessage(frame, [frame.pixels.buffer]);

@@ -148,11 +148,14 @@ let ui = Object.create(null);
 let pendingFrame = null;
 let image = context.createImageData(canvas.width, canvas.height);
 let imagePixels = new Uint32Array(image.data.buffer);
-let displayTicks = 0;
-let displayRate = 0;
+let animationTicks = 0;
+let presentedFrames = 0;
+let presentedFps = 0;
+let displayStartedFrame = 0;
 let displayStartedAt = performance.now();
 let displayMilliseconds = 0;
 let lastMetrics = null;
+globalThis.__linoMetrics = null;
 
 function showCrash(message) {
   const packet = message.packet ?? { version: 1, occurredAt: new Date().toISOString(),
@@ -237,10 +240,11 @@ function present(frame) {
   }
   lastMetrics = frame.metrics;
   displayMilliseconds += performance.now() - started;
+  presentedFrames += 1;
 }
 
 function animationFrame(now) {
-  displayTicks += 1;
+  animationTicks += 1;
   worker.tick?.();
   if (pendingFrame) {
     const frame = pendingFrame;
@@ -250,12 +254,32 @@ function animationFrame(now) {
   }
   const elapsed = now - displayStartedAt;
   if (elapsed >= 1000) {
-    displayRate = displayTicks * 1000 / elapsed;
-    const displayPerTick = displayMilliseconds / Math.max(1, displayTicks);
+    const presentations = presentedFrames - displayStartedFrame;
+    presentedFps = presentations * 1000 / elapsed;
+    const animationHz = animationTicks * 1000 / elapsed;
+    const displayMillisecondsPerPresentation = displayMilliseconds / Math.max(1, presentations);
     if (lastMetrics) {
-      status.textContent = `Noctis / ${lastMetrics.gameFrames ?? 0} game frames / ${lastMetrics.renderedFps.toFixed(1)} FPS gameplay / ${displayRate.toFixed(1)} Hz display / render ${lastMetrics.runnerMillisecondsPerFrame.toFixed(1)} ms + display ${displayPerTick.toFixed(1)} ms / ${(lastMetrics.instructionsPerFrame / 1_000_000).toFixed(2)}M ops / ${lastMetrics.status}`;
+      globalThis.__linoMetrics = {
+        schema: 1,
+        runtimeId,
+        presentedFrames,
+        presentedFps,
+        producedPresentationFrames: lastMetrics.presentationFrames,
+        producedPresentationFps: lastMetrics.presentationFps,
+        simulationTicks: lastMetrics.simulationTicks,
+        simulationFps: lastMetrics.simulationFps,
+        cumulativeRunnerMilliseconds: lastMetrics.cumulativeRunnerMilliseconds,
+        cumulativeInstructions: lastMetrics.cumulativeInstructions,
+        runnerMillisecondsPerPresentation: lastMetrics.runnerMillisecondsPerPresentation,
+        instructionsPerPresentation: lastMetrics.instructionsPerPresentation,
+        displayMillisecondsPerPresentation,
+        animationHz,
+        status: lastMetrics.status,
+      };
+      status.textContent = `Noctis / ${presentedFrames} presentations / ${presentedFps.toFixed(1)} FPS presented / ${lastMetrics.presentationFps.toFixed(1)} FPS produced / ${lastMetrics.simulationFps.toFixed(1)} Hz simulation / JS ${lastMetrics.runnerMillisecondsPerPresentation.toFixed(1)} ms + display ${displayMillisecondsPerPresentation.toFixed(1)} ms / ${(lastMetrics.instructionsPerPresentation / 1_000_000).toFixed(2)}M ops / ${lastMetrics.status}`;
     }
-    displayTicks = 0;
+    displayStartedFrame = presentedFrames;
+    animationTicks = 0;
     displayMilliseconds = 0;
     displayStartedAt = now;
   }
