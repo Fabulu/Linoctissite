@@ -294,6 +294,8 @@ const SERVICE_IDS = Object.freeze({
   groundTextureDarkline: "service:vhgndtexturedarklinecommon",
   groundPostSurface: "service:vhgndpostsurfacecommon",
   groundSurfaceBlur: "service:vhgndsurfaceblurcommon",
+  groundBackgroundCacheSave: "service:vhgndbackgroundcachesave",
+  groundBackgroundCacheRestore: "service:vhgndbackgroundcacherestore",
   spaceFade: "service:vhsfade",
   flareSourceStick: "service:vhfsourcestick",
   glowRaster: "service:spglowraster",
@@ -1308,6 +1310,32 @@ function interiorSmooth64(machine, linked) {
       + (memory[base + index + 641] & 0x3f)) >>> 2;
     memory[base + index] = (first & 0xc0) | intensity;
   }
+  machine.X = LINO_DONE;
+}
+
+function groundBackgroundCacheCopy(machine, linked, restore) {
+  const memory = machine.memory;
+  const pointerAddress = address(linked, "VHGNDbgcachep");
+  const pageAddress = address(linked, "VHGNDbgcacheq");
+  const countAddress = address(linked, "VHGNDbgcachecount");
+  const cache = address(linked, "VHGNDskycache") | 0;
+  const page = noctisBuffer(linked, "RADPT") | 0;
+  const source = restore ? cache : page;
+  const destination = restore ? page : cache;
+  const count = 64_000;
+  if (destination > source && destination < source + count) {
+    for (let index = 0; index < count; index += 1) {
+      memory[(destination + index) >>> 0] = memory[(source + index) >>> 0];
+    }
+  } else {
+    memory.copyWithin(destination >>> 0, source >>> 0, (source + count) >>> 0);
+  }
+  memory[pointerAddress] = (cache + count) | 0;
+  memory[pageAddress] = (page + count) | 0;
+  memory[countAddress] = 0;
+  machine.A = 0;
+  machine.C = memory[(source + count - 1) >>> 0] | 0;
+  machine.D = (destination + count - 4) | 0;
   machine.X = LINO_DONE;
 }
 
@@ -13705,6 +13733,12 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.groundTextureDarkline]: groundTextureDarkline,
     [SERVICE_IDS.groundPostSurface]: groundPostSurface,
     [SERVICE_IDS.groundSurfaceBlur]: groundSurfaceBlur,
+    [SERVICE_IDS.groundBackgroundCacheSave]: (machine, linked) => {
+      groundBackgroundCacheCopy(machine, linked, false);
+    },
+    [SERVICE_IDS.groundBackgroundCacheRestore]: (machine, linked) => {
+      groundBackgroundCacheCopy(machine, linked, true);
+    },
     [SERVICE_IDS.spaceFade]: spaceFade,
     [SERVICE_IDS.flareSourceStick]: flareSourceStick,
     [SERVICE_IDS.glowRaster]: glowRaster,
