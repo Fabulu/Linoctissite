@@ -635,8 +635,15 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   assert.equal(keyboardInput.at(-1)?.type, "clearKeys");
 
   await page.locator("#game").focus();
-  await page.keyboard.press("Escape");
-  await waitState((current) => current.values.vhgconsole === 0, "close GOES before terminal action");
+  const beforeEscape = await runtimeSnapshot();
+  if (beforeEscape.values.vhgconsole === 1) {
+    await page.keyboard.press("Escape");
+    await waitState(
+      (current) => current.values.vhgconsole === 0
+        && current.values.vhgloopcalls > beforeEscape.values.vhgloopcalls,
+      "close GOES before terminal action",
+    );
+  }
   await chooseGame(11, (current) => current.values.vhgesc === 1, "Save and quit");
   const stopped = await waitState((current) => !current.running || current.halted,
     "terminal Save and quit", 30_000);
