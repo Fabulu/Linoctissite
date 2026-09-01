@@ -43891,27 +43891,115 @@ case 41484: {  m[(6919) >>> 0] = (187) | 0; pc = 41485; }
 case 41485: { if(executed!==0&&executed+3>maxInstructions){pc=41485;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6923) >>> 0] = (9) | 0; pc = 41486; }
 case 41486: {  m[(6924) >>> 0] = (9) | 0; pc = 41487; }
 case 41487: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (41489) | 0; pc = (41511) - 1; continue runner; }
-case 41488: { if(executed!==0&&executed+3>maxInstructions){pc=41488;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6927) >>> 0] = (9) | 0; pc = 41489; }
+case 41488: { if(executed!==0&&executed+6>maxInstructions){pc=41488;outputStatus="budget";outputInstructions=executed;break runner;}executed+=6; m[(6927) >>> 0] = (9) | 0; pc = 41489; }
 case 41489: {  m[(6928) >>> 0] = (9) | 0; pc = 41490; }
-case 41490: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (41492) | 0; pc = (41530) - 1; continue runner; }
-case 41491: { if(executed!==0&&executed+3>maxInstructions){pc=41491;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6923) >>> 0] = ((m[(6920) >>> 0] | 0)) | 0; pc = 41492; }
+case 41490: {  {
+    const hudSmoothCx=m[6927]|0,hudSmoothCy=m[6928]|0,hudSmoothBase=1547229;
+    let hudSmoothLast=0,hudSmoothAverage=0;
+    for(let hudSmoothPy=-5;hudSmoothPy<=5;hudSmoothPy+=1){
+      const hudSmoothY=(hudSmoothCy+hudSmoothPy)|0;
+      for(let hudSmoothPx=-5;hudSmoothPx<=5;hudSmoothPx+=1){
+        if(Math.imul(hudSmoothPx,hudSmoothPx)+Math.imul(hudSmoothPy,hudSmoothPy)>=25)continue;
+        const hudSmoothX=(hudSmoothCx+hudSmoothPx)|0;
+        const hudSmoothPointer=(hudSmoothBase+Math.imul(hudSmoothY,320)+hudSmoothX)|0;
+        const hudSmoothUl=hudSmoothPointer>>>0,hudSmoothUr=(hudSmoothPointer+1)>>>0;
+        const hudSmoothLl=(hudSmoothPointer+320)>>>0,hudSmoothLr=(hudSmoothPointer+321)>>>0;
+        hudSmoothAverage=((m[hudSmoothUl]&63)+(m[hudSmoothUr]&63)+(m[hudSmoothLl]&63)+(m[hudSmoothLr]&63))>>>2;
+        m[hudSmoothUl]=(m[hudSmoothUl]&192)+hudSmoothAverage;
+        m[hudSmoothUr]=(m[hudSmoothUr]&192)+hudSmoothAverage;
+        m[hudSmoothLl]=(m[hudSmoothLl]&192)+hudSmoothAverage;
+        m[hudSmoothLr]=(m[hudSmoothLr]&192)+hudSmoothAverage;
+        hudSmoothLast=hudSmoothPointer;
+      }
+    }
+    m[6929]=(hudSmoothCx+6)|0;m[6930]=(hudSmoothCy+6)|0;m[6931]=6;m[6932]=6;
+    m[6933]=25;m[6934]=hudSmoothAverage;m[6935]=hudSmoothLast;
+    A=6;C=25;D=(hudSmoothLast+321)|0;X=1685024357;
+  } pc=41491; }
+case 41491: {  m[(6923) >>> 0] = ((m[(6920) >>> 0] | 0)) | 0; pc = 41492; }
 case 41492: {  m[(6924) >>> 0] = (9) | 0; pc = 41493; }
 case 41493: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (41495) | 0; pc = (41511) - 1; continue runner; }
-case 41494: { if(executed!==0&&executed+3>maxInstructions){pc=41494;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6927) >>> 0] = (308) | 0; pc = 41495; }
+case 41494: { if(executed!==0&&executed+6>maxInstructions){pc=41494;outputStatus="budget";outputInstructions=executed;break runner;}executed+=6; m[(6927) >>> 0] = (308) | 0; pc = 41495; }
 case 41495: {  m[(6928) >>> 0] = (9) | 0; pc = 41496; }
-case 41496: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (41498) | 0; pc = (41530) - 1; continue runner; }
-case 41497: { if(executed!==0&&executed+3>maxInstructions){pc=41497;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6923) >>> 0] = (9) | 0; pc = 41498; }
+case 41496: {  {
+    const hudSmoothCx=m[6927]|0,hudSmoothCy=m[6928]|0,hudSmoothBase=1547229;
+    let hudSmoothLast=0,hudSmoothAverage=0;
+    for(let hudSmoothPy=-5;hudSmoothPy<=5;hudSmoothPy+=1){
+      const hudSmoothY=(hudSmoothCy+hudSmoothPy)|0;
+      for(let hudSmoothPx=-5;hudSmoothPx<=5;hudSmoothPx+=1){
+        if(Math.imul(hudSmoothPx,hudSmoothPx)+Math.imul(hudSmoothPy,hudSmoothPy)>=25)continue;
+        const hudSmoothX=(hudSmoothCx+hudSmoothPx)|0;
+        const hudSmoothPointer=(hudSmoothBase+Math.imul(hudSmoothY,320)+hudSmoothX)|0;
+        const hudSmoothUl=hudSmoothPointer>>>0,hudSmoothUr=(hudSmoothPointer+1)>>>0;
+        const hudSmoothLl=(hudSmoothPointer+320)>>>0,hudSmoothLr=(hudSmoothPointer+321)>>>0;
+        hudSmoothAverage=((m[hudSmoothUl]&63)+(m[hudSmoothUr]&63)+(m[hudSmoothLl]&63)+(m[hudSmoothLr]&63))>>>2;
+        m[hudSmoothUl]=(m[hudSmoothUl]&192)+hudSmoothAverage;
+        m[hudSmoothUr]=(m[hudSmoothUr]&192)+hudSmoothAverage;
+        m[hudSmoothLl]=(m[hudSmoothLl]&192)+hudSmoothAverage;
+        m[hudSmoothLr]=(m[hudSmoothLr]&192)+hudSmoothAverage;
+        hudSmoothLast=hudSmoothPointer;
+      }
+    }
+    m[6929]=(hudSmoothCx+6)|0;m[6930]=(hudSmoothCy+6)|0;m[6931]=6;m[6932]=6;
+    m[6933]=25;m[6934]=hudSmoothAverage;m[6935]=hudSmoothLast;
+    A=6;C=25;D=(hudSmoothLast+321)|0;X=1685024357;
+  } pc=41497; }
+case 41497: {  m[(6923) >>> 0] = (9) | 0; pc = 41498; }
 case 41498: {  m[(6924) >>> 0] = ((m[(6919) >>> 0] | 0)) | 0; pc = 41499; }
 case 41499: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (41501) | 0; pc = (41511) - 1; continue runner; }
-case 41500: { if(executed!==0&&executed+3>maxInstructions){pc=41500;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6927) >>> 0] = (9) | 0; pc = 41501; }
+case 41500: { if(executed!==0&&executed+6>maxInstructions){pc=41500;outputStatus="budget";outputInstructions=executed;break runner;}executed+=6; m[(6927) >>> 0] = (9) | 0; pc = 41501; }
 case 41501: {  m[(6928) >>> 0] = (188) | 0; pc = 41502; }
-case 41502: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (41504) | 0; pc = (41530) - 1; continue runner; }
-case 41503: { if(executed!==0&&executed+3>maxInstructions){pc=41503;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6923) >>> 0] = ((m[(6920) >>> 0] | 0)) | 0; pc = 41504; }
+case 41502: {  {
+    const hudSmoothCx=m[6927]|0,hudSmoothCy=m[6928]|0,hudSmoothBase=1547229;
+    let hudSmoothLast=0,hudSmoothAverage=0;
+    for(let hudSmoothPy=-5;hudSmoothPy<=5;hudSmoothPy+=1){
+      const hudSmoothY=(hudSmoothCy+hudSmoothPy)|0;
+      for(let hudSmoothPx=-5;hudSmoothPx<=5;hudSmoothPx+=1){
+        if(Math.imul(hudSmoothPx,hudSmoothPx)+Math.imul(hudSmoothPy,hudSmoothPy)>=25)continue;
+        const hudSmoothX=(hudSmoothCx+hudSmoothPx)|0;
+        const hudSmoothPointer=(hudSmoothBase+Math.imul(hudSmoothY,320)+hudSmoothX)|0;
+        const hudSmoothUl=hudSmoothPointer>>>0,hudSmoothUr=(hudSmoothPointer+1)>>>0;
+        const hudSmoothLl=(hudSmoothPointer+320)>>>0,hudSmoothLr=(hudSmoothPointer+321)>>>0;
+        hudSmoothAverage=((m[hudSmoothUl]&63)+(m[hudSmoothUr]&63)+(m[hudSmoothLl]&63)+(m[hudSmoothLr]&63))>>>2;
+        m[hudSmoothUl]=(m[hudSmoothUl]&192)+hudSmoothAverage;
+        m[hudSmoothUr]=(m[hudSmoothUr]&192)+hudSmoothAverage;
+        m[hudSmoothLl]=(m[hudSmoothLl]&192)+hudSmoothAverage;
+        m[hudSmoothLr]=(m[hudSmoothLr]&192)+hudSmoothAverage;
+        hudSmoothLast=hudSmoothPointer;
+      }
+    }
+    m[6929]=(hudSmoothCx+6)|0;m[6930]=(hudSmoothCy+6)|0;m[6931]=6;m[6932]=6;
+    m[6933]=25;m[6934]=hudSmoothAverage;m[6935]=hudSmoothLast;
+    A=6;C=25;D=(hudSmoothLast+321)|0;X=1685024357;
+  } pc=41503; }
+case 41503: {  m[(6923) >>> 0] = ((m[(6920) >>> 0] | 0)) | 0; pc = 41504; }
 case 41504: {  m[(6924) >>> 0] = ((m[(6919) >>> 0] | 0)) | 0; pc = 41505; }
 case 41505: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (41507) | 0; pc = (41511) - 1; continue runner; }
 case 41506: { if(executed!==0&&executed+3>maxInstructions){pc=41506;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(6927) >>> 0] = (308) | 0; pc = 41507; }
 case 41507: {  m[(6928) >>> 0] = (188) | 0; pc = 41508; }
-case 41508: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (41510) | 0; pc = (41530) - 1; continue runner; }
+case 41508: {  {
+    const hudSmoothCx=m[6927]|0,hudSmoothCy=m[6928]|0,hudSmoothBase=1547229;
+    let hudSmoothLast=0,hudSmoothAverage=0;
+    for(let hudSmoothPy=-5;hudSmoothPy<=5;hudSmoothPy+=1){
+      const hudSmoothY=(hudSmoothCy+hudSmoothPy)|0;
+      for(let hudSmoothPx=-5;hudSmoothPx<=5;hudSmoothPx+=1){
+        if(Math.imul(hudSmoothPx,hudSmoothPx)+Math.imul(hudSmoothPy,hudSmoothPy)>=25)continue;
+        const hudSmoothX=(hudSmoothCx+hudSmoothPx)|0;
+        const hudSmoothPointer=(hudSmoothBase+Math.imul(hudSmoothY,320)+hudSmoothX)|0;
+        const hudSmoothUl=hudSmoothPointer>>>0,hudSmoothUr=(hudSmoothPointer+1)>>>0;
+        const hudSmoothLl=(hudSmoothPointer+320)>>>0,hudSmoothLr=(hudSmoothPointer+321)>>>0;
+        hudSmoothAverage=((m[hudSmoothUl]&63)+(m[hudSmoothUr]&63)+(m[hudSmoothLl]&63)+(m[hudSmoothLr]&63))>>>2;
+        m[hudSmoothUl]=(m[hudSmoothUl]&192)+hudSmoothAverage;
+        m[hudSmoothUr]=(m[hudSmoothUr]&192)+hudSmoothAverage;
+        m[hudSmoothLl]=(m[hudSmoothLl]&192)+hudSmoothAverage;
+        m[hudSmoothLr]=(m[hudSmoothLr]&192)+hudSmoothAverage;
+        hudSmoothLast=hudSmoothPointer;
+      }
+    }
+    m[6929]=(hudSmoothCx+6)|0;m[6930]=(hudSmoothCy+6)|0;m[6931]=6;m[6932]=6;
+    m[6933]=25;m[6934]=hudSmoothAverage;m[6935]=hudSmoothLast;
+    A=6;C=25;D=(hudSmoothLast+321)|0;X=1685024357;
+  } pc=41509; }
 case 41509: { if(executed!==0&&executed+1>maxInstructions){pc=41509;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; X = 1685024357; if (d === 0) { pc = 41509; halted = true; outputStatus="halted";outputInstructions=executed;break runner; } pc = (s[--d] | 0) - 1; continue runner; }
 case 41510: { if(executed!==0&&executed+1>maxInstructions){pc=41510;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; m[(6926) >>> 0] = (0) | 0; pc = 41511; }
 case 41511: { if(executed!==0&&executed+9>maxInstructions){pc=41511;outputStatus="budget";outputInstructions=executed;break runner;}executed+=9; A = ((m[(6924) >>> 0] | 0)) | 0; pc = 41512; }

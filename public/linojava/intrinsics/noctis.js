@@ -295,6 +295,7 @@ const SERVICE_IDS = Object.freeze({
   groundTextureDarkline: "service:vhgndtexturedarklinecommon",
   groundPostSurface: "service:vhgndpostsurfacecommon",
   groundSurfaceBlur: "service:vhgndsurfaceblurcommon",
+  groundHudLampSmooth: "service:vhgndhudlampsmooth",
   groundBackgroundCacheSave: "service:vhgndbackgroundcachesave",
   groundBackgroundCacheRestore: "service:vhgndbackgroundcacherestore",
   spaceFade: "service:vhsfade",
@@ -349,6 +350,7 @@ const groundRoundHillAddressCaches = new WeakMap();
 const groundStdCraterAddressCaches = new WeakMap();
 const groundTextureDarklineAddressCaches = new WeakMap();
 const groundPostSurfaceAddressCaches = new WeakMap();
+const groundHudLampSmoothAddressCaches = new WeakMap();
 const spaceFadeAddressCaches = new WeakMap();
 const flareSourceStickAddressCaches = new WeakMap();
 const glowRasterAddressCaches = new WeakMap();
@@ -1377,6 +1379,93 @@ function groundSurfaceBlur(machine, linked) {
   machine.C = first & 0xc0;
   machine.D = (destination - 1) | 0;
   machine.E = (source - 1) | 0;
+}
+
+function groundHudLampSmoothAddresses(linked) {
+  let cached = groundHudLampSmoothAddressCaches.get(linked);
+  if (cached) return cached;
+  cached = {
+    cx: address(linked, "VHGNDsmoothcx"),
+    cy: address(linked, "VHGNDsmoothcy"),
+    x: address(linked, "VHGNDsmoothx"),
+    y: address(linked, "VHGNDsmoothy"),
+    px: address(linked, "VHGNDsmoothpx"),
+    py: address(linked, "VHGNDsmoothpy"),
+    sum: address(linked, "VHGNDsmoothsum"),
+    average: address(linked, "VHGNDsmoothavg"),
+    pointer: address(linked, "VHGNDsmoothptr"),
+    page: noctisBuffer(linked, "RADPT") | 0,
+  };
+  groundHudLampSmoothAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function groundHudLampSmooth(machine, linked) {
+  const memory = machine.memory;
+  const p = groundHudLampSmoothAddresses(linked);
+  const cx = memory[p.cx] | 0;
+  const cy = memory[p.cy] | 0;
+  let lastPointer = 0;
+  let average = 0;
+  for (let py = -5; py <= 5; py += 1) {
+    const y = (cy + py) | 0;
+    for (let px = -5; px <= 5; px += 1) {
+      if (Math.imul(px, px) + Math.imul(py, py) >= 25) continue;
+      const x = (cx + px) | 0;
+      const pointer = (p.page + Math.imul(y, 320) + x) | 0;
+      const upperLeft = pointer >>> 0;
+      const upperRight = (pointer + 1) >>> 0;
+      const lowerLeft = (pointer + 320) >>> 0;
+      const lowerRight = (pointer + 321) >>> 0;
+      average = ((memory[upperLeft] & 63)
+        + (memory[upperRight] & 63)
+        + (memory[lowerLeft] & 63)
+        + (memory[lowerRight] & 63)) >>> 2;
+      memory[upperLeft] = (memory[upperLeft] & 192) + average;
+      memory[upperRight] = (memory[upperRight] & 192) + average;
+      memory[lowerLeft] = (memory[lowerLeft] & 192) + average;
+      memory[lowerRight] = (memory[lowerRight] & 192) + average;
+      lastPointer = pointer;
+    }
+  }
+  memory[p.x] = (cx + 6) | 0;
+  memory[p.y] = (cy + 6) | 0;
+  memory[p.px] = 6;
+  memory[p.py] = 6;
+  memory[p.sum] = 25;
+  memory[p.average] = average;
+  memory[p.pointer] = lastPointer;
+  machine.A = 6;
+  machine.C = 25;
+  machine.D = (lastPointer + 321) | 0;
+  machine.X = LINO_DONE;
+}
+
+function groundHudLampSmoothInline(linked) {
+  const p = groundHudLampSmoothAddresses(linked);
+  return `{
+    const hudSmoothCx=m[${p.cx}]|0,hudSmoothCy=m[${p.cy}]|0,hudSmoothBase=${p.page};
+    let hudSmoothLast=0,hudSmoothAverage=0;
+    for(let hudSmoothPy=-5;hudSmoothPy<=5;hudSmoothPy+=1){
+      const hudSmoothY=(hudSmoothCy+hudSmoothPy)|0;
+      for(let hudSmoothPx=-5;hudSmoothPx<=5;hudSmoothPx+=1){
+        if(Math.imul(hudSmoothPx,hudSmoothPx)+Math.imul(hudSmoothPy,hudSmoothPy)>=25)continue;
+        const hudSmoothX=(hudSmoothCx+hudSmoothPx)|0;
+        const hudSmoothPointer=(hudSmoothBase+Math.imul(hudSmoothY,320)+hudSmoothX)|0;
+        const hudSmoothUl=hudSmoothPointer>>>0,hudSmoothUr=(hudSmoothPointer+1)>>>0;
+        const hudSmoothLl=(hudSmoothPointer+320)>>>0,hudSmoothLr=(hudSmoothPointer+321)>>>0;
+        hudSmoothAverage=((m[hudSmoothUl]&63)+(m[hudSmoothUr]&63)+(m[hudSmoothLl]&63)+(m[hudSmoothLr]&63))>>>2;
+        m[hudSmoothUl]=(m[hudSmoothUl]&192)+hudSmoothAverage;
+        m[hudSmoothUr]=(m[hudSmoothUr]&192)+hudSmoothAverage;
+        m[hudSmoothLl]=(m[hudSmoothLl]&192)+hudSmoothAverage;
+        m[hudSmoothLr]=(m[hudSmoothLr]&192)+hudSmoothAverage;
+        hudSmoothLast=hudSmoothPointer;
+      }
+    }
+    m[${p.x}]=(hudSmoothCx+6)|0;m[${p.y}]=(hudSmoothCy+6)|0;m[${p.px}]=6;m[${p.py}]=6;
+    m[${p.sum}]=25;m[${p.average}]=hudSmoothAverage;m[${p.pointer}]=hudSmoothLast;
+    A=6;C=25;D=(hudSmoothLast+321)|0;X=${LINO_DONE};
+  }`;
 }
 
 function compareFloat64Service(machine, linked) {
@@ -13809,6 +13898,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.groundTextureDarkline]: groundTextureDarkline,
     [SERVICE_IDS.groundPostSurface]: groundPostSurface,
     [SERVICE_IDS.groundSurfaceBlur]: groundSurfaceBlur,
+    [SERVICE_IDS.groundHudLampSmooth]: groundHudLampSmooth,
     [SERVICE_IDS.groundBackgroundCacheSave]: (machine, linked) => {
       groundBackgroundCacheCopy(machine, linked, false);
     },
@@ -14091,6 +14181,9 @@ export function createNoctisIntrinsics(overrides = {}) {
   }
   if (!Object.hasOwn(overrides, SERVICE_IDS.xMul32u)) {
     implementations[SERVICE_IDS.xMul32u].inline = xMul32uInline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.groundHudLampSmooth)) {
+    implementations[SERVICE_IDS.groundHudLampSmooth].inline = groundHudLampSmoothInline;
   }
   if (!Object.hasOwn(overrides, SERVICE_IDS.alphaDim)) {
     implementations[SERVICE_IDS.alphaDim].inline = () => alphaDimInline("A", "B");
