@@ -285,6 +285,7 @@ const SERVICE_IDS = Object.freeze({
   surfaceNegate: "service:sunegate",
   surfaceRandomPattern: "service:surndpat",
   surfaceSda: "service:susda",
+  starMaskPage: "service:vhtmaskpagecommon",
   paletteShade: "service:palshade",
   paletteTavola: "service:paltavola",
   groundRoundHill: "service:grroundhill",
@@ -1379,6 +1380,24 @@ function maskStarPage(machine, linked) {
   for (let index = 0; index < 58240; index += 1) {
     memory[base + index] = (memory[base + index] & 0x3f) + 0x40;
   }
+}
+
+function maskStarPageService(machine, linked) {
+  const memory = machine.memory;
+  const indexAddress = address(linked, "VHTmaski");
+  const base = (address(linked, "nw")
+    + value(memory, linked, "VHTmaskbase")) | 0;
+  let index = memory[indexAddress] | 0;
+  let pixel = 0;
+  do {
+    const pointer = (base + index) >>> 0;
+    pixel = ((memory[pointer] | 0) & 0x3f) + 0x40;
+    memory[pointer] = pixel;
+    index = (index + 1) | 0;
+  } while (index < 58240);
+  memory[indexAddress] = index;
+  machine.A = index;
+  machine.C = pixel;
 }
 
 function cycleStarTexture(machine, linked) {
@@ -13649,6 +13668,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.surfaceNegate]: surfaceNegate,
     [SERVICE_IDS.surfaceRandomPattern]: surfaceRandomPattern,
     [SERVICE_IDS.surfaceSda]: surfaceSda,
+    [SERVICE_IDS.starMaskPage]: maskStarPageService,
     [SERVICE_IDS.paletteShade]: paletteShade,
     [SERVICE_IDS.paletteTavola]: paletteTavola,
     [SERVICE_IDS.groundRoundHill]: groundRoundHill,
