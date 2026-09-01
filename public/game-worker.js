@@ -250,6 +250,7 @@ function instructionProfileSummary(limit = 50) {
     aliases.set(alias.instruction, names);
   }
   const byLabel = new Map();
+  const byLabelEntry = new Map();
   const byModule = new Map();
   const byOperation = new Map();
   const topInstructions = [];
@@ -267,6 +268,11 @@ function instructionProfileSummary(limit = 50) {
     const moduleId = instruction?.moduleId ?? instruction?.sourceId ?? "(unknown)";
     const operation = instruction?.op ?? "(unknown)";
     byLabel.set(currentLabel, (byLabel.get(currentLabel) ?? 0) + count);
+    if (labels) {
+      for (const label of labels) {
+        byLabelEntry.set(label, (byLabelEntry.get(label) ?? 0) + count);
+      }
+    }
     byModule.set(moduleId, (byModule.get(moduleId) ?? 0) + count);
     byOperation.set(operation, (byOperation.get(operation) ?? 0) + count);
     topInstructions.push({
@@ -285,7 +291,8 @@ function instructionProfileSummary(limit = 50) {
     schema: 1,
     totalInstructions,
     activeInstructions,
-    byLabel: rankedProfileTotals(byLabel),
+    byLabel: rankedProfileTotals(byLabel, byLabel.size),
+    byLabelEntry: rankedProfileTotals(byLabelEntry, byLabelEntry.size),
     byModule: rankedProfileTotals(byModule),
     byOperation: rankedProfileTotals(byOperation),
     topInstructions: topInstructions.slice(0, limit),
