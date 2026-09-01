@@ -6496,8 +6496,53 @@ case 6051: { if(executed!==0&&executed+4>maxInstructions){pc=6051;outputStatus="
 case 6052: {  m[(2440) >>> 0] = (0) | 0; pc = 6053; }
 case 6053: {  m[(2441) >>> 0] = (0) | 0; pc = 6054; }
 case 6054: {  X = 1685024357; if (d === 0) { pc = 6054; halted = true; outputStatus="halted";outputInstructions=executed;break runner; } pc = (s[--d] | 0) - 1; continue runner; }
-case 6055: { if(executed!==0&&executed+1>maxInstructions){pc=6055;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6057) | 0; pc = (6062) - 1; continue runner; }
-case 6056: { if(executed!==0&&executed+1>maxInstructions){pc=6056;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6058) | 0; pc = (5727) - 1; continue runner; }
+case 6055: { if(executed!==0&&executed+2>maxInstructions){pc=6055;outputStatus="budget";outputInstructions=executed;break runner;}executed+=2; {
+    let xrTemporary=(m[2463]-16383)|0;
+    const xrMantissaHigh=m[2464]|0,xrMantissaLow=m[2465]|0;
+    m[2537]=0;
+    if((xrTemporary&1)!==0){m[2538]=0;m[2539]=xrMantissaLow;m[2540]=xrMantissaHigh;xrTemporary=(xrTemporary-1)|0;}
+    else{m[2538]=xrMantissaLow<<31;m[2539]=((xrMantissaLow>>>1)|(xrMantissaHigh<<31))|0;m[2540]=xrMantissaHigh>>>1;}
+    let xrRootHigh=0,xrRootLow=0,xrRemainder0=0,xrRemainder1=0,xrRemainder2=0;
+    let xrCursor=2540,xrActiveLimb=m[xrCursor]|0,xrPairs=16,xrCarry=0,xrB=0,xrC=0,xrD=0,xrE=0;
+    m[xrCursor]=0;
+    for(;;){
+      xrE=xrActiveLimb;xrActiveLimb<<=2;xrE>>>=30;
+      xrRemainder2=((xrRemainder2<<2)|(xrRemainder1>>>30))|0;
+      xrRemainder1=((xrRemainder1<<2)|(xrRemainder0>>>30))|0;
+      xrRemainder0=((xrRemainder0<<2)|xrE)|0;
+      xrE=xrRootLow>>>31;xrRootHigh=((xrRootHigh<<1)|xrE)|0;xrRootLow<<=1;
+      xrCarry=xrRootHigh>>>31;xrB=xrRootLow>>>31;xrC=((xrRootHigh<<1)|xrB)|0;xrD=((xrRootLow<<1)|1)|0;
+      let xrAccept;xrB=xrCarry;
+      if((xrRemainder2>>>0)>(xrCarry>>>0))xrAccept=true;
+      else if((xrRemainder2>>>0)<(xrCarry>>>0))xrAccept=false;
+      else{xrB=xrC;if((xrRemainder1>>>0)>(xrC>>>0))xrAccept=true;
+        else if((xrRemainder1>>>0)<(xrC>>>0))xrAccept=false;
+        else{xrB=xrD;xrAccept=(xrRemainder0>>>0)>=(xrD>>>0);}}
+      if(xrAccept){
+        xrB=xrD;let xrBorrow=(xrRemainder0>>>0)<(xrD>>>0)?1:0;xrRemainder0=(xrRemainder0-xrD)|0;
+        xrB=xrC;const xrMiddleBorrow=(xrRemainder1>>>0)<(xrC>>>0)||(xrRemainder1===xrC&&xrBorrow!==0);
+        xrRemainder1=(xrRemainder1-xrC-xrBorrow)|0;xrE=xrMiddleBorrow?1:0;
+        xrRemainder2=(xrRemainder2-xrCarry-xrE)|0;xrRootLow=(xrRootLow+1)|0;if(xrRootLow===0)xrRootHigh=(xrRootHigh+1)|0;
+      }
+      xrPairs=(xrPairs-1)|0;if(xrPairs!==0)continue;xrCursor=(xrCursor-1)|0;
+      if(xrCursor<2537)break;xrB=xrCursor;xrActiveLimb=m[xrCursor]|0;m[xrCursor]=0;xrPairs=16;
+    }
+    xrE=0;
+    if((xrRootLow&65535)===0){xrRemainder1=(xrRemainder1-1)|0;if(xrRemainder1===-1){xrRemainder2=(xrRemainder2-1)|0;if(xrRemainder2===-1)xrE=-1;}}
+    let xrIncrement=xrE!==0||xrRemainder2!==0;
+    if(!xrIncrement){xrB=xrRootHigh;if((xrRemainder1>>>0)>(xrRootHigh>>>0))xrIncrement=true;
+      else if(xrRemainder1===xrRootHigh){xrB=xrRootLow;xrIncrement=(xrRemainder0>>>0)>(xrRootLow>>>0);}}
+    if(xrIncrement){xrRootLow=(xrRootLow+1)|0;if(xrRootLow===0)xrRootHigh=(xrRootHigh+1)|0;}
+    let xrOutputHigh=xrRootHigh,xrOutputLow=xrRootLow;
+    if(xrRootHigh===0&&xrRootLow===0){xrOutputHigh=2147483648|0;xrOutputLow=0;xrTemporary=(xrTemporary+1)|0;}
+    const xrExponent=((xrTemporary/2)|0)+16383;
+    m[2514]=xrTemporary;m[2541]=xrRootHigh;m[2542]=xrRootLow;
+    m[2543]=xrActiveLimb;m[2544]=xrPairs;m[2545]=xrCarry;m[2546]=xrCursor;
+    m[2547]=xrRemainder0;m[2548]=xrRemainder1;m[2549]=xrRemainder2;m[2550]=xrE;
+    m[2464]=xrOutputHigh;m[2465]=xrOutputLow;m[2463]=xrExponent;m[2462]=0;
+    A=xrExponent;B=xrB;C=xrC;D=xrD;E=xrE;X=1685024357;
+  } pc=6056; }
+case 6056: {  if (d === s.length) { const n = new Int32Array(s.length * 2); n.set(s); s = n; } s[d++] = (6058) | 0; pc = (5727) - 1; continue runner; }
 case 6057: { if(executed!==0&&executed+1>maxInstructions){pc=6057;outputStatus="budget";outputInstructions=executed;break runner;}executed+=1; X = 1685024357; if (d === 0) { pc = 6057; halted = true; outputStatus="halted";outputInstructions=executed;break runner; } pc = (s[--d] | 0) - 1; continue runner; }
 case 6058: { if(executed!==0&&executed+3>maxInstructions){pc=6058;outputStatus="budget";outputInstructions=executed;break runner;}executed+=3; m[(2440) >>> 0] = (0) | 0; pc = 6059; }
 case 6059: {  m[(2441) >>> 0] = (0) | 0; pc = 6060; }
