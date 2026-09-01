@@ -291,6 +291,7 @@ const SERVICE_IDS = Object.freeze({
   groundStdCrater: "service:grstdcrater",
   groundTextureDarkline: "service:vhgndtexturedarklinecommon",
   groundPostSurface: "service:vhgndpostsurfacecommon",
+  groundSurfaceBlur: "service:vhgndsurfaceblurcommon",
   spaceFade: "service:vhsfade",
   flareSourceStick: "service:vhfsourcestick",
   glowRaster: "service:spglowraster",
@@ -1279,6 +1280,44 @@ function interiorSmooth64(machine, linked) {
     memory[base + index] = (first & 0xc0) | intensity;
   }
   machine.X = LINO_DONE;
+}
+
+function groundSurfaceBlur(machine, linked) {
+  const memory = machine.memory;
+  const passesAddress = address(linked, "VHGNDblurpasses");
+  const countAddress = address(linked, "VHGNDblurcount");
+  const pointerAddress = address(linked, "VHGNDblurp");
+  const valueAddress = address(linked, "VHGNDblurval");
+  const count = value(memory, linked, "VHGNDblursize") | 0;
+  const pixels = count > 0 ? count : 1;
+  const base = noctisBuffer(linked, "RADPT") + 2556;
+  let passes = memory[passesAddress] | 0;
+  let destination = base;
+  let source = base + 320;
+  let first = 0;
+  do {
+    destination = base;
+    source = base + 320;
+    for (let index = 0; index < pixels; index += 1) {
+      first = memory[source] | 0;
+      const intensity = ((first & 0x3f)
+        + (memory[source + 1] & 0x3f)
+        + (memory[source + 320] & 0x3f)
+        + (memory[source + 321] & 0x3f)) >>> 2;
+      memory[destination] = (first & 0xc0) | intensity;
+      destination += 1;
+      source += 1;
+    }
+    passes = (passes - 1) | 0;
+  } while (passes > 0);
+  memory[pointerAddress] = destination;
+  memory[countAddress] = count > 0 ? 0 : (count - 1) | 0;
+  memory[valueAddress] = first;
+  memory[passesAddress] = passes;
+  machine.A = passes;
+  machine.C = first & 0xc0;
+  machine.D = (destination - 1) | 0;
+  machine.E = (source - 1) | 0;
 }
 
 function compareFloat64Service(machine, linked) {
@@ -13616,6 +13655,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.groundStdCrater]: groundStdCrater,
     [SERVICE_IDS.groundTextureDarkline]: groundTextureDarkline,
     [SERVICE_IDS.groundPostSurface]: groundPostSurface,
+    [SERVICE_IDS.groundSurfaceBlur]: groundSurfaceBlur,
     [SERVICE_IDS.spaceFade]: spaceFade,
     [SERVICE_IDS.flareSourceStick]: flareSourceStick,
     [SERVICE_IDS.glowRaster]: glowRaster,
