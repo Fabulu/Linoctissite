@@ -234,8 +234,11 @@ async function runProfile(options) {
       }, null, 2)}`);
     }
     const startupSeconds = (performance.now() - startupStartedAt) / 1000;
-    await page.evaluate(() => globalThis.__linoRuntime.postMessage({ type: "runtimeSnapshot" }));
-    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    await page.evaluate(() => {
+      globalThis.__linoWorkerSnapshot = null;
+      globalThis.__linoRuntime.postMessage({ type: "runtimeSnapshot" });
+    });
+    await page.waitForFunction(() => globalThis.__linoWorkerSnapshot !== null, null, { timeout: 10_000 });
     const readyState = await page.evaluate(() => ({
       crash: document.querySelector("#crash-report")?.textContent,
       crashHidden: document.querySelector("#crash-panel")?.hidden,
@@ -248,6 +251,9 @@ async function runProfile(options) {
     if (!readyState.realWorker) throw new Error("profile did not use the default module worker");
     if (readyState.worker?.fastBootstrap !== false) {
       throw new Error("profile bootstrap scheduler remained active at the measurement boundary");
+    }
+    if (readyState.worker?.budgetYieldStrategy !== "scheduler-yield") {
+      throw new Error(`profile used ${readyState.worker?.budgetYieldStrategy ?? "unknown"} budget yielding`);
     }
 
     await page.locator("#game").focus();
@@ -301,6 +307,7 @@ async function runProfile(options) {
         clockSeconds: options.clockSeconds,
         defaultModuleWorker: true,
         fastBootstrapEndedBeforeMeasurement: true,
+        budgetYieldStrategy: readyState.worker.budgetYieldStrategy,
         runtimeId: String(manifest.runtimeId ?? "unversioned"),
         checkpointPath: options.checkpoint,
         checkpoint: checkpointRecord,

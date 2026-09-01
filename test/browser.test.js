@@ -84,7 +84,8 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
         ?.match(/^Noctis \/ (\d+) presentations/);
       const crashed = !document.querySelector("#crash-panel")?.hidden;
       return crashed || (match && Number(match[1]) > 0
-        && globalThis.__linoMetrics?.simulationTicks > 0);
+        && globalThis.__linoMetrics?.simulationTicks > 0
+        && globalThis.__linoMetrics?.simulationFps > 0);
     }, null, { timeout: 240_000 });
   } catch (error) {
     const diagnostic = await page.evaluate(() => ({
@@ -97,6 +98,12 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
       consoleErrors, diagnostic, failedRequests, pageErrors,
     }, null, 2)}`);
   }
+
+  await page.evaluate(() => {
+    globalThis.__linoWorkerSnapshot = null;
+    globalThis.__linoRuntime.postMessage({ type: "runtimeSnapshot" });
+  });
+  await page.waitForFunction(() => globalThis.__linoWorkerSnapshot?.budgetYieldStrategy);
 
   const state = await page.evaluate(() => {
     const canvas = document.querySelector("#game");
@@ -123,6 +130,7 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
       stageVisible: !document.querySelector("#game-stage").hidden,
       status: document.querySelector("#status").textContent,
       width: canvas.width,
+      worker: globalThis.__linoWorkerSnapshot,
     };
   });
 
@@ -146,6 +154,8 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   assert.ok(state.metrics.cumulativeInstructions > 0);
   assert.ok(state.metrics.runnerMillisecondsPerPresentation >= 0);
   assert.ok(state.metrics.instructionsPerPresentation > 0);
+  assert.equal(state.worker.budgetYieldStrategy, "scheduler-yield");
+  assert.equal(state.worker.fastBootstrap, false);
 
   const initialFrames = Number(state.status.match(/^Noctis \/ (\d+) presentations/)[1]);
   await page.evaluate(() => {

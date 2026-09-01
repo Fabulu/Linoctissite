@@ -219,6 +219,12 @@ function symbolValues(names, lengths = {}) {
 }
 
 const runChannel = workerScope ? new MessageChannel() : null;
+const browserScheduler = workerScope
+  && typeof globalThis.scheduler?.yield === "function"
+  ? globalThis.scheduler
+  : null;
+const budgetYieldStrategy = browserScheduler ? "scheduler-yield" : "timer";
+let yieldedRun = false;
 if (runChannel) {
   runChannel.port1.addEventListener("message", () => {
     runQueued = false;
@@ -234,12 +240,31 @@ function queueRun(delay = 0, yieldToHost = false) {
     if (delay > 0) delayedRun = setTimeout(() => { delayedRun = 0; }, delay);
     return;
   }
-  if (delay > 0 || yieldToHost) {
+  if (delay > 0) {
     delayedRun = setTimeout(() => {
       delayedRun = 0;
       runQueued = false;
       runMachine();
-    }, Math.max(0, delay));
+    }, delay);
+  } else if (yieldToHost && browserScheduler) {
+    yieldedRun = true;
+    browserScheduler.yield().then(() => {
+      yieldedRun = false;
+      runQueued = false;
+      runMachine();
+    }, (error) => {
+      yieldedRun = false;
+      runQueued = false;
+      running = false;
+      emitMessage({ type: "error", message: error?.stack || error?.message || String(error),
+        packet: crashPacket(error, "schedule") });
+    });
+  } else if (yieldToHost) {
+    delayedRun = setTimeout(() => {
+      delayedRun = 0;
+      runQueued = false;
+      runMachine();
+    }, 0);
   } else runChannel.port2.postMessage(0);
 }
 
@@ -365,9 +390,8 @@ function runMachine() {
     // two schedulers and drops a nominal 60 Hz run toward 30 Hz.
     const delay = result.sleepMilliseconds > 0 ? result.sleepMilliseconds : 0;
     // Long Lino redraws can consume several runner budgets without reaching a
-    // presentation. Yield through the worker event loop between those slices
-    // so pointer releases and other host messages cannot be starved by our
-    // private MessageChannel queue.
+    // presentation. Scheduler.yield keeps host messages responsive without the
+    // repeated-timer clamp; older workers retain the conservative timer path.
     const yieldToHost = !producedFrame && result.status === "budget" && !fastBootstrap;
     if (!waitingForFrameCredit) queueRun(delay, yieldToHost);
   } catch (error) {
@@ -570,6 +594,8 @@ function handleMessage(message) {
           .filter((item) => item.instruction === pc).map((item) => item.name),
         runQueued,
         delayedRun: Boolean(delayedRun),
+        yieldedRun,
+        budgetYieldStrategy,
         waitingForFrameCredit,
         fastBootstrap,
         frameCredits,
@@ -603,7 +629,7 @@ export function createForegroundRuntime(onMessage) {
     removeEventListener: target.removeEventListener.bind(target),
     postMessage: (message) => handleMessage(message),
     tick() {
-      if (!runQueued || delayedRun || !running) return;
+      if (!runQueued || delayedRun || yieldedRun || !running) return;
       runQueued = false;
       runMachine();
     },
