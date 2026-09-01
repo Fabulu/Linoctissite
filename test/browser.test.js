@@ -55,7 +55,7 @@ async function close(server) {
   });
 }
 
-test("current shared-Lino project boots and paints in a real browser worker", {
+test("current shared-Lino project boots, paints, and survives fullscreen GOES focus", {
   timeout: 300_000,
 }, async (context) => {
   const server = createStaticServer();
@@ -133,4 +133,52 @@ test("current shared-Lino project boots and paints in a real browser worker", {
   assert.ok(state.width >= 320 && state.height >= 200);
   assert.equal(state.nonUniform, true);
   assert.match(state.status, /^Noctis \/ [1-9]\d* game frames/);
+
+  const initialFrames = Number(state.status.match(/^Noctis \/ (\d+) game frames/)[1]);
+  await page.evaluate(() => {
+    const runtime = globalThis.__linoRuntime;
+    const postMessage = runtime.postMessage.bind(runtime);
+    globalThis.__linoTestInput = [];
+    runtime.postMessage = (...args) => {
+      const message = args[0];
+      if (["ascii", "clearKeys", "key", "pointer"].includes(message?.type)) {
+        globalThis.__linoTestInput.push({ ...message });
+      }
+      return postMessage(...args);
+    };
+  });
+
+  await page.locator("#game").focus();
+  await page.keyboard.press("Control+Shift+F");
+  await page.waitForFunction(() => document.fullscreenElement?.id === "game-stage");
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "fullscreen-game");
+  await page.keyboard.press("g");
+  await page.keyboard.type("oes");
+
+  const fullscreen = page.locator("#fullscreen-game");
+  const bounds = await fullscreen.boundingBox();
+  assert.ok(bounds);
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down({ button: "right" });
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await page.mouse.up({ button: "right" });
+
+  await page.locator("#exit-fullscreen").click();
+  await page.waitForFunction(() => document.fullscreenElement === null);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "game");
+  await page.keyboard.type("x");
+  await page.waitForFunction((minimum) => {
+    const match = document.querySelector("#status")?.textContent
+      ?.match(/^Noctis \/ (\d+) game frames/);
+    return match && Number(match[1]) > minimum;
+  }, initialFrames, { timeout: 30_000 });
+
+  const input = await page.evaluate(() => globalThis.__linoTestInput);
+  assert.deepEqual(
+    input.filter((message) => message.type === "ascii").map((message) => message.value),
+    [103, 111, 101, 115, 120],
+  );
+  assert.ok(input.some((message) => message.type === "pointer" && message.buttons === 8));
+  assert.ok(input.some((message) => message.type === "pointer" && message.buttons === 0));
+  assert.ok(input.some((message) => message.type === "clearKeys"));
 });
