@@ -306,7 +306,21 @@ function movePointer(event, target) {
 }
 
 async function requestGameFullscreen() {
-  if (!document.fullscreenElement) await gameStage.requestFullscreen();
+  try {
+    if (document.fullscreenElement) return;
+    if (typeof gameStage.requestFullscreen !== "function") throw new Error("Fullscreen API is unavailable");
+    await gameStage.requestFullscreen();
+  } catch (error) {
+    status.textContent = `Full screen unavailable: ${error?.message ?? error}`;
+  }
+}
+
+async function exitGameFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+  } catch (error) {
+    status.textContent = `Unable to exit full screen: ${error?.message ?? error}`;
+  }
 }
 
 function releasePointer(event, target) {
@@ -331,7 +345,7 @@ function releasePointer(event, target) {
   sendPointer(0, 0, true);
   if (linoFullscreenPress && event.button === 0 && target === canvas
       && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY)) {
-    requestGameFullscreen().catch((error) => { status.textContent = `Full screen unavailable: ${error.message}`; });
+    void requestGameFullscreen();
   }
   linoFullscreenPress = false;
   linoWindowDrag = null;
@@ -414,15 +428,15 @@ function linoKey(code) {
   if (/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(code)) return `key${code.toLowerCase()}`;
   if (/^Numpad[0-9]$/.test(code)) return `key${code.slice(6)}n`;
   return ({
-    Backspace: "keybackspace", Tab: "keytab", Enter: "keyreturn", Escape: "keyescape",
-    Space: "keyspacebar", Insert: "keyinsert", Delete: "keydelete", Home: "keyhome", End: "keyend",
-    PageUp: "keypgup", PageDown: "keypgdn", ArrowUp: "keyup", ArrowDown: "keydown",
-    ArrowLeft: "keyleft", ArrowRight: "keyright", NumpadDivide: "keyslash",
-    NumpadMultiply: "keyasterisk", NumpadSubtract: "keyhyphen", NumpadAdd: "keycross",
-    NumpadDecimal: "keydot", ShiftLeft: "keyshift", ShiftRight: "keyshift",
-    ControlLeft: "keycontrol", ControlRight: "keycontrol", AltLeft: "keyalternate",
-    AltRight: "keyalternate", Pause: "keypause", NumLock: "keynumlock",
-    CapsLock: "keycapslock", ScrollLock: "keyscrolllock",
+    Backspace: "keybackspace", Tab: "keytab", Enter: "keyreturn", NumpadEnter: "keyreturn",
+    Escape: "keyescape", Space: "keyspacebar", Insert: "keyinsert", Delete: "keydelete",
+    Home: "keyhome", End: "keyend", PageUp: "keypgup", PageDown: "keypgdn",
+    ArrowUp: "keyup", ArrowDown: "keydown", ArrowLeft: "keyleft", ArrowRight: "keyright",
+    NumpadDivide: "keyslash", NumpadMultiply: "keyasterisk", NumpadSubtract: "keyhyphen",
+    NumpadAdd: "keycross", NumpadDecimal: "keydot", ShiftLeft: "keyshift",
+    ShiftRight: "keyshift", ControlLeft: "keycontrol", ControlRight: "keycontrol",
+    AltLeft: "keyalternate", AltRight: "keyalternate", Pause: "keypause",
+    NumLock: "keynumlock", CapsLock: "keycapslock", ScrollLock: "keyscrolllock",
   })[code];
 }
 
@@ -432,40 +446,69 @@ function asciiInput(event) {
   return ({ Enter: 13, Tab: 9, Backspace: 8, Escape: 27 })[event.key] ?? null;
 }
 
+const pressedKeyCodes = new Set();
+const linoKeyCounts = new Map();
+
+function updateLinoKey(code, down) {
+  const key = linoKey(code);
+  if (!key) return null;
+  if (down) {
+    if (pressedKeyCodes.has(code)) return key;
+    pressedKeyCodes.add(code);
+    const count = linoKeyCounts.get(key) ?? 0;
+    linoKeyCounts.set(key, count + 1);
+    if (count === 0) worker.postMessage({ type: "key", name: key, down: true });
+  } else if (pressedKeyCodes.delete(code)) {
+    const count = (linoKeyCounts.get(key) ?? 1) - 1;
+    if (count === 0) {
+      linoKeyCounts.delete(key);
+      worker.postMessage({ type: "key", name: key, down: false });
+    } else linoKeyCounts.set(key, count);
+  }
+  return key;
+}
+
+function clearKeyboard() {
+  pressedKeyCodes.clear();
+  linoKeyCounts.clear();
+  worker.postMessage({ type: "clearKeys" });
+}
+
 for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("keydown", (event) => {
-    const key = linoKey(event.code);
-    if (key) worker.postMessage({ type: "key", name: key, down: true });
+    const key = updateLinoKey(event.code, true);
     const ascii = asciiInput(event);
     if (ascii !== null) worker.postMessage({ type: "ascii", value: ascii });
     if (key || ascii !== null) event.preventDefault();
   });
   target.addEventListener("keyup", (event) => {
-    const key = linoKey(event.code);
-    if (key) worker.postMessage({ type: "key", name: key, down: false });
+    const key = updateLinoKey(event.code, false);
     if (key) event.preventDefault();
   });
 }
 
 window.addEventListener("blur", () => {
   cancelActivePointer();
-  worker.postMessage({ type: "clearKeys" });
+  clearKeyboard();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) cancelActivePointer();
+  if (document.hidden) {
+    cancelActivePointer();
+    clearKeyboard();
+  }
 });
 window.addEventListener("resize", () => worker.postMessage({
   type: "physical", width: Math.max(1, window.innerWidth), height: Math.max(1, window.innerHeight),
 }));
 document.addEventListener("pointerdown", () => { void pcmHost.unlock(); }, { passive: true });
 document.addEventListener("keydown", () => { void pcmHost.unlock(); });
-exitFullscreenButton.addEventListener("click", () => document.exitFullscreen());
-fullscreenCanvas.addEventListener("dblclick", () => document.exitFullscreen());
-document.addEventListener("keydown", async (event) => {
+exitFullscreenButton.addEventListener("click", () => { void exitGameFullscreen(); });
+fullscreenCanvas.addEventListener("dblclick", () => { void exitGameFullscreen(); });
+document.addEventListener("keydown", (event) => {
   if (!(event.ctrlKey && event.shiftKey && event.code === "KeyF")) return;
   event.preventDefault();
-  if (document.fullscreenElement) await document.exitFullscreen();
-  else await gameStage.requestFullscreen();
+  if (document.fullscreenElement) void exitGameFullscreen();
+  else void requestGameFullscreen();
 });
 document.addEventListener("fullscreenchange", () => {
   const active = document.fullscreenElement === gameStage;

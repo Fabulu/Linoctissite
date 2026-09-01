@@ -150,7 +150,8 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
 
   await page.locator("#game").focus();
   await page.keyboard.press("Control+Shift+F");
-  await page.waitForFunction(() => document.fullscreenElement?.id === "game-stage");
+  await page.waitForFunction(() => document.fullscreenElement?.id === "game-stage"
+    && document.activeElement?.id === "fullscreen-game");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "fullscreen-game");
   await page.keyboard.press("g");
   await page.keyboard.type("oes");
@@ -164,7 +165,8 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   await page.mouse.up({ button: "right" });
 
   await page.locator("#exit-fullscreen").click();
-  await page.waitForFunction(() => document.fullscreenElement === null);
+  await page.waitForFunction(() => document.fullscreenElement === null
+    && document.activeElement?.id === "game");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "game");
   await page.keyboard.type("x");
   await page.waitForFunction((minimum) => {
@@ -181,4 +183,42 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   assert.ok(input.some((message) => message.type === "pointer" && message.buttons === 8));
   assert.ok(input.some((message) => message.type === "pointer" && message.buttons === 0));
   assert.ok(input.some((message) => message.type === "clearKeys"));
+
+  const keyboardInput = await page.evaluate(() => {
+    globalThis.__linoTestInput.length = 0;
+    const target = document.querySelector("#game");
+    const send = (type, code, key, modifiers = {}) => target.dispatchEvent(new KeyboardEvent(type, {
+      bubbles: true, cancelable: true, code, key, ...modifiers,
+    }));
+    send("keydown", "ControlLeft", "Control", { ctrlKey: true });
+    send("keydown", "ControlRight", "Control", { ctrlKey: true });
+    send("keyup", "ControlLeft", "Control", { ctrlKey: true });
+    send("keyup", "ControlRight", "Control");
+    send("keydown", "NumpadEnter", "Enter");
+    send("keyup", "NumpadEnter", "Enter");
+    send("keydown", "KeyW", "w", { ctrlKey: true });
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    delete document.hidden;
+    send("keyup", "KeyW", "w");
+    return globalThis.__linoTestInput;
+  });
+  assert.deepEqual(
+    keyboardInput.filter((message) => message.type === "key"),
+    [
+      { type: "key", name: "keycontrol", down: true },
+      { type: "key", name: "keycontrol", down: false },
+      { type: "key", name: "keyreturn", down: true },
+      { type: "key", name: "keyreturn", down: false },
+      { type: "key", name: "keyw", down: true },
+    ],
+  );
+  assert.deepEqual(
+    keyboardInput.filter((message) => message.type === "ascii"),
+    [{ type: "ascii", value: 13 }],
+  );
+  assert.equal(keyboardInput.at(-1)?.type, "clearKeys");
+  assert.deepEqual(consoleErrors, []);
+  assert.deepEqual(pageErrors, []);
+  assert.deepEqual(failedRequests, []);
 });

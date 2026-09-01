@@ -122,6 +122,8 @@ let gameTop = 0;
 let gameWidth = 320;
 let gameHeight = 200;
 const heldKeys = Object.create(null);
+const pressedKeyCodes = new Set();
+const linoKeyCounts = new Map();
 const consoleInput = [];
 let frameCount = 0;
 let frameRate = 0;
@@ -424,7 +426,21 @@ function insideLinoBounds(name, x, y) {
 }
 
 async function requestGameFullscreen() {
-  if (!document.fullscreenElement) await gameStage.requestFullscreen();
+  try {
+    if (document.fullscreenElement) return;
+    if (typeof gameStage.requestFullscreen !== "function") throw new Error("Fullscreen API is unavailable");
+    await gameStage.requestFullscreen();
+  } catch (error) {
+    status.textContent = `Full screen unavailable: ${error?.message ?? error}`;
+  }
+}
+
+async function exitGameFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+  } catch (error) {
+    status.textContent = `Unable to exit full screen: ${error?.message ?? error}`;
+  }
 }
 
 function scheduleLinoMenuAction() {
@@ -619,9 +635,7 @@ function releasePointer(event, target) {
   pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY, deltaX: 0, deltaY: 0 });
   if (linoFullscreenPress && event.button === 0 && target === canvas
       && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY)) {
-    requestGameFullscreen().catch((error) => {
-      status.textContent = `Full screen unavailable: ${error.message}`;
-    });
+    void requestGameFullscreen();
   }
   linoFullscreenPress = false;
   linoWindowDrag = null;
@@ -720,7 +734,7 @@ function linoKey(code) {
   if (/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(code)) return `key${code.toLowerCase()}`;
   if (/^Numpad[0-9]$/.test(code)) return `key${code.slice(6)}n`;
   return ({
-    Backspace: "keybackspace", Tab: "keytab", Enter: "keyreturn",
+    Backspace: "keybackspace", Tab: "keytab", Enter: "keyreturn", NumpadEnter: "keyreturn",
     Escape: "keyescape", Space: "keyspacebar", Insert: "keyinsert",
     Delete: "keydelete", Home: "keyhome", End: "keyend",
     PageUp: "keypgup", PageDown: "keypgdn", ArrowUp: "keyup",
@@ -740,35 +754,61 @@ function asciiInput(event) {
   return ({ Enter: 13, Tab: 9, Backspace: 8, Escape: 27 })[event.key] ?? null;
 }
 
+function updateLinoKey(code, down) {
+  const key = linoKey(code);
+  if (!key) return null;
+  if (down) {
+    if (pressedKeyCodes.has(code)) return key;
+    pressedKeyCodes.add(code);
+    const count = linoKeyCounts.get(key) ?? 0;
+    linoKeyCounts.set(key, count + 1);
+    if (count === 0) heldKeys[key] = 1;
+  } else if (pressedKeyCodes.delete(code)) {
+    const count = (linoKeyCounts.get(key) ?? 1) - 1;
+    if (count === 0) {
+      linoKeyCounts.delete(key);
+      delete heldKeys[key];
+    } else linoKeyCounts.set(key, count);
+  }
+  return key;
+}
+
+function clearKeyboard() {
+  pressedKeyCodes.clear();
+  linoKeyCounts.clear();
+  for (const key of Object.keys(heldKeys)) delete heldKeys[key];
+}
+
 for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("keydown", (event) => {
-    const key = linoKey(event.code);
-    if (key) heldKeys[key] = 1;
+    const key = updateLinoKey(event.code, true);
     const ascii = asciiInput(event);
     if (ascii !== null) consoleInput.push(ascii);
     if (key || ascii !== null) event.preventDefault();
   });
   target.addEventListener("keyup", (event) => {
-    const key = linoKey(event.code);
-    if (key) delete heldKeys[key];
+    const key = updateLinoKey(event.code, false);
     if (key) event.preventDefault();
   });
 }
 window.addEventListener("blur", () => {
   cancelActivePointer();
-  for (const key of Object.keys(heldKeys)) delete heldKeys[key];
+  clearKeyboard();
 });
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) cancelActivePointer();
+  if (document.hidden) {
+    cancelActivePointer();
+    clearKeyboard();
+  }
 });
 
-exitFullscreenButton.addEventListener("click", () => document.exitFullscreen());
-fullscreenCanvas.addEventListener("dblclick", () => document.exitFullscreen());
-document.addEventListener("keydown", async (event) => {
+exitFullscreenButton.addEventListener("click", () => { void exitGameFullscreen(); });
+fullscreenCanvas.addEventListener("dblclick", () => { void exitGameFullscreen(); });
+document.addEventListener("keydown", (event) => {
   if (!(event.ctrlKey && event.shiftKey && event.code === "KeyF")) return;
   event.preventDefault();
-  if (document.fullscreenElement) await document.exitFullscreen();
-  else await gameStage.requestFullscreen();
+  if (document.fullscreenElement) void exitGameFullscreen();
+  else void requestGameFullscreen();
 });
 document.addEventListener("fullscreenchange", () => {
   const active = document.fullscreenElement === gameStage;

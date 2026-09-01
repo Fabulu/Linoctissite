@@ -56,6 +56,14 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(app, /sleepMilliseconds/);
   assert.match(app, /presentations/);
   assert.match(app, /toFixed\(1\).*FPS/);
+  for (const host of [app, workerHost]) {
+    assert.match(host, /NumpadEnter: "keyreturn"/);
+    assert.match(host, /const pressedKeyCodes = new Set\(\)/);
+    assert.match(host, /const linoKeyCounts = new Map\(\)/);
+    assert.match(host, /visibilitychange[\s\S]*clearKeyboard\(\)/);
+    assert.match(host, /typeof gameStage\.requestFullscreen !== "function"/);
+    assert.match(host, /void exitGameFullscreen\(\)/);
+  }
 });
 
 test("deployment rejects stale pinned runtime artifacts", async () => {
