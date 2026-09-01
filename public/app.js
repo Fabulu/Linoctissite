@@ -116,7 +116,12 @@ let pointerDeltaX = 0;
 let pointerDeltaY = 0;
 const pointerTransitions = [];
 let activePointerTransition = null;
+let activePointerLoop = null;
 let pendingGuiMenu = false;
+let guiMenuActive = false;
+let guiPointerPressPendingRelease = false;
+let gameLoopAddress = -1;
+let menuOnAddress = -1;
 let gameLeft = 0;
 let gameTop = 0;
 let gameWidth = 320;
@@ -334,6 +339,8 @@ const host = {
     pointerMode = mode | 0;
       if (!activePointerTransition && pointerTransitions.length > 0) {
         activePointerTransition = pointerTransitions.shift();
+        activePointerLoop = gameLoopAddress >= 0
+          ? program.machine.memory[gameLoopAddress] | 0 : null;
       }
       const transition = activePointerTransition;
     const deltaX = transition?.deltaX ?? pointerDeltaX;
@@ -383,6 +390,8 @@ const program = await compileProject(entry, resolvers, {
   physicalHeight: Math.max(1, window.innerHeight),
   audioPlayback: pcmHost.supported,
 });
+gameLoopAddress = program.linked.symbols.get("vhgloopcalls")?.value ?? -1;
+menuOnAddress = program.linked.symbols.get("menuon")?.value ?? -1;
 status.textContent = "Starting Noctis from its real Lino entry point...";
 
 function positionBrowserWindow(x, y) {
@@ -490,12 +499,31 @@ function runFrame() {
     const guiIdle = program.linked.labels.get("eclj25");
     if (activePointerTransition && result.status === "yield"
         && guiIdle !== undefined && program.machine.pc === guiIdle) {
-      activePointerTransition = null;
+      const released = activePointerTransition.buttons === 0;
+      const gameScanned = gameLoopAddress < 0
+        || (program.machine.memory[gameLoopAddress] | 0) !== activePointerLoop;
+      if (guiMenuActive || gameScanned) {
+        activePointerTransition = null;
+        activePointerLoop = null;
+        if (guiMenuActive) {
+          if (released) {
+            guiMenuActive = false;
+            guiPointerPressPendingRelease = false;
+          } else guiPointerPressPendingRelease = true;
+        }
+      }
+    }
+    if (guiMenuActive && !guiPointerPressPendingRelease
+        && result.status === "yield" && guiIdle !== undefined
+        && program.machine.pc === guiIdle && menuOnAddress >= 0
+        && (program.machine.memory[menuOnAddress] | 0) === 0) {
+      guiMenuActive = false;
     }
     if (pendingGuiMenu && result.status === "yield") {
       const idle = guiIdle;
       const action = program.linked.labels.get("menubuttonaction");
-      if (idle !== undefined && action !== undefined && program.machine.pc === idle) {
+      if (idle !== undefined && action !== undefined && program.machine.pc === idle
+          && !activePointerTransition && pointerTransitions.length === 0) {
         const machine = program.machine;
         if (machine.depth === machine.stack.length) {
           const grown = new Int32Array(machine.stack.length * 2);
@@ -505,6 +533,8 @@ function runFrame() {
         machine.stack[machine.depth++] = (machine.pc | 0) + 1;
         machine.pc = action;
         pendingGuiMenu = false;
+        guiMenuActive = true;
+        guiPointerPressPendingRelease = false;
       }
     }
     const now = performance.now();

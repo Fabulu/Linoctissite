@@ -12,6 +12,7 @@ let fastBootstrap = false;
 let emitMessage = (message, transfer = []) => globalThis.postMessage(message, transfer);
 
 let program = null;
+let runtimeFiles = null;
 let running = false;
 let pointerX = 0;
 let pointerY = 0;
@@ -32,6 +33,9 @@ let waitingForFrameCredit = false;
 let runQueued = false;
 let delayedRun = 0;
 let pendingGuiMenu = false;
+let guiMenuActive = false;
+let guiPointerPressPendingRelease = false;
+let activePointerLoop = null;
 let presentationFrames = 0;
 let simulationTicks = 0;
 let rateStartedAt = performance.now();
@@ -49,6 +53,8 @@ let pendingRunnerMilliseconds = 0;
 let pendingInstructions = 0;
 let instructionProfileNestedInstructions = 0;
 let gameTimingAddress = -1;
+let gameLoopAddress = -1;
+let menuOnAddress = -1;
 let lastGameTimingCount = 0;
 let lastRun = null;
 let pcmState = { frames: 0, rate: 44100, offset: 0, startedAt: 0, loop: false, paused: false };
@@ -205,6 +211,24 @@ function projectCandidates(sourceRoot, specifier, importer, suffixes) {
   return bases.flatMap((base) => suffixes.map((suffix) => new URL(`${base.href}${suffix}`)));
 }
 
+const runtimeSnapshotSymbols = [
+  "vhsvok", "vhgmode", "vhglanded", "vhgtimingcalls", "vhgloopcalls",
+  "vhghelpshow", "vhgconsole", "vhgconsoleview", "vhgfps", "vhgfpsshow", "vhgfast",
+  "vhaavailable", "vhaplaying", "vhggraphics", "vhgfcsopen", "vhgdevaccess",
+  "vhgdev", "vhgprefs", "vhginfo", "vhgnoticeframes", "vhgnoticeptr",
+  "vhgmenuheld", "vhgmenuhover", "vhgmenux", "vhgmenuy", "pointerstatus",
+  "vhguileft", "vhguitop", "vhguidw", "vhguidh", "menuon",
+  "mgstspeed", "mgpwr", "mgcharge", "mgapreached", "mgipreaching",
+  "mgipreached", "mgaptgt", "vhglocalactive", "vhglocaltarget",
+  "vhglandingselect", "vhglandpending", "vhgfcs9class", "vhgbrowseorigin",
+  "vhgbrowsecursor", "vhgbrowsevalid", "vhgbrowsex", "vhgbrowsey",
+  "vhgbrowsez", "vhttx", "vhtty", "vhttz", "vhgamp", "vhgfinder",
+  "vhgsync", "vhgantirad", "vhgilight", "vhgcollector", "vhglabelstar",
+  "vhglabelbody", "vhggburst", "vhgresetcount", "vhgrescueactive",
+  "vhgautoscreenoff", "vhgrevcontrols", "vhgmenusalwayson", "vhgdepolarize",
+  "vhgesc",
+];
+
 function symbolValues(names, lengths = {}) {
   const memory = program.machine.memory;
   const output = {};
@@ -217,6 +241,20 @@ function symbolValues(names, lengths = {}) {
       : Array.from(memory.subarray(symbol.value, symbol.value + length), (value) => value | 0);
   }
   return output;
+}
+
+function runtimeFileWords(name) {
+  const wanted = canonical(name);
+  const entry = runtimeFiles && [...runtimeFiles]
+    .find(([candidate]) => canonical(candidate) === wanted);
+  if (!entry) return null;
+  const bytes = entry[1];
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return {
+    size: bytes.byteLength,
+    words: Array.from({ length: Math.floor(bytes.byteLength / 4) },
+      (_, index) => view.getInt32(index * 4, true)),
+  };
 }
 
 function instructionProfileRuntimeSample() {
@@ -439,15 +477,37 @@ function runMachine() {
     const guiIdle = program.linked.labels.get("eclj25");
     if (activePointerTransition && result.status === "yield"
         && guiIdle !== undefined && program.machine.pc === guiIdle) {
-      // One browser edge remains the live pointer sample for one complete
-      // iGUI control-loop scan. Only expose the following edge at GUI idle.
-      activePointerTransition = null;
-      publishPointerWorkspace();
+      // iGUI consumes its own drop-down edges at GUI idle. Gameplay clicks
+      // must remain live until the shared Lino frame has passed VHG input;
+      // otherwise a quick press/release can be retired between iGUI's pointer
+      // scan and the accessibility/onboard dispatcher that owns the click.
+      const released = activePointerTransition.buttons === 0;
+      const gameScanned = gameLoopAddress < 0
+        || (program.machine.memory[gameLoopAddress] | 0) !== activePointerLoop;
+      if (guiMenuActive || gameScanned) {
+        activePointerTransition = null;
+        activePointerLoop = null;
+        publishPointerWorkspace();
+        if (guiMenuActive) {
+          if (released) {
+            guiMenuActive = false;
+            guiPointerPressPendingRelease = false;
+          } else guiPointerPressPendingRelease = true;
+        }
+      }
+    }
+    if (guiMenuActive && !guiPointerPressPendingRelease
+        && result.status === "yield" && guiIdle !== undefined
+        && program.machine.pc === guiIdle && menuOnAddress >= 0
+        && (program.machine.memory[menuOnAddress] | 0) === 0) {
+      // Keyboard selection or Escape can close iGUI without a pointer-up edge.
+      guiMenuActive = false;
     }
     if (pendingGuiMenu && result.status === "yield") {
       const idle = guiIdle;
       const action = program.linked.labels.get("menubuttonaction");
-      if (idle !== undefined && action !== undefined && program.machine.pc === idle) {
+      if (idle !== undefined && action !== undefined && program.machine.pc === idle
+          && !activePointerTransition && pointerTransitions.length === 0) {
         const machine = program.machine;
         if (machine.depth === machine.stack.length) {
           const grown = new Int32Array(machine.stack.length * 2);
@@ -459,6 +519,8 @@ function runMachine() {
         machine.stack[machine.depth++] = (machine.pc | 0) + 1;
         machine.pc = action;
         pendingGuiMenu = false;
+        guiMenuActive = true;
+        guiPointerPressPendingRelease = false;
       }
     }
     if (program.machine.halted) {
@@ -492,6 +554,7 @@ async function initialize(message) {
     if (!response.ok) throw new Error(`Unable to load ${filename}`);
     return [name, new Uint8Array(await response.arrayBuffer())];
   })));
+  runtimeFiles = namedFiles;
   const packagedFiles = new Set(namedFiles.keys());
   for (const [name, bytes] of message.files ?? []) {
     const key = canonical(name);
@@ -540,6 +603,8 @@ async function initialize(message) {
       }
       if (!activePointerTransition && pointerTransitions.length > 0) {
         activePointerTransition = pointerTransitions.shift();
+        activePointerLoop = gameLoopAddress >= 0
+          ? program.machine.memory[gameLoopAddress] | 0 : null;
       }
       const transition = activePointerTransition;
       const deltaX = transition?.deltaX ?? pointerDeltaX;
@@ -615,6 +680,8 @@ async function initialize(message) {
     };
   }
   gameTimingAddress = program.linked.symbols.get("vhgtimingcalls")?.value ?? -1;
+  gameLoopAddress = program.linked.symbols.get("vhgloopcalls")?.value ?? -1;
+  menuOnAddress = program.linked.symbols.get("menuon")?.value ?? -1;
   lastGameTimingCount = gameTimingAddress >= 0
     ? program.machine.memory[gameTimingAddress] | 0 : 0;
   const bounds = message.windowBounds;
@@ -709,7 +776,17 @@ function handleMessage(message) {
         lastRun,
         presentationFrames,
         simulationTicks,
-        values: symbolValues(["vhsvok", "vhgmode", "vhglanded", "vhgtimingcalls"]),
+        pendingGuiMenu,
+        guiMenuActive,
+        guiPointerPressPendingRelease,
+        pointerTransitions: pointerTransitions.length,
+        activePointerTransition: activePointerTransition
+          ? { ...activePointerTransition } : null,
+        files: {
+          current: runtimeFileWords("current.lin"),
+          backup: runtimeFileWords("current.bak"),
+        },
+        values: symbolValues(runtimeSnapshotSymbols),
       },
     });
   } else if (message.type === "guiAction" && program && message.name === "menu") {

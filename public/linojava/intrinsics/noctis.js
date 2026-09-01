@@ -236,6 +236,7 @@ const SERVICE_IDS = Object.freeze({
   copyLayerRegion: "service:copyl2lregion",
   uafCopyCommon: "service:uafcopycommon",
   xMul32u: "service:xmul32u",
+  xRootCore: "service:xrootcore",
   compareFloat64: "service:fcmp",
   spaceClear: "service:vhgspaceclear",
   interiorSmooth64: "service:vhginteriorsmooth64",
@@ -344,6 +345,7 @@ const textAddressCaches = new WeakMap();
 const ekeyAddressCaches = new WeakMap();
 const surfaceBulkAddressCaches = new WeakMap();
 const xMul32uAddressCaches = new WeakMap();
+const xRootCoreAddressCaches = new WeakMap();
 const paletteShadeAddressCaches = new WeakMap();
 const paletteTavolaAddressCaches = new WeakMap();
 const groundRoundHillAddressCaches = new WeakMap();
@@ -1579,6 +1581,226 @@ function xMul32uInline(linked) {
     m[${p.xup0}]=xmulP0;m[${p.xup1}]=xmulP1;m[${p.xup2}]=xmulP2;m[${p.xup3}]=xmulP3;
     m[${p.xutmp}]=xmulTmp;m[${p.xumid}]=xmulMid;m[${p.xulo}]=xmulLow;m[${p.xuhi}]=xmulHigh;
     A=xmulHigh;B=xmulMid>>>16;X=${LINO_DONE};
+  }`;
+}
+
+function xRootCoreAddresses(linked) {
+  let cached = xRootCoreAddressCaches.get(linked);
+  if (cached) return cached;
+  cached = {
+    sign: address(linked, "XS"),
+    exponent: address(linked, "XE"),
+    mantissaHigh: address(linked, "XMH"),
+    mantissaLow: address(linked, "XML"),
+    temporary: address(linked, "xtmp"),
+    radicand0: address(linked, "srd0"),
+    radicand1: address(linked, "srd1"),
+    radicand2: address(linked, "srd2"),
+    radicand3: address(linked, "srd3"),
+    rootHigh: address(linked, "sqrh"),
+    rootLow: address(linked, "sqrl"),
+    activeLimb: address(linked, "sqmh"),
+    pairs: address(linked, "sqml"),
+    carry: address(linked, "sqcarry"),
+    cursor: address(linked, "sqstep"),
+    remainder0: address(linked, "srm0"),
+    remainder1: address(linked, "srm1"),
+    remainder2: address(linked, "srm2"),
+    remainder3: address(linked, "srm3"),
+  };
+  xRootCoreAddressCaches.set(linked, cached);
+  return cached;
+}
+
+function xRootCore(machine, linked) {
+  const memory = machine.memory;
+  const p = xRootCoreAddresses(linked);
+  let temporary = (memory[p.exponent] - 16383) | 0;
+  const mantissaHigh = memory[p.mantissaHigh] | 0;
+  const mantissaLow = memory[p.mantissaLow] | 0;
+  memory[p.radicand0] = 0;
+  if ((temporary & 1) !== 0) {
+    memory[p.radicand1] = 0;
+    memory[p.radicand2] = mantissaLow;
+    memory[p.radicand3] = mantissaHigh;
+    temporary = (temporary - 1) | 0;
+  } else {
+    memory[p.radicand1] = mantissaLow << 31;
+    memory[p.radicand2] = ((mantissaLow >>> 1) | (mantissaHigh << 31)) | 0;
+    memory[p.radicand3] = mantissaHigh >>> 1;
+  }
+
+  let rootHigh = 0;
+  let rootLow = 0;
+  let remainder0 = 0;
+  let remainder1 = 0;
+  let remainder2 = 0;
+  let cursor = p.radicand3;
+  let activeLimb = memory[cursor] | 0;
+  memory[cursor] = 0;
+  let pairs = 16;
+  let carry = 0;
+  let b = 0;
+  let c = 0;
+  let d = 0;
+  let e = 0;
+
+  for (;;) {
+    e = activeLimb;
+    activeLimb <<= 2;
+    e >>>= 30;
+    remainder2 = ((remainder2 << 2) | (remainder1 >>> 30)) | 0;
+    remainder1 = ((remainder1 << 2) | (remainder0 >>> 30)) | 0;
+    remainder0 = ((remainder0 << 2) | e) | 0;
+
+    e = rootLow >>> 31;
+    rootHigh = ((rootHigh << 1) | e) | 0;
+    rootLow <<= 1;
+    carry = rootHigh >>> 31;
+    b = rootLow >>> 31;
+    c = ((rootHigh << 1) | b) | 0;
+    d = ((rootLow << 1) | 1) | 0;
+
+    let accept;
+    b = carry;
+    if ((remainder2 >>> 0) > (carry >>> 0)) accept = true;
+    else if ((remainder2 >>> 0) < (carry >>> 0)) accept = false;
+    else {
+      b = c;
+      if ((remainder1 >>> 0) > (c >>> 0)) accept = true;
+      else if ((remainder1 >>> 0) < (c >>> 0)) accept = false;
+      else {
+        b = d;
+        accept = (remainder0 >>> 0) >= (d >>> 0);
+      }
+    }
+
+    if (accept) {
+      b = d;
+      let borrow = (remainder0 >>> 0) < (d >>> 0) ? 1 : 0;
+      remainder0 = (remainder0 - d) | 0;
+      b = c;
+      const middleBorrow = (remainder1 >>> 0) < (c >>> 0)
+        || (remainder1 === c && borrow !== 0);
+      remainder1 = (remainder1 - c - borrow) | 0;
+      e = middleBorrow ? 1 : 0;
+      remainder2 = (remainder2 - carry - e) | 0;
+      rootLow = (rootLow + 1) | 0;
+      if (rootLow === 0) rootHigh = (rootHigh + 1) | 0;
+    }
+
+    pairs = (pairs - 1) | 0;
+    if (pairs !== 0) continue;
+    cursor = (cursor - 1) | 0;
+    if (cursor < p.radicand0) break;
+    b = cursor;
+    activeLimb = memory[cursor] | 0;
+    memory[cursor] = 0;
+    pairs = 16;
+  }
+
+  e = 0;
+  if ((rootLow & 0xffff) === 0) {
+    remainder1 = (remainder1 - 1) | 0;
+    if (remainder1 === -1) {
+      remainder2 = (remainder2 - 1) | 0;
+      if (remainder2 === -1) e = -1;
+    }
+  }
+
+  let increment = e !== 0 || remainder2 !== 0;
+  if (!increment) {
+    b = rootHigh;
+    if ((remainder1 >>> 0) > (rootHigh >>> 0)) increment = true;
+    else if (remainder1 === rootHigh) {
+      b = rootLow;
+      increment = (remainder0 >>> 0) > (rootLow >>> 0);
+    }
+  }
+  if (increment) {
+    rootLow = (rootLow + 1) | 0;
+    if (rootLow === 0) rootHigh = (rootHigh + 1) | 0;
+  }
+
+  let outputHigh = rootHigh;
+  let outputLow = rootLow;
+  if (rootHigh === 0 && rootLow === 0) {
+    outputHigh = 0x80000000 | 0;
+    outputLow = 0;
+    temporary = (temporary + 1) | 0;
+  }
+  const exponent = ((temporary / 2) | 0) + 16383;
+
+  memory[p.temporary] = temporary;
+  memory[p.rootHigh] = rootHigh;
+  memory[p.rootLow] = rootLow;
+  memory[p.activeLimb] = activeLimb;
+  memory[p.pairs] = pairs;
+  memory[p.carry] = carry;
+  memory[p.cursor] = cursor;
+  memory[p.remainder0] = remainder0;
+  memory[p.remainder1] = remainder1;
+  memory[p.remainder2] = remainder2;
+  memory[p.remainder3] = e;
+  memory[p.mantissaHigh] = outputHigh;
+  memory[p.mantissaLow] = outputLow;
+  memory[p.exponent] = exponent;
+  memory[p.sign] = 0;
+  machine.A = exponent;
+  machine.B = b;
+  machine.C = c;
+  machine.D = d;
+  machine.E = e;
+  machine.X = LINO_DONE;
+}
+
+function xRootCoreInline(linked) {
+  const p = xRootCoreAddresses(linked);
+  return `{
+    let xrTemporary=(m[${p.exponent}]-16383)|0;
+    const xrMantissaHigh=m[${p.mantissaHigh}]|0,xrMantissaLow=m[${p.mantissaLow}]|0;
+    m[${p.radicand0}]=0;
+    if((xrTemporary&1)!==0){m[${p.radicand1}]=0;m[${p.radicand2}]=xrMantissaLow;m[${p.radicand3}]=xrMantissaHigh;xrTemporary=(xrTemporary-1)|0;}
+    else{m[${p.radicand1}]=xrMantissaLow<<31;m[${p.radicand2}]=((xrMantissaLow>>>1)|(xrMantissaHigh<<31))|0;m[${p.radicand3}]=xrMantissaHigh>>>1;}
+    let xrRootHigh=0,xrRootLow=0,xrRemainder0=0,xrRemainder1=0,xrRemainder2=0;
+    let xrCursor=${p.radicand3},xrActiveLimb=m[xrCursor]|0,xrPairs=16,xrCarry=0,xrB=0,xrC=0,xrD=0,xrE=0;
+    m[xrCursor]=0;
+    for(;;){
+      xrE=xrActiveLimb;xrActiveLimb<<=2;xrE>>>=30;
+      xrRemainder2=((xrRemainder2<<2)|(xrRemainder1>>>30))|0;
+      xrRemainder1=((xrRemainder1<<2)|(xrRemainder0>>>30))|0;
+      xrRemainder0=((xrRemainder0<<2)|xrE)|0;
+      xrE=xrRootLow>>>31;xrRootHigh=((xrRootHigh<<1)|xrE)|0;xrRootLow<<=1;
+      xrCarry=xrRootHigh>>>31;xrB=xrRootLow>>>31;xrC=((xrRootHigh<<1)|xrB)|0;xrD=((xrRootLow<<1)|1)|0;
+      let xrAccept;xrB=xrCarry;
+      if((xrRemainder2>>>0)>(xrCarry>>>0))xrAccept=true;
+      else if((xrRemainder2>>>0)<(xrCarry>>>0))xrAccept=false;
+      else{xrB=xrC;if((xrRemainder1>>>0)>(xrC>>>0))xrAccept=true;
+        else if((xrRemainder1>>>0)<(xrC>>>0))xrAccept=false;
+        else{xrB=xrD;xrAccept=(xrRemainder0>>>0)>=(xrD>>>0);}}
+      if(xrAccept){
+        xrB=xrD;let xrBorrow=(xrRemainder0>>>0)<(xrD>>>0)?1:0;xrRemainder0=(xrRemainder0-xrD)|0;
+        xrB=xrC;const xrMiddleBorrow=(xrRemainder1>>>0)<(xrC>>>0)||(xrRemainder1===xrC&&xrBorrow!==0);
+        xrRemainder1=(xrRemainder1-xrC-xrBorrow)|0;xrE=xrMiddleBorrow?1:0;
+        xrRemainder2=(xrRemainder2-xrCarry-xrE)|0;xrRootLow=(xrRootLow+1)|0;if(xrRootLow===0)xrRootHigh=(xrRootHigh+1)|0;
+      }
+      xrPairs=(xrPairs-1)|0;if(xrPairs!==0)continue;xrCursor=(xrCursor-1)|0;
+      if(xrCursor<${p.radicand0})break;xrB=xrCursor;xrActiveLimb=m[xrCursor]|0;m[xrCursor]=0;xrPairs=16;
+    }
+    xrE=0;
+    if((xrRootLow&65535)===0){xrRemainder1=(xrRemainder1-1)|0;if(xrRemainder1===-1){xrRemainder2=(xrRemainder2-1)|0;if(xrRemainder2===-1)xrE=-1;}}
+    let xrIncrement=xrE!==0||xrRemainder2!==0;
+    if(!xrIncrement){xrB=xrRootHigh;if((xrRemainder1>>>0)>(xrRootHigh>>>0))xrIncrement=true;
+      else if(xrRemainder1===xrRootHigh){xrB=xrRootLow;xrIncrement=(xrRemainder0>>>0)>(xrRootLow>>>0);}}
+    if(xrIncrement){xrRootLow=(xrRootLow+1)|0;if(xrRootLow===0)xrRootHigh=(xrRootHigh+1)|0;}
+    let xrOutputHigh=xrRootHigh,xrOutputLow=xrRootLow;
+    if(xrRootHigh===0&&xrRootLow===0){xrOutputHigh=2147483648|0;xrOutputLow=0;xrTemporary=(xrTemporary+1)|0;}
+    const xrExponent=((xrTemporary/2)|0)+16383;
+    m[${p.temporary}]=xrTemporary;m[${p.rootHigh}]=xrRootHigh;m[${p.rootLow}]=xrRootLow;
+    m[${p.activeLimb}]=xrActiveLimb;m[${p.pairs}]=xrPairs;m[${p.carry}]=xrCarry;m[${p.cursor}]=xrCursor;
+    m[${p.remainder0}]=xrRemainder0;m[${p.remainder1}]=xrRemainder1;m[${p.remainder2}]=xrRemainder2;m[${p.remainder3}]=xrE;
+    m[${p.mantissaHigh}]=xrOutputHigh;m[${p.mantissaLow}]=xrOutputLow;m[${p.exponent}]=xrExponent;m[${p.sign}]=0;
+    A=xrExponent;B=xrB;C=xrC;D=xrD;E=xrE;X=${LINO_DONE};
   }`;
 }
 
@@ -13835,6 +14057,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.copyLayerRegion]: copyLayerRegion,
     [SERVICE_IDS.uafCopyCommon]: uafCopyCommon,
     [SERVICE_IDS.xMul32u]: xMul32u,
+    [SERVICE_IDS.xRootCore]: xRootCore,
     [SERVICE_IDS.compareFloat64]: compareFloat64Service,
     [SERVICE_IDS.spaceClear]: spaceClear,
     [SERVICE_IDS.interiorSmooth64]: interiorSmooth64,
@@ -14181,6 +14404,9 @@ export function createNoctisIntrinsics(overrides = {}) {
   }
   if (!Object.hasOwn(overrides, SERVICE_IDS.xMul32u)) {
     implementations[SERVICE_IDS.xMul32u].inline = xMul32uInline;
+  }
+  if (!Object.hasOwn(overrides, SERVICE_IDS.xRootCore)) {
+    implementations[SERVICE_IDS.xRootCore].inline = xRootCoreInline;
   }
   if (!Object.hasOwn(overrides, SERVICE_IDS.groundHudLampSmooth)) {
     implementations[SERVICE_IDS.groundHudLampSmooth].inline = groundHudLampSmoothInline;

@@ -49,6 +49,19 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(gameWorker, /pointerTransitions\[0\]/);
   assert.match(gameWorker, /activePointerTransition = pointerTransitions\.shift\(\)/);
   assert.match(gameWorker, /program\.machine\.pc === guiIdle/);
+  for (const runtime of [app, gameWorker]) {
+    assert.match(runtime, /activePointerLoop/);
+    assert.match(runtime, /symbols\.get\("vhgloopcalls"\)/);
+    assert.match(runtime, /const gameScanned = gameLoopAddress < 0/);
+    assert.match(runtime, /guiMenuActive \|\| gameScanned/);
+    assert.match(runtime, /guiPointerPressPendingRelease/);
+    assert.match(runtime, /symbols\.get\("menuon"\)/);
+    assert.match(runtime, /program\.machine\.memory\[menuOnAddress\]/);
+    assert.match(runtime, /!activePointerTransition && pointerTransitions\.length === 0/);
+  }
+  assert.match(gameWorker, /pointerTransitions: pointerTransitions\.length/);
+  assert.match(gameWorker, /activePointerTransition: activePointerTransition/);
+  assert.match(gameWorker, /values: symbolValues\(runtimeSnapshotSymbols\)/);
   assert.match(gameWorker, /pendingGuiMenu && result\.status === "yield"/);
   assert.match(app, /pendingGuiMenu && result\.status === "yield"/);
   assert.match(app, /physicalWidth: Math\.max\(1, window\.innerWidth\)/);
