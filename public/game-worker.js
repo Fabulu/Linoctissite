@@ -8,6 +8,7 @@ import {
 const workerScope = typeof WorkerGlobalScope !== "undefined"
   && globalThis instanceof WorkerGlobalScope;
 const structuredSelfBackedgeLabels = ["VHGUI compose pixel", "VHGUI 2x pixel"];
+const countedSelfBackedgeLabels = structuredSelfBackedgeLabels;
 const sinkFallthroughPc = true;
 let foregroundRuntime = false;
 let fastBootstrap = false;
@@ -666,6 +667,7 @@ async function initialize(message) {
     profileInstructions,
     sinkFallthroughPc,
     structuredSelfBackedgeLabels,
+    countedSelfBackedgeLabels,
     precompiledRunners: profileInstructions ? undefined : {
       create: createNoctisRunners,
       instructionCount: noctisInstructionCount,
