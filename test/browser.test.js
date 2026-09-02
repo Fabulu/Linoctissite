@@ -392,8 +392,10 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
     "open Flight control for quick-click route");
   await clickLogical(63, (current) => current.values.vhgnoticeframes > 0,
     "quick-click START VIMANA FLIGHT");
-  const focusRouteAction = await runtimeSnapshot();
   assert.equal(await page.evaluate(() => document.activeElement?.id), "game");
+  const focusRouteAction = await waitState((current) => current.values.pointerstatus === 3
+    && current.pointerTransitions === 0 && current.activePointerTransition === null,
+  "retire quick-click transitions");
   assert.equal(focusRouteAction.values.pointerstatus, 3);
   assert.equal(focusRouteAction.values.vhgmenuheld, 0);
   assert.ok(focusRouteAction.values.vhgnoticeframes > 0);
@@ -402,9 +404,6 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   assert.equal(noticeCyan.bands.some(([top, bottom]) => top <= 400 && bottom >= 379), false);
   assert.ok(noticeGreen.count > 0);
   assert.ok(noticeGreen.bands.some(([top, bottom]) => top <= 400 && bottom >= 379));
-  await waitState((current) => current.values.pointerstatus === 3
-    && current.pointerTransitions === 0 && current.activePointerTransition === null,
-  "retire quick-click transitions");
   await waitState((current) => current.presentationFrames > focusRouteAction.presentationFrames
     && current.simulationTicks > focusRouteAction.simulationTicks,
   "continue after START VIMANA FLIGHT");
