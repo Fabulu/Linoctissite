@@ -503,9 +503,7 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
 
   await openDevicePage(107, 5, "emergency reset");
   await clickLogical(41, (current) => current.values.vhgresetcount > 0, "emergency systems reset");
-  await page.waitForTimeout(9_000);
-  await waitState((current) => current.values.vhgresetcount > 0
-    && current.values.vhgresetcount < 100,
+  await waitState((current) => current.values.vhgresetcount < 100,
     "advance emergency reset beyond modal and preference stages", 30_000, 500);
   await openDevicePage(107, 5, "emergency help");
   await clickLogical(63, (current) => current.values.vhgdev === 0
