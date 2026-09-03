@@ -157,6 +157,7 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   assert.ok(state.metrics.instructionsPerPresentation > 0);
   assert.equal(state.worker.budgetYieldStrategy, "scheduler-yield");
   assert.equal(state.worker.fastBootstrap, false);
+  assert.equal(state.worker.values.vhgfast, 0);
 
   const initialFrames = Number(state.status.match(/^Noctis \/ (\d+) presentations/)[1]);
   await page.evaluate(() => {
@@ -209,6 +210,10 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
     await localPoint(550, 36 + 19 * index, true);
     return waitState((current) => current.values.menuon === 0 && predicate(current), label);
   }
+
+  await chooseGame(5, (current) => current.values.vhgfast === 1,
+    "enable 60-Hz presentation after proving the authentic browser default");
+  await page.evaluate(() => { globalThis.__linoTestInput.length = 0; });
 
   async function clickLogical(y, predicate, label) {
     const current = await runtimeSnapshot();
@@ -679,12 +684,17 @@ test("main-thread fallback keeps the real FCS click route responsive", {
     };
   });
 
-  await page.goto(`${baseUrl}/?mainThread`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${baseUrl}/?mainThread&presentation=60`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
     const match = document.querySelector("#status")?.textContent
       ?.match(/^Noctis \/ (\d+) presentations/);
     return match && Number(match[1]) > 0;
   }, null, { timeout: 240_000 });
+  assert.equal(await page.evaluate(() => globalThis.__linoFastPresentation?.()), 1);
+  assert.match(
+    await page.locator("#presentation-mode").textContent(),
+    /sustained 60 FPS is not guaranteed/,
+  );
 
   async function localPoint(x, y) {
     const bounds = await page.locator("#game").boundingBox();

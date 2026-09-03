@@ -1,4 +1,5 @@
 import { createForegroundRuntime } from "./game-worker.js";
+import { fastPresentationFromSearch } from "./runtime-options.js";
 
 const linoWindow = document.querySelector("#lino-window");
 const gameStage = document.querySelector("#game-stage");
@@ -18,6 +19,7 @@ const runtimeManifest = await fetch(new URL("manifest.json", sourceRoot)).then((
 });
 const runtimeId = String(runtimeManifest.runtimeId ?? "unversioned");
 const runtimeOptions = new URLSearchParams(location.search);
+const fastPresentation = fastPresentationFromSearch(location.search);
 const clockOption = runtimeOptions.get("clock");
 const fixedClockSeconds = clockOption !== null && /^\d+$/.test(clockOption)
   && Number.isSafeInteger(Number(clockOption)) ? Number(clockOption) : null;
@@ -598,11 +600,11 @@ worker.addEventListener("error", (event) => {
   showCrash({ message: event.message });
 });
 
-status.textContent = "Compiling the real 73-module Noctis project in JavaScript...";
+status.textContent = "Compiling the real 74-module Noctis project in JavaScript...";
 const windowBounds = linoWindow.getBoundingClientRect();
 worker.postMessage({
   type: "init", sourceRoot: sourceRoot.href, files: savedFiles, globalK: savedGlobalK,
-  runtimeId, clockSeconds: fixedClockSeconds,
+  runtimeId, clockSeconds: fixedClockSeconds, fastPresentation,
   fastBootstrap: runtimeOptions.get("profile") === "1",
   instructionProfile: runtimeOptions.get("instructionProfile") === "1",
   physicalWidth: Math.max(1, window.innerWidth), physicalHeight: Math.max(1, window.innerHeight),

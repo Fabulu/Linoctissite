@@ -677,6 +677,12 @@ async function initialize(message) {
     physicalHeight: Math.max(1, message.physicalHeight | 0),
     audioPlayback: Boolean(message.audioPlayback),
   });
+  const fastPresentationSymbol = program.linked.symbols.get("vhgfast");
+  if (!fastPresentationSymbol) {
+    throw new Error("Linked Noctis project has no VHGfast workspace");
+  }
+  program.machine.memory[fastPresentationSymbol.value] =
+    message.fastPresentation === 1 ? 1 : 0;
   if (profileInstructions) {
     const callCode = program.machine.callCode;
     program.machine.callCode = (...args) => {

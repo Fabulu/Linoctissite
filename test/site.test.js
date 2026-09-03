@@ -2,6 +2,21 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import {
+  fastPresentationFromSearch,
+  presentationDescription,
+} from "../public/runtime-options.js";
+
+test("browser cadence defaults to authentic timing with explicit 60-Hz opt-in", () => {
+  assert.equal(fastPresentationFromSearch(""), 0);
+  assert.equal(fastPresentationFromSearch("?mainThread"), 0);
+  assert.equal(fastPresentationFromSearch("?presentation=18"), 0);
+  assert.equal(fastPresentationFromSearch("?presentation=60"), 1);
+  assert.equal(fastPresentationFromSearch("?mainThread&presentation=60"), 1);
+  assert.match(presentationDescription(0), /authentic 18\.206-Hz/);
+  assert.match(presentationDescription(1), /sustained 60 FPS is not guaranteed/);
+});
+
 test("ships the real linked Noctis project and visible fullscreen exits", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const build = await readFile(new URL("../build.mjs", import.meta.url), "utf8");
@@ -32,7 +47,11 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(app, /pointer\(\{ mode \}\)/);
   assert.match(app, /keys: heldKeys/);
   assert.match(app, /new URLSearchParams\(location\.search\).*mainThread/s);
+  assert.match(app, /program\.machine\.memory\[fastPresentationSymbol\.value\] = fastPresentation/);
+  assert.match(html, /authentic 18\.206-Hz cadence by default/);
+  assert.match(workerHost, /clockSeconds: fixedClockSeconds, fastPresentation/);
   assert.match(workerHost, /new Worker\(new URL\("\.\/game-worker\.js"/);
+  assert.match(gameWorker, /message\.fastPresentation === 1 \? 1 : 0/);
   assert.match(gameWorker, /globalK,/);
   assert.match(gameWorker, /compileProject/);
   assert.match(gameWorker, /createNoctisIntrinsics/);

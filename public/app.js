@@ -1,5 +1,14 @@
+import {
+  fastPresentationFromSearch,
+  presentationDescription,
+} from "./runtime-options.js";
+
+const runtimeOptions = new URLSearchParams(location.search);
+const fastPresentation = fastPresentationFromSearch(location.search);
+document.querySelector("#presentation-mode").textContent =
+  presentationDescription(fastPresentation);
 const useWorkerRuntime = typeof Worker === "function"
-  && !new URLSearchParams(location.search).has("mainThread");
+  && !runtimeOptions.has("mainThread");
 
 if (useWorkerRuntime) {
   await import("./worker-host.js");
@@ -390,6 +399,11 @@ const program = await compileProject(entry, resolvers, {
   physicalHeight: Math.max(1, window.innerHeight),
   audioPlayback: pcmHost.supported,
 });
+const fastPresentationSymbol = program.linked.symbols.get("vhgfast");
+if (!fastPresentationSymbol) throw new Error("Linked Noctis project has no VHGfast workspace");
+program.machine.memory[fastPresentationSymbol.value] = fastPresentation;
+globalThis.__linoFastPresentation = () =>
+  program.machine.memory[fastPresentationSymbol.value] | 0;
 gameLoopAddress = program.linked.symbols.get("vhgloopcalls")?.value ?? -1;
 menuOnAddress = program.linked.symbols.get("menuon")?.value ?? -1;
 status.textContent = "Starting Noctis from its real Lino entry point...";

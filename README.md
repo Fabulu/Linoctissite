@@ -4,7 +4,7 @@ Linoctis is the browser home of the L.in.oleum Noctis port. The reusable
 JavaScript compiler and machine live in
 [Fabulu/linojava](https://github.com/Fabulu/linojava).
 
-The site now loads the current `work/vhgame.txt` project, its 73 Lino modules,
+The site now loads the current `work/vhgame.txt` project, its 74 Lino modules,
 and 23 stockfile assets. LinoJava links and compiles that source in the browser,
 runs the real IsoKernel startup sequence, and presents the 400 by 300 Noctis
 framebuffer drawn by Lino itself. HTML provides only the page shell, loading
@@ -12,9 +12,12 @@ status, input bridge, and an easy reversible fullscreen control.
 
 The default runtime is pure JavaScript. It compiles and executes the linked
 Lino machine in a module worker, while the browser thread presents completed
-frames and handles the DOM. This keeps controls and the 60 Hz display loop
-responsive during expensive game frames. Add `?mainThread` to the URL to use
-the original single-threaded fallback for debugging.
+frames and handles the DOM. Fresh browser sessions use Noctis's authentic
+18.206-Hz presentation cadence. Add `?presentation=60` to request experimental
+60-Hz presentation; this does not imply sustained 60 FPS. Add `?mainThread` to
+the URL to use the original single-threaded fallback for debugging. Both
+runtime paths use the same presentation option, while desktop Noctis continues
+to default to 60-Hz presentation.
 
 Current browser integration includes:
 
