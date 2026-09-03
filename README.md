@@ -1,6 +1,6 @@
 # Linoctis
 
-Linoctis is the browser home of the L.in.oleum Noctis port. The reusable
+Linoctis 1.0.0 is the browser home of the L.in.oleum Noctis port. The reusable
 JavaScript compiler and machine live in
 [Fabulu/linojava](https://github.com/Fabulu/linojava).
 
@@ -31,9 +31,9 @@ Current browser integration includes:
 A visible corner control, double-click, or Ctrl+Shift+F returns to windowed
 mode without consuming Noctis's Escape key.
 
-This is an early compatibility build. Unsupported native paths still stop with
-an explicit error, and the renderer has not yet passed the native visual oracle.
-Renderer fidelity and complete game-mode coverage remain active work.
+This stable browser package tracks the same shared Lino source as desktop
+`v1.0.0`. Unsupported native paths still stop with an explicit error. Browser
+sustained 60 FPS and browser/native FPS parity are not claimed.
 
 ## Local build
 

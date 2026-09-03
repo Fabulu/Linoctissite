@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Fabulu/noctis-lino
-          ref: 17cdd1905f496928a9891975c6fcab73db5e9e4b
+          ref: 38c638af1f2af628b0bd90205d429573e8ce3aa6
           path: vendor/linoleum
 
       - name: Set up Node.js
