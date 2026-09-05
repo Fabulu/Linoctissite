@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout Linoctis
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Checkout pinned LinoJava
         uses: actions/checkout@v4
@@ -20,6 +22,7 @@ jobs:
           repository: Fabulu/linojava
           ref: db0c0c7004e10a90576da0e5e2f6af75d89e7e5c
           path: vendor/linojava
+          fetch-depth: 0
 
       - name: Checkout pinned Noctis Lino sources
         uses: actions/checkout@v4
@@ -27,27 +30,7 @@ jobs:
           repository: Fabulu/noctis-lino
           ref: 38c638af1f2af628b0bd90205d429573e8ce3aa6
           path: vendor/linoleum
-
-      - name: Checkout historical Linoctis reference
-        uses: actions/checkout@v4
-        with:
-          repository: Fabulu/Linoctissite
-          ref: 2f9f64cddbd1aead03c7f5a46cbba97eedfe7017
-          path: vendor/historical-site
-
-      - name: Checkout historical LinoJava reference
-        uses: actions/checkout@v4
-        with:
-          repository: Fabulu/linojava
-          ref: 722fd5047061783adbdfce9b7ba25338ac4ee86e
-          path: vendor/historical-linojava
-
-      - name: Checkout historical Lino source reference
-        uses: actions/checkout@v4
-        with:
-          repository: Fabulu/noctis-lino
-          ref: b90737d337dbeed10a0ff810c4bdeb7ce754bbd2
-          path: vendor/historical-linoleum
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -279,41 +262,111 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Build historical browser reference
-        working-directory: vendor/historical-site
-        env:
-          LINOJAVA_DIR: ${{ github.workspace }}/vendor/historical-linojava
-          LINO_SOURCE_DIR: ${{ github.workspace }}/vendor/historical-linoleum
-        run: node build.mjs
+      - name: Prepare historical browser worktrees
+        shell: bash
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/site-58ecd8c" \
+            58ecd8c740c361704eee5145d04041e79080e363
+          git worktree add --detach "$RUNNER_TEMP/site-4f9734b" \
+            4f9734bc4b44d24e353929b7a1938b242894a551
+          git worktree add --detach "$RUNNER_TEMP/site-2f9f64c" \
+            2f9f64cddbd1aead03c7f5a46cbba97eedfe7017
+          git -C vendor/linojava worktree add --detach \
+            "$RUNNER_TEMP/linojava-f9bf364" \
+            f9bf364c39be19aa0d0019133a704a7ff50ac535
+          git -C vendor/linojava worktree add --detach \
+            "$RUNNER_TEMP/linojava-32d18b8" \
+            32d18b85da5621990dc38a98f1fdb7af3985e043
+          git -C vendor/linojava worktree add --detach \
+            "$RUNNER_TEMP/linojava-722fd50" \
+            722fd5047061783adbdfce9b7ba25338ac4ee86e
+          git -C vendor/linoleum worktree add --detach \
+            "$RUNNER_TEMP/linoleum-f35fb83" \
+            f35fb8317fd4f5e5c1c2876bae56978a81548bbe
+          git -C vendor/linoleum worktree add --detach \
+            "$RUNNER_TEMP/linoleum-b90737d" \
+            b90737d337dbeed10a0ff810c4bdeb7ce754bbd2
+
+      - name: Build historical browser references
+        shell: bash
+        run: |
+          (
+            cd "$RUNNER_TEMP/site-58ecd8c"
+            LINOJAVA_DIR="$RUNNER_TEMP/linojava-f9bf364" \
+              LINO_SOURCE_DIR="$RUNNER_TEMP/linoleum-f35fb83" \
+              node build.mjs
+          )
+          (
+            cd "$RUNNER_TEMP/site-4f9734b"
+            LINOJAVA_DIR="$RUNNER_TEMP/linojava-32d18b8" \
+              LINO_SOURCE_DIR="$RUNNER_TEMP/linoleum-f35fb83" \
+              node build.mjs
+          )
+          (
+            cd "$RUNNER_TEMP/site-2f9f64c"
+            LINOJAVA_DIR="$RUNNER_TEMP/linojava-722fd50" \
+              LINO_SOURCE_DIR="$RUNNER_TEMP/linoleum-b90737d" \
+              node build.mjs
+          )
 
       - name: Profile historical retrace semantics
         shell: bash
         run: |
           mkdir -p build/historical-screen
           node tools/profile-historical-browser.mjs \
-            --root vendor/historical-site/public \
+            --root "$RUNNER_TEMP/site-58ecd8c/public" \
+            --output build/historical-screen/58ecd8c-pinned.json \
+            --commit 58ecd8c740c361704eee5145d04041e79080e363 \
+            --variant pinned-build \
+            --duration 5 \
+            --source-counters
+          node tools/profile-historical-browser.mjs \
+            --root "$RUNNER_TEMP/site-4f9734b/public" \
+            --output build/historical-screen/4f9734b-pinned.json \
+            --commit 4f9734bc4b44d24e353929b7a1938b242894a551 \
+            --variant pinned-build \
+            --duration 5 \
+            --source-counters
+          node tools/profile-historical-browser.mjs \
+            --root "$RUNNER_TEMP/site-2f9f64c/public" \
             --output build/historical-screen/2f9f64c-pinned.json \
             --commit 2f9f64cddbd1aead03c7f5a46cbba97eedfe7017 \
             --variant pinned-build \
             --duration 5 \
             --source-counters
-          jq -e '
-            .failures == {console: [], page: [], requests: [], runtime: []}
-            and .ratios.legacyRetracesPerSourceLoop > 1.95
-            and .ratios.legacyRetracesPerSourceLoop < 2.05
-            and .interval.sourceLoopCalls > 0
-          ' build/historical-screen/2f9f64c-pinned.json
+          for report in build/historical-screen/*.json; do
+            jq -e '
+              .failures == {console: [], page: [], requests: [], runtime: []}
+              and .interval.sourceLoopCalls > 0
+            ' "$report"
+          done
+          for report in \
+            build/historical-screen/4f9734b-pinned.json \
+            build/historical-screen/2f9f64c-pinned.json; do
+            jq -e '
+              .ratios.legacyRetracesPerSourceLoop > 1.95
+              and .ratios.legacyRetracesPerSourceLoop < 2.05
+            ' "$report"
+          done
           {
-            echo "## Historical metric reference"
+            echo "## Historical metric references"
             echo
-            jq -r '
-              "Legacy counter: \(.rates.legacyRenderedHz | tostring) retraces/s; "
-              + "shared-Lino loop: \(.rates.sourceLoopHz | tostring) loops/s; "
-              + "ratio: \(.ratios.legacyRetracesPerSourceLoop | tostring):1."
-            ' build/historical-screen/2f9f64c-pinned.json
+            echo "| Revision | Legacy retraces Hz | Shared-Lino loop Hz | Retraces/loop | Canvas writes Hz |"
+            echo "| :-- | ---: | ---: | ---: | ---: |"
+            jq -r '[
+              (.commit[0:8]),
+              (.rates.legacyRenderedHz // 0),
+              .rates.sourceLoopHz,
+              (.ratios.legacyRetracesPerSourceLoop // 0),
+              .rates.canvasWriteHz
+            ] | @tsv' build/historical-screen/*.json |
+              while IFS=$'\t' read -r revision legacy loop ratio canvas; do
+                printf '| %s | %.3f | %.3f | %.3f | %.3f |\n' \
+                  "$revision" "$legacy" "$loop" "$ratio" "$canvas"
+              done
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload historical metric report
+      - name: Upload historical metric reports
         uses: actions/upload-artifact@v4
         with:
           name: browser-historical-screen-${{ github.sha }}
