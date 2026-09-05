@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p build/scheduler-screen
-          budgets=(10000 250000 250000 10000)
+          budgets=(10000 50000 100000 250000 250000 100000 50000 10000)
           for index in "${!budgets[@]}"; do
             budget="${budgets[$index]}"
             run="$((index + 1))"
@@ -96,7 +96,7 @@ jobs:
               activeElement: .interaction.activeElement,
               failures
             })
-          }' build/scheduler-screen/[1-4]-*.json \
+          }' build/scheduler-screen/[1-8]-*.json \
             > build/scheduler-screen/summary.json
           {
             echo "## Browser scheduler screen"
