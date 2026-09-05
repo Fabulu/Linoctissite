@@ -6,7 +6,7 @@ import { extname, isAbsolute, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { chromium } from "playwright";
+import { chromium, firefox } from "playwright";
 
 const PUBLIC_ROOT = fileURLToPath(new URL("../public/", import.meta.url));
 const MIME_TYPES = new Map([
@@ -21,6 +21,14 @@ function createStaticServer() {
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
+      if (url.pathname === "/__seed__") {
+        response.writeHead(200, {
+          "cache-control": "no-store",
+          "content-type": "text/html; charset=utf-8",
+        });
+        response.end("<!doctype html><title>checkpoint seed</title>");
+        return;
+      }
       const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
       const filename = resolve(PUBLIC_ROOT, `.${pathname}`);
       const localPath = relative(PUBLIC_ROOT, filename);
@@ -94,7 +102,57 @@ async function seedCheckpoint(page, baseUrl, words) {
   }, words);
 }
 
-test("physical Stardrifter panels render mapped text at meaningful throughput", {
+async function canvasColorMask(page, crop, color) {
+  const result = await page.evaluate(({ crop: area, color: wanted }) => {
+    const image = document.querySelector("#game").getContext("2d")
+      .getImageData(area.x, area.y, area.width, area.height).data;
+    const positions = [];
+    const occupiedRows = new Set();
+    for (let index = 0, pixel = 0; index < image.length; index += 4, pixel += 1) {
+      if (image[index] !== wanted[0] || image[index + 1] !== wanted[1]
+        || image[index + 2] !== wanted[2] || image[index + 3] !== 255) continue;
+      positions.push(pixel & 255, (pixel >>> 8) & 255,
+        (pixel >>> 16) & 255, (pixel >>> 24) & 255);
+      occupiedRows.add(area.y + Math.floor(pixel / area.width));
+    }
+    return { positions, rows: [...occupiedRows].sort((left, right) => left - right) };
+  }, { crop, color });
+  const bands = [];
+  for (const row of result.rows) {
+    const last = bands.at(-1);
+    if (last && row === last[1] + 1) last[1] = row;
+    else bands.push([row, row]);
+  }
+  return {
+    bands,
+    count: result.positions.length / 4,
+    hash: createHash("sha256").update(Uint8Array.from(result.positions)).digest("hex"),
+  };
+}
+
+async function assertPhysicalGlyphMasks(page, runtime) {
+  assert.deepEqual(
+    await canvasColorMask(page, { x: 25, y: 50, width: 190, height: 85 }, [252, 216, 176]),
+    {
+      count: 156,
+      hash: "f71c07ea630cd251c2b570a4fd50e2e2b1576312df81de150ee9b19fe7f7c845",
+      bands: [[61, 64], [67, 68], [73, 78], [87, 90], [99, 106], [111, 120]],
+    },
+    `${runtime} PLANE and PLANE 4(F) glyph mask`,
+  );
+  assert.deepEqual(
+    await canvasColorMask(page, { x: 475, y: 50, width: 150, height: 125 }, [252, 216, 176]),
+    {
+      count: 204,
+      hash: "cbb927b458cd5b723a76c1757ec4eeb518585cfac886af62f92af88ca884ae71",
+      bands: [[61, 64], [73, 78], [87, 90], [99, 102], [105, 106], [111, 116],
+        [121, 122], [125, 128], [139, 144], [149, 154], [157, 158], [165, 166]],
+    },
+    `${runtime} G.O.E.S., REVISION, and CHANNEL glyph mask`,
+  );
+}
+
+test("physical Stardrifter panels render mapped text immediately and at meaningful throughput", {
   timeout: 600_000,
 }, async (context) => {
   const server = createStaticServer();
@@ -120,6 +178,19 @@ test("physical Stardrifter panels render mapped text at meaningful throughput", 
   await page.goto(`${baseUrl}/?clock=1344638527&presentation=18`, {
     waitUntil: "domcontentloaded",
   });
+  await page.waitForFunction(() => globalThis.__linoMetrics?.simulationTicks >= 5
+    || !document.querySelector("#crash-panel")?.hidden, null, { timeout: 540_000 });
+
+  const earlyState = await page.evaluate(() => ({
+    crash: document.querySelector("#crash-report")?.textContent,
+    crashHidden: document.querySelector("#crash-panel")?.hidden,
+    simulationTicks: globalThis.__linoMetrics?.simulationTicks,
+  }));
+  assert.equal(earlyState.crashHidden, true, earlyState.crash);
+  assert.ok(earlyState.simulationTicks <= 20,
+    `physical lettering was not checked during startup: tick ${earlyState.simulationTicks}`);
+  await assertPhysicalGlyphMasks(page, "early Chromium");
+
   await page.waitForFunction(() => globalThis.__linoMetrics?.simulationTicks >= 80
     || !document.querySelector("#crash-panel")?.hidden, null, { timeout: 540_000 });
   await page.waitForFunction(() => {
@@ -174,6 +245,48 @@ test("physical Stardrifter panels render mapped text at meaningful throughput", 
   assert.ok(state.rightPanel.foregroundPixels > 6000);
   assert.ok(state.metrics.producedPresentationFps >= 0.5);
   assert.ok(state.metrics.simulationFps >= 0.5);
+  assert.deepEqual(consoleErrors, []);
+  assert.deepEqual(pageErrors, []);
+  assert.deepEqual(failedRequests, []);
+});
+
+test("Firefox renders exact physical Stardrifter lettering during startup", {
+  timeout: 600_000,
+}, async (context) => {
+  const server = createStaticServer();
+  const baseUrl = await listen(server);
+  context.after(() => close(server));
+
+  const browser = await firefox.launch({ headless: true });
+  context.after(() => browser.close());
+  const browserContext = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await browserContext.newPage();
+  const pageErrors = [];
+  const consoleErrors = [];
+  const failedRequests = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("requestfailed", (request) => {
+    failedRequests.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText}`);
+  });
+
+  await seedCheckpoint(page, baseUrl, PHYSICAL_PANEL_CHECKPOINT_WORDS);
+  await page.goto(`${baseUrl}/?clock=1344638527&presentation=18`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForFunction(() => globalThis.__linoMetrics?.simulationTicks >= 5
+    || !document.querySelector("#crash-panel")?.hidden, null, { timeout: 540_000 });
+  const state = await page.evaluate(() => ({
+    crash: document.querySelector("#crash-report")?.textContent,
+    crashHidden: document.querySelector("#crash-panel")?.hidden,
+    simulationTicks: globalThis.__linoMetrics?.simulationTicks,
+  }));
+  assert.equal(state.crashHidden, true, state.crash);
+  assert.ok(state.simulationTicks <= 20,
+    `Firefox physical lettering was not checked during startup: tick ${state.simulationTicks}`);
+  await assertPhysicalGlyphMasks(page, "early Firefox");
   assert.deepEqual(consoleErrors, []);
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(failedRequests, []);
@@ -809,6 +922,7 @@ test("main-thread fallback keeps the real FCS click route responsive", {
     };
   });
 
+  await seedCheckpoint(page, baseUrl, PHYSICAL_PANEL_CHECKPOINT_WORDS);
   await page.goto(`${baseUrl}/?mainThread&presentation=60`, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
     const match = document.querySelector("#status")?.textContent
@@ -820,6 +934,17 @@ test("main-thread fallback keeps the real FCS click route responsive", {
     await page.locator("#presentation-mode").textContent(),
     /sustained 60 FPS is not guaranteed/,
   );
+  await page.waitForFunction(() => {
+    const data = document.querySelector("#game").getContext("2d")
+      .getImageData(25, 50, 190, 85).data;
+    let matches = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      if (data[index] === 252 && data[index + 1] === 216
+        && data[index + 2] === 176 && data[index + 3] === 255) matches += 1;
+    }
+    return matches === 156;
+  }, null, { timeout: 120_000 });
+  await assertPhysicalGlyphMasks(page, "main-thread fallback");
 
   async function localPoint(x, y) {
     const bounds = await page.locator("#game").boundingBox();

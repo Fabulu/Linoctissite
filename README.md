@@ -1,6 +1,6 @@
 # Linoctis
 
-Linoctis 1.0.3 is the browser home of the L.in.oleum Noctis port. The reusable
+Linoctis 1.0.4 is the browser home of the L.in.oleum Noctis port. The reusable
 JavaScript compiler and machine live in
 [Fabulu/linojava](https://github.com/Fabulu/linojava).
 
@@ -28,7 +28,11 @@ Current browser integration includes:
 - Separate, honest rendered-FPS and display-refresh measurements.
 - Fullscreen presentation of the live `VHGUI` game rectangle.
 - Legible physical Stardrifter panel labels, click-to-focus control, and tested
-  GAME-menu open/dismiss behavior.
+  GAME-menu open/dismiss behavior. Version 1.0.4 seeds the first resolved shared
+  stellar palette so those mapped labels are readable at startup instead of
+  fading up from black for 64 simulation ticks; later stellar changes retain
+  the original one-step easing. Exact glyph-shape and placement masks run in
+  Chromium, Firefox, and the main-thread fallback.
 - Bounded held-pointer input: obsolete adjacent motion is coalesced while every
   button edge, final coordinate, and accumulated drag/resize delta is retained;
   the worker path is regression-tested in Chromium and Firefox.
@@ -44,8 +48,8 @@ measured 39.414 produced presentations/s with the linked-Lino smoothing fallback
 and 59.453/s with the exact service. Runner cost fell from 13.835 to 4.583
 ms/presentation. This is same-host relative evidence, not a sustained one-minute
 60-FPS claim. The released generated runner has runtime ID
-`70492b9919353c4c0e88740b` and SHA-256
-`70492b9919353c4c0e88740b3af4d40c43a708b15d3bf8ddf5d44514103d6b41`.
+`9d9046597f007c15ebb64526` and SHA-256
+`9d9046597f007c15ebb645262f614ac75662c6532a624f13d487e335d05a5603`.
 
 A visible corner control, double-click, or Ctrl+Shift+F returns to windowed
 mode without consuming Noctis's Escape key.

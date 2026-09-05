@@ -31,7 +31,7 @@ jobs:
       PROFILE_DURATION: ${{ inputs.duration || '20' }}
       LINOJAVA_FALLBACK_REVISION: fc3ff3292f57ae8477095c9edf2b91a44d905f5b
       LINOJAVA_SERVICE_REVISION: 5d16d444255a3787e7ad114c53e15b36b99cda2f
-      LINO_SOURCE_REVISION: 92ddf9abe501c704bf2bb29858bda0f5444aa09b
+      LINO_SOURCE_REVISION: b187274c2b3235784f3a88a687cbdcf3a6cdd28a
     steps:
       - name: Checkout Linoctis
         uses: actions/checkout@v4
