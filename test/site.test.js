@@ -193,6 +193,6 @@ test("deployment and exact-service screening reject stale pinned runtime artifac
   assert.match(screen, /stardrifter-panel-v18\.bin/);
   assert.match(screen, /git diff --exit-code -- public\/noctis-runners\.js public\/linojava/);
   assert.match(screen, /controlSpreadPercent <= 5/);
-  assert.match(screen, /instructionsPerFrame <= \$fallback\.instructionsPerFrame - 5000000/);
+  assert.match(screen, /instructionsPerFrame <= \$fallback\.instructionsPerFrame - 2500000/);
   assert.match(screen, /producedPresentationHz > \$fallback\.producedPresentationHz/);
 });

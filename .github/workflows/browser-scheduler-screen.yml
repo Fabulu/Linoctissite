@@ -191,7 +191,9 @@ jobs:
                 ))
                 and ($arms | all(.runs == 4 and (.runtimeIds | length) == 1 and (.runnerSha256 | length) == 1))
                 and ($arms | all(.controlSpreadPercent <= 5))
-                and ($service.instructionsPerFrame <= $fallback.instructionsPerFrame - 5000000)
+                # A smoothed update can feed two presentations; the attributed call owns
+                # 5,639,600 instructions, so require at least 2.5M per presented frame.
+                and ($service.instructionsPerFrame <= $fallback.instructionsPerFrame - 2500000)
                 and ($service.runnerMillisecondsPerFrame < $fallback.runnerMillisecondsPerFrame)
                 and ($service.producedPresentationHz > $fallback.producedPresentationHz)
               )
