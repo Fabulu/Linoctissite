@@ -2,6 +2,15 @@ name: Browser scheduler screen
 
 on:
   workflow_dispatch:
+    inputs:
+      duration:
+        description: Profile interval in seconds
+        required: true
+        default: "5"
+        type: choice
+        options:
+          - "5"
+          - "20"
 
 permissions:
   contents: read
@@ -10,6 +19,8 @@ jobs:
   profile:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      PROFILE_DURATION: ${{ inputs.duration || '5' }}
     steps:
       - name: Checkout Linoctis
         uses: actions/checkout@v4
@@ -62,7 +73,7 @@ jobs:
             run="$((index + 1))"
             node tools/profile-browser.mjs \
               --checkpoint test/fixtures/stardrifter-panel-v18.bin \
-              --duration 5 \
+              --duration "$PROFILE_DURATION" \
               --presentation 60 \
               --worker-budget "$budget" \
               --linojava-root vendor/linojava \
@@ -182,7 +193,7 @@ jobs:
             npm run build
             node tools/profile-browser.mjs \
               --checkpoint test/fixtures/stardrifter-panel-v18.bin \
-              --duration 5 \
+              --duration "$PROFILE_DURATION" \
               --presentation 60 \
               --worker-budget 10000 \
               --linojava-root vendor/linojava \
@@ -318,21 +329,21 @@ jobs:
             --output build/historical-screen/58ecd8c-pinned.json \
             --commit 58ecd8c740c361704eee5145d04041e79080e363 \
             --variant pinned-build \
-            --duration 5 \
+            --duration "$PROFILE_DURATION" \
             --source-counters
           node tools/profile-historical-browser.mjs \
             --root "$RUNNER_TEMP/site-4f9734b/public" \
             --output build/historical-screen/4f9734b-pinned.json \
             --commit 4f9734bc4b44d24e353929b7a1938b242894a551 \
             --variant pinned-build \
-            --duration 5 \
+            --duration "$PROFILE_DURATION" \
             --source-counters
           node tools/profile-historical-browser.mjs \
             --root "$RUNNER_TEMP/site-2f9f64c/public" \
             --output build/historical-screen/2f9f64c-pinned.json \
             --commit 2f9f64cddbd1aead03c7f5a46cbba97eedfe7017 \
             --variant pinned-build \
-            --duration 5 \
+            --duration "$PROFILE_DURATION" \
             --source-counters
           for report in build/historical-screen/*.json; do
             jq -e '

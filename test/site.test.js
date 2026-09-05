@@ -175,6 +175,7 @@ test("deployment and screening reject stale pinned runtime artifacts", async () 
     /git diff --exit-code -- public\/noctis-runners\.js public\/linojava/,
   );
   assert.match(screen, /workflow_dispatch/);
+  assert.match(screen, /PROFILE_DURATION: \$\{\{ inputs\.duration \|\| '5' \}\}/);
   assert.match(
     screen,
     /budgets=\(10000 50000 100000 250000 250000 100000 50000 10000\)/,
