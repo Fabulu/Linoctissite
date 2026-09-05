@@ -1,0 +1,130 @@
+name: Browser scheduler screen
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Linoctis
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned LinoJava
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/linojava
+          ref: db0c0c7004e10a90576da0e5e2f6af75d89e7e5c
+          path: vendor/linojava
+
+      - name: Checkout pinned Noctis Lino sources
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/noctis-lino
+          ref: 38c638af1f2af628b0bd90205d429573e8ce3aa6
+          path: vendor/linoleum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies and Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Build exact pinned runtime
+        env:
+          LINOJAVA_DIR: vendor/linojava
+          LINO_SOURCE_DIR: vendor/linoleum
+        run: |
+          npm run build
+          git diff --exit-code -- public/noctis-runners.js public/linojava
+          node --test test/site.test.js
+
+      - name: Run interleaved scheduler screen
+        shell: bash
+        run: |
+          mkdir -p build/scheduler-screen
+          budgets=(10000 250000 250000 10000)
+          for index in "${!budgets[@]}"; do
+            budget="${budgets[$index]}"
+            run="$((index + 1))"
+            node tools/profile-browser.mjs \
+              --checkpoint test/fixtures/stardrifter-panel-v18.bin \
+              --duration 5 \
+              --presentation 60 \
+              --worker-budget "$budget" \
+              --linojava-root vendor/linojava \
+              --linoleum-root vendor/linoleum \
+              --linojava-revision db0c0c7004e10a90576da0e5e2f6af75d89e7e5c \
+              --linoleum-revision 38c638af1f2af628b0bd90205d429573e8ce3aa6 \
+              --site-revision "$GITHUB_SHA" \
+              --output "build/scheduler-screen/${run}-${budget}.json"
+          done
+
+      - name: Summarize screening results
+        shell: bash
+        run: |
+          jq -s '{
+            schema: 1,
+            qualification: "shared GitHub runner screening only; not release FPS evidence",
+            runs: map({
+              workerBudget: .provenance.workerBudget,
+              runtimeId: .provenance.runtimeId,
+              workerSha256: .provenance.workerSource.servedSha256,
+              runnerSha256: .provenance.staticRunner.sha256,
+              measuredMilliseconds,
+              presentations: .interval.presentations,
+              producedPresentations: .interval.producedPresentations,
+              instructions: .interval.instructions,
+              runCalls: .interval.runCalls,
+              producedPresentationHz: .metrics.producedPresentationHz,
+              simulationHz: .metrics.simulationHz,
+              runnerMillisecondsPerProducedFrame: .metrics.averageRunnerMillisecondsPerProducedFrame,
+              nonRunnerMillisecondsPerProducedFrame: .metrics.nonRunnerMillisecondsPerProducedFrame,
+              runnerDutyCycle: .metrics.runnerDutyCycle,
+              runCallsPerProducedFrame: .metrics.runCallsPerProducedFrame,
+              menuOpenMilliseconds: .interaction.menuOpenMilliseconds,
+              menuDismissMilliseconds: .interaction.menuDismissMilliseconds,
+              activeElement: .interaction.activeElement,
+              failures
+            })
+          }' build/scheduler-screen/[1-4]-*.json \
+            > build/scheduler-screen/summary.json
+          {
+            echo "## Browser scheduler screen"
+            echo
+            echo "Shared-runner screening only; absolute FPS is not release evidence."
+            echo
+            echo "| Budget | Produced Hz | Simulation Hz | Runner ms/frame | Non-runner ms/frame | Run calls/frame | Menu open ms | Menu dismiss ms |"
+            echo "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
+            jq -r '.runs[] | [
+              .workerBudget,
+              .producedPresentationHz,
+              .simulationHz,
+              .runnerMillisecondsPerProducedFrame,
+              .nonRunnerMillisecondsPerProducedFrame,
+              .runCallsPerProducedFrame,
+              .menuOpenMilliseconds,
+              .menuDismissMilliseconds
+            ] | @tsv' build/scheduler-screen/summary.json |
+              while IFS=$'\t' read -r budget produced simulation runner nonrunner calls menuopen menudismiss; do
+                printf '| %s | %.3f | %.3f | %.3f | %.3f | %.3f | %.1f | %.1f |\n' \
+                  "$budget" "$produced" "$simulation" "$runner" "$nonrunner" "$calls" "$menuopen" "$menudismiss"
+              done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload scheduler reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-scheduler-screen-${{ github.sha }}
+          path: build/scheduler-screen/
+          if-no-files-found: error
+          retention-days: 14

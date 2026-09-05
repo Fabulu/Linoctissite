@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
@@ -105,6 +106,14 @@ test("browser profiler uses the deterministic shared-Lino worker scene", async (
   const gameWorker = await readFile(new URL("../public/game-worker.js", import.meta.url), "utf8");
   const workerHost = await readFile(new URL("../public/worker-host.js", import.meta.url), "utf8");
   const profiler = await readFile(new URL("../tools/profile-browser.mjs", import.meta.url), "utf8");
+  const checkpoint = await readFile(
+    new URL("./fixtures/stardrifter-panel-v18.bin", import.meta.url),
+  );
+  assert.equal(checkpoint.length, 268);
+  assert.equal(
+    createHash("sha256").update(checkpoint).digest("hex"),
+    "52eaf92f1038d69f64350d98e2e807d71dddc095e225114d2f18f96e63990098",
+  );
   assert.match(gameWorker, /date: fixedDateMilliseconds === null \? undefined/);
   assert.match(gameWorker, /browserScheduler\.yield\(\)\.then/);
   assert.match(gameWorker, /budgetYieldStrategy/);
