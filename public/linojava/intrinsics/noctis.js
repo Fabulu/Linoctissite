@@ -729,7 +729,6 @@ function pgfSetFloat32(machine, linked) {
 }
 
 function pgfNarrow(machine, linked) {
-  pgfLoadA(machine, linked);
   narrowFloat32(machine, linked);
   pgfStoreA(machine, linked);
 }

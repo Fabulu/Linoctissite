@@ -56,6 +56,114 @@ async function close(server) {
   });
 }
 
+const PHYSICAL_PANEL_CHECKPOINT_WORDS = [
+  1447580502, 18, 0, 3, 2800, 0, -2100, 0, -90, 0, 0, -300,
+  628034590, 1094079838, -2147483648, -1051588217, 1734663254, -1055212624,
+  30000, 1, 0, 0, 1, 300, 1463568, -4728350, -437812, 1, 0, 0, 0, 3,
+  0, 0, 0, 1344638527, 642, 426, 1, 12, 0, 60, 131072, 0, 131072, 0, 0,
+  5, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 0, 4227135,
+];
+
+async function seedCheckpoint(page, baseUrl, words) {
+  await page.goto(`${baseUrl}/__seed__`, { waitUntil: "domcontentloaded" });
+  await page.evaluate(async (payload) => {
+    const bytes = new Uint8Array(payload.length * 4);
+    const view = new DataView(bytes.buffer);
+    payload.forEach((value, index) => view.setInt32(index * 4, value, true));
+    const database = await new Promise((resolveOpen, rejectOpen) => {
+      const request = indexedDB.open("linoctis", 1);
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains("files")) {
+          request.result.createObjectStore("files");
+        }
+        if (!request.result.objectStoreNames.contains("globalK")) {
+          request.result.createObjectStore("globalK");
+        }
+      };
+      request.onsuccess = () => resolveOpen(request.result);
+      request.onerror = () => rejectOpen(request.error);
+    });
+    await new Promise((resolveWrite, rejectWrite) => {
+      const transaction = database.transaction("files", "readwrite");
+      transaction.objectStore("files").put(bytes, "current.lin");
+      transaction.objectStore("files").put(bytes, "current.bak");
+      transaction.oncomplete = resolveWrite;
+      transaction.onerror = () => rejectWrite(transaction.error);
+    });
+    database.close();
+  }, words);
+}
+
+test("physical Stardrifter panels render mapped text at meaningful throughput", {
+  timeout: 600_000,
+}, async (context) => {
+  const server = createStaticServer();
+  const baseUrl = await listen(server);
+  context.after(() => close(server));
+
+  const browser = await chromium.launch({ headless: true });
+  context.after(() => browser.close());
+  const browserContext = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await browserContext.newPage();
+  await seedCheckpoint(page, baseUrl, PHYSICAL_PANEL_CHECKPOINT_WORDS);
+  const pageErrors = [];
+  const consoleErrors = [];
+  const failedRequests = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("requestfailed", (request) => {
+    failedRequests.push(`${request.method()} ${request.url()}: ${request.failure()?.errorText}`);
+  });
+
+  await page.goto(`${baseUrl}/?clock=1344638527&presentation=18`, {
+    waitUntil: "domcontentloaded",
+  });
+  await page.waitForFunction(() => globalThis.__linoMetrics?.simulationTicks >= 80
+    || !document.querySelector("#crash-panel")?.hidden, null, { timeout: 540_000 });
+
+  const state = await page.evaluate(() => {
+    const canvas = document.querySelector("#game");
+    const context2d = canvas.getContext("2d");
+    const crop = (x, y, width, height) => {
+      const pixels = context2d.getImageData(x, y, width, height).data;
+      const colors = new Map();
+      for (let index = 0; index < pixels.length; index += 4) {
+        const key = `${pixels[index]},${pixels[index + 1]},${pixels[index + 2]},${pixels[index + 3]}`;
+        colors.set(key, (colors.get(key) ?? 0) + 1);
+      }
+      const [background, backgroundPixels] = [...colors]
+        .sort((left, right) => right[1] - left[1])[0];
+      return {
+        background: background.split(",").map(Number),
+        distinctColors: colors.size,
+        foregroundPixels: width * height - backgroundPixels,
+      };
+    };
+    return {
+      crash: document.querySelector("#crash-report")?.textContent,
+      crashHidden: document.querySelector("#crash-panel")?.hidden,
+      leftPanel: crop(30, 60, 370, 75),
+      metrics: globalThis.__linoMetrics,
+      rightPanel: crop(480, 60, 135, 120),
+    };
+  });
+
+  assert.equal(state.crashHidden, true, state.crash);
+  assert.deepEqual(state.leftPanel.background, [40, 36, 28, 255]);
+  assert.deepEqual(state.rightPanel.background, [40, 36, 28, 255]);
+  assert.ok(state.leftPanel.distinctColors >= 10);
+  assert.ok(state.leftPanel.foregroundPixels > 4000);
+  assert.ok(state.rightPanel.distinctColors >= 10);
+  assert.ok(state.rightPanel.foregroundPixels > 6000);
+  assert.ok(state.metrics.producedPresentationFps >= 0.5);
+  assert.ok(state.metrics.simulationFps >= 0.5);
+  assert.deepEqual(consoleErrors, []);
+  assert.deepEqual(pageErrors, []);
+  assert.deepEqual(failedRequests, []);
+});
+
 test("current shared-Lino project boots, paints, and survives fullscreen GOES focus", {
   timeout: 600_000,
 }, async (context) => {
