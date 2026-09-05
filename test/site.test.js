@@ -167,10 +167,15 @@ test("deployment and exact-service screening reject stale pinned runtime artifac
     new URL("../.github/workflows/browser-scheduler-screen.yml", import.meta.url),
     "utf8",
   );
-  const deployedRevision = "fc3ff3292f57ae8477095c9edf2b91a44d905f5b";
-  const fallbackRevision = deployedRevision;
+  const runner = await readFile(new URL("../public/noctis-runners.js", import.meta.url));
+  const deployedRevision = "8e53b565862b9a40d213b1b32ca7fcb869f1ec7c";
+  const fallbackRevision = "fc3ff3292f57ae8477095c9edf2b91a44d905f5b";
   const serviceRevision = "5d16d444255a3787e7ad114c53e15b36b99cda2f";
   const sourceRevision = "92ddf9abe501c704bf2bb29858bda0f5444aa09b";
+  assert.equal(
+    createHash("sha256").update(runner).digest("hex"),
+    "70492b9919353c4c0e88740b3af4d40c43a708b15d3bf8ddf5d44514103d6b41",
+  );
   assert.match(workflow, /Verify the pinned build is the checked-in runtime/);
   assert.match(
     workflow,

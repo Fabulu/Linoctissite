@@ -1,6 +1,6 @@
 # Linoctis
 
-Linoctis 1.0.0 is the browser home of the L.in.oleum Noctis port. The reusable
+Linoctis 1.0.1 is the browser home of the L.in.oleum Noctis port. The reusable
 JavaScript compiler and machine live in
 [Fabulu/linojava](https://github.com/Fabulu/linojava).
 
@@ -27,13 +27,28 @@ Current browser integration includes:
 - Stereo PCM playback bridged from the worker to Web Audio.
 - Separate, honest rendered-FPS and display-refresh measurements.
 - Fullscreen presentation of the live `VHGUI` game rectangle.
+- Legible physical Stardrifter panel labels, click-to-focus control, and tested
+  GAME-menu open/dismiss behavior.
+- Optional exact host services for bounded shared-Lino routines, including the
+  packed in-place Stardrifter star-page smoother; the same linked Lino
+  implementations remain executable fallbacks.
+
+A controlled clean-host, eight-run, 20-second interleaved Stardrifter comparison
+measured 39.414 produced presentations/s with the linked-Lino smoothing fallback
+and 59.453/s with the exact service. Runner cost fell from 13.835 to 4.583
+ms/presentation. This is same-host relative evidence, not a sustained one-minute
+60-FPS claim. The released generated runner has runtime ID
+`70492b9919353c4c0e88740b` and SHA-256
+`70492b9919353c4c0e88740b3af4d40c43a708b15d3bf8ddf5d44514103d6b41`.
 
 A visible corner control, double-click, or Ctrl+Shift+F returns to windowed
 mode without consuming Noctis's Escape key.
 
-This stable browser package tracks the same shared Lino source as desktop
-`v1.0.0`. Unsupported native paths still stop with an explicit error. Browser
-sustained 60 FPS and browser/native FPS parity are not claimed.
+This stable browser package compiles the same tracked shared-Lino closure as the
+desktop targets. The published Linoleum `v1.0.0` tag remains an immutable
+reference; current forward releases pin later shared-source commits explicitly.
+Unsupported native paths still stop with an explicit error. Browser sustained
+60 FPS and browser/native FPS parity are not claimed.
 
 ## Local build
 

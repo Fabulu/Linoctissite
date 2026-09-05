@@ -309,6 +309,10 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   }
 
   async function openGameMenu() {
+    await localPoint(630, 420);
+    await waitState((current) => current.values.pointerstatus === 3
+      && current.pointerTransitions === 0 && current.activePointerTransition === null,
+    "settle pointer before GAME menu");
     await localPoint(565, 12, true);
     return waitState((current) => current.values.menuon === 1, "open GAME menu");
   }
@@ -597,14 +601,22 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   }
 
   await openDevicePage(85, 4, "cartography actions");
-  await clickLogical(41, (current) => current.values.vhglabelstar !== 0
-    || current.values.vhgnoticeframes > 0, "star label action");
-  await page.keyboard.press("Escape");
-  await waitState((current) => current.values.vhglabelstar === 0, "cancel star label editor");
-  await clickLogical(63, (current) => current.values.vhglabelbody !== 0
-    || current.values.vhgnoticeframes > 0, "planet label action");
-  await page.keyboard.press("Escape");
-  await waitState((current) => current.values.vhglabelbody === 0, "cancel planet label editor");
+  const starLabelBefore = await runtimeSnapshot();
+  const starLabelAction = await clickLogical(41, (current) => current.values.vhglabelstar !== 0
+    || current.values.vhgnoticeptr !== starLabelBefore.values.vhgnoticeptr
+    || current.values.vhgnoticeframes > starLabelBefore.values.vhgnoticeframes,
+  "star label action");
+  if (starLabelAction.values.vhglabelstar !== 0) await page.keyboard.press("Escape");
+  await waitState((current) => current.values.vhglabelstar === 0 && current.values.vhgdev === 4,
+    "finish star label action");
+  const planetLabelBefore = await runtimeSnapshot();
+  const planetLabelAction = await clickLogical(63, (current) => current.values.vhglabelbody !== 0
+    || current.values.vhgnoticeptr !== planetLabelBefore.values.vhgnoticeptr
+    || current.values.vhgnoticeframes > planetLabelBefore.values.vhgnoticeframes,
+  "planet label action");
+  if (planetLabelAction.values.vhglabelbody !== 0) await page.keyboard.press("Escape");
+  await waitState((current) => current.values.vhglabelbody === 0 && current.values.vhgdev === 4,
+    "finish planet label action");
   await clickLogical(85, (current) => current.values.vhgdev === 6, "cartography Target Browser");
   await clickLogical(173, (current) => current.values.vhgdev === 4,
     "Target Browser Back restores Cartography");

@@ -291,6 +291,7 @@ const SERVICE_IDS = Object.freeze({
   surfaceRandomPattern: "service:surndpat",
   surfaceSda: "service:susda",
   starMaskPage: "service:vhtmaskpagecommon",
+  starSmoothGrays: "service:vhtsmoothgrays",
   paletteShade: "service:palshade",
   paletteTavola: "service:paltavola",
   groundRoundHill: "service:grroundhill",
@@ -1919,6 +1920,42 @@ function smoothStarPage(machine, linked) {
     q2 = q3;
     q3 = quarter(destination + 3);
   }
+}
+
+function smoothStarGraysService(machine, linked) {
+  const memory = machine.memory;
+  const p = surfaceBulkAddresses(linked);
+  const base = (noctisBuffer(linked, "RADPT") + 2880) >>> 0;
+  memory[address(linked, "VHTsmoothbase")] = base;
+  memory[p.SUsp] = base;
+  let output = 0;
+  let packed = 0;
+  let lane = 0;
+  for (let index = 320, remaining = 56960;
+    remaining > 0; index += 1, remaining -= 1) {
+    packed = surfaceDword(memory, base + index - 320);
+    packed = (packed + surfaceDword(memory, base + index)) | 0;
+    packed = (packed + surfaceDword(memory, base + index + 320)) | 0;
+    packed = (packed + surfaceDword(memory, base + index + 640)) | 0;
+    packed = ((packed & 0xfcfcfcfc) >>> 2) | 0;
+    output = packed & 0xff;
+    lane = (packed >>> 8) & 0xff;
+    output = (output + lane) & 0xff;
+    packed >>>= 16;
+    lane = packed & 0xff;
+    output = (output + lane) & 0xff;
+    lane = (packed >>> 8) & 0xff;
+    output = (output + lane) & 0xff;
+    output >>>= 2;
+    memory[base + index] = output;
+  }
+  memory[p.SUsi] = 57280;
+  machine.A = output;
+  machine.B = 0;
+  machine.C = (base + 57279) | 0;
+  machine.D = lane;
+  machine.E = packed | 0;
+  machine.X = LINO_DONE;
 }
 
 function copyPlanetView(machine, linked) {
@@ -14163,6 +14200,7 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.surfaceRandomPattern]: surfaceRandomPattern,
     [SERVICE_IDS.surfaceSda]: surfaceSda,
     [SERVICE_IDS.starMaskPage]: maskStarPageService,
+    [SERVICE_IDS.starSmoothGrays]: smoothStarGraysService,
     [SERVICE_IDS.paletteShade]: paletteShade,
     [SERVICE_IDS.paletteTavola]: paletteTavola,
     [SERVICE_IDS.groundRoundHill]: groundRoundHill,
