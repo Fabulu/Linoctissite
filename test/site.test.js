@@ -153,6 +153,8 @@ test("browser profiler uses the deterministic shared-Lino worker scene", async (
   assert.match(profiler, /values\?\.vhgfast/);
   assert.match(profiler, /cumulativeRunnerMilliseconds/);
   assert.match(profiler, /--instruction-profile/);
+  assert.match(profiler, /--attribution-only requires --instruction-profile/);
+  assert.match(profiler, /instruction attribution only; not functional or release evidence/);
   assert.match(profiler, /instructionProfileSnapshot/);
   assert.match(profiler, /instruction counters retained/);
 });
@@ -177,6 +179,7 @@ test("deployment and VHGUI screening reject stale pinned runtime artifacts", asy
   assert.match(screen, /workflow_dispatch/);
   assert.match(screen, /- current-profile/);
   assert.match(screen, /--instruction-profile/);
+  assert.match(screen, /--attribution-only/);
   assert.match(screen, /PROFILE_DURATION: \$\{\{ inputs\.duration \|\| '20' \}\}/);
   assert.match(
     screen,

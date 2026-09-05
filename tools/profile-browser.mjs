@@ -29,13 +29,14 @@ const MIME_TYPES = new Map([
 
 function usage(message) {
   if (message) console.error(message);
-  console.error("Usage: node tools/profile-browser.mjs --checkpoint FILE [--duration SECONDS] [--presentation 18|60] [--worker-budget 10000|50000|100000|250000] [--linoleum-revision SHA] [--linojava-revision SHA] [--site-revision SHA] [--output FILE] [--instruction-profile] [--force] [--headed]");
+  console.error("Usage: node tools/profile-browser.mjs --checkpoint FILE [--duration SECONDS] [--presentation 18|60] [--worker-budget 10000|50000|100000|250000] [--linoleum-revision SHA] [--linojava-revision SHA] [--site-revision SHA] [--output FILE] [--instruction-profile] [--attribution-only] [--force] [--headed]");
   process.exitCode = 2;
   return null;
 }
 
 function parseArguments(argv) {
   const options = {
+    attributionOnly: false,
     checkpoint: null,
     clockSeconds: DEFAULT_CLOCK_SECONDS,
     durationSeconds: 20,
@@ -56,7 +57,8 @@ function parseArguments(argv) {
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--force") options.force = true;
+    if (argument === "--attribution-only") options.attributionOnly = true;
+    else if (argument === "--force") options.force = true;
     else if (argument === "--headed") options.headed = true;
     else if (argument === "--instruction-profile") options.instructionProfile = true;
     else {
@@ -79,6 +81,9 @@ function parseArguments(argv) {
     }
   }
   if (!options.checkpoint) return usage("--checkpoint is required");
+  if (options.attributionOnly && !options.instructionProfile) {
+    return usage("--attribution-only requires --instruction-profile");
+  }
   if (!(options.durationSeconds >= 5 && options.durationSeconds <= 120)) {
     return usage("--duration must be between 5 and 120 seconds");
   }
@@ -432,35 +437,44 @@ async function runProfile(options) {
       throw new Error("browser profile did not retain a positive presentation interval");
     }
 
-    const canvasBounds = await page.locator("#game").boundingBox();
-    if (!canvasBounds || canvasBounds.width < 600 || canvasBounds.height < 350) {
-      throw new Error(`unexpected game canvas bounds: ${JSON.stringify(canvasBounds)}`);
+    let interaction;
+    if (options.attributionOnly) {
+      interaction = {
+        checksPerformed: false,
+        qualification: "instruction attribution only; not functional or release evidence",
+      };
+    } else {
+      const canvasBounds = await page.locator("#game").boundingBox();
+      if (!canvasBounds || canvasBounds.width < 600 || canvasBounds.height < 350) {
+        throw new Error(`unexpected game canvas bounds: ${JSON.stringify(canvasBounds)}`);
+      }
+      const menuStartedAt = performance.now();
+      await page.mouse.click(canvasBounds.x + 565, canvasBounds.y + 12);
+      const menuOpened = await waitRuntimeState(
+        (snapshot) => snapshot.values.menuon === 1,
+        "open GAME menu",
+      );
+      const menuOpenMilliseconds = performance.now() - menuStartedAt;
+      const dismissStartedAt = performance.now();
+      await page.mouse.click(canvasBounds.x + 200, canvasBounds.y + 300);
+      const menuDismissed = await waitRuntimeState(
+        (snapshot) => snapshot.values.menuon === 0 && !snapshot.guiMenuActive
+          && snapshot.pointerTransitions === 0 && !snapshot.activePointerTransition,
+        "dismiss GAME menu with pointer",
+      );
+      const menuDismissMilliseconds = performance.now() - dismissStartedAt;
+      const activeElement = await page.evaluate(() => document.activeElement?.id ?? "");
+      if (activeElement !== "game") throw new Error(`game canvas lost focus to ${activeElement}`);
+      interaction = {
+        checksPerformed: true,
+        canvasBounds,
+        menuOpenMilliseconds,
+        menuDismissMilliseconds,
+        activeElement,
+        openedAtPresentation: menuOpened.presentationFrames,
+        dismissedAtPresentation: menuDismissed.presentationFrames,
+      };
     }
-    const menuStartedAt = performance.now();
-    await page.mouse.click(canvasBounds.x + 565, canvasBounds.y + 12);
-    const menuOpened = await waitRuntimeState(
-      (snapshot) => snapshot.values.menuon === 1,
-      "open GAME menu",
-    );
-    const menuOpenMilliseconds = performance.now() - menuStartedAt;
-    const dismissStartedAt = performance.now();
-    await page.mouse.click(canvasBounds.x + 200, canvasBounds.y + 300);
-    const menuDismissed = await waitRuntimeState(
-      (snapshot) => snapshot.values.menuon === 0 && !snapshot.guiMenuActive
-        && snapshot.pointerTransitions === 0 && !snapshot.activePointerTransition,
-      "dismiss GAME menu with pointer",
-    );
-    const menuDismissMilliseconds = performance.now() - dismissStartedAt;
-    const activeElement = await page.evaluate(() => document.activeElement?.id ?? "");
-    if (activeElement !== "game") throw new Error(`game canvas lost focus to ${activeElement}`);
-    const interaction = {
-      canvasBounds,
-      menuOpenMilliseconds,
-      menuDismissMilliseconds,
-      activeElement,
-      openedAtPresentation: menuOpened.presentationFrames,
-      dismissedAtPresentation: menuDismissed.presentationFrames,
-    };
 
     if (consoleErrors.length || pageErrors.length || failedRequests.length) {
       throw new Error(JSON.stringify({ consoleErrors, failedRequests, pageErrors }, null, 2));
@@ -494,6 +508,10 @@ async function runProfile(options) {
           servedSha256: sha256(workerSource),
         },
         instructionProfile: options.instructionProfile,
+        attributionOnly: options.attributionOnly,
+        evidenceQualification: options.attributionOnly
+          ? "instruction-attribution-only"
+          : "functional-and-performance-screen",
         runtimeId: String(manifest.runtimeId ?? "unversioned"),
         staticRunner: {
           bytes: runnerSource.length,

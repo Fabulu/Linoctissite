@@ -122,6 +122,7 @@ jobs:
             --presentation 60 \
             --worker-budget 10000 \
             --instruction-profile \
+            --attribution-only \
             --linojava-root vendor/linojava-service \
             --linoleum-root vendor/linoleum \
             --linojava-revision "$LINOJAVA_SERVICE_REVISION" \
