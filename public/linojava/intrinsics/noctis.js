@@ -228,6 +228,8 @@ const SERVICE_IDS = Object.freeze({
   pgfInteger: "service:pgfint",
   pgfFromInteger: "service:pgffromint",
   framebufferDigit: "service:fbdigitat",
+  vhguiCompose: "service:vhguicompose",
+  vhguiFixed2x: "service:vhguifixed2x",
   alphaDim: "service:fxalphadim",
   antialiasingDim: "service:fxantialiasingdim",
   clearLayer: "service:clearl2l",
@@ -949,6 +951,52 @@ function copyRegion(machine, linked) {
     source = (source + width + gap) >>> 0;
     destination = (destination + width + gap) >>> 0;
   }
+}
+
+function vhguiCompose(machine, linked) {
+  const memory = machine.memory;
+  const source = noctisBuffer(linked, "RADPT");
+  const palette = address(linked, "pal");
+  const destination = address(linked, "VHGUIframe");
+  for (let pixel = 0; pixel < 64_000; pixel += 1) {
+    const paletteIndex = (palette + (memory[source + pixel] | 0)) >>> 0;
+    memory[destination + pixel] = memory[paletteIndex];
+  }
+  memory[address(linked, "VHGUIx")] = 0;
+  memory[address(linked, "VHGUIy")] = 200;
+  machine.A = 200;
+  machine.C = (source + 64_000) | 0;
+  machine.D = (destination + 64_000) | 0;
+}
+
+function vhguiFixed2x(machine, linked) {
+  const memory = machine.memory;
+  const source = address(linked, "VHGUIframe");
+  const backdrop = address(linked, "Backdrop Layer");
+  const displayWidth = value(memory, linked, "Display Width") | 0;
+  const left = value(memory, linked, "VHGUIleft") | 0;
+  const top = value(memory, linked, "VHGUItop") | 0;
+  let finalRow = 0;
+  for (let row = 0; row < 200; row += 1) {
+    const sourceRow = source + row * 320;
+    const destinationRow = (backdrop + Math.imul(top + row * 2, displayWidth) + left) >>> 0;
+    const duplicateRow = (destinationRow + displayWidth) >>> 0;
+    finalRow = destinationRow;
+    for (let column = 0; column < 320; column += 1) {
+      const pixel = memory[sourceRow + column];
+      const offset = column * 2;
+      memory[destinationRow + offset] = pixel;
+      memory[destinationRow + offset + 1] = pixel;
+      memory[duplicateRow + offset] = pixel;
+      memory[duplicateRow + offset + 1] = pixel;
+    }
+  }
+  memory[address(linked, "VHGUIx")] = 0;
+  memory[address(linked, "VHGUIy")] = 200;
+  machine.A = 200;
+  machine.C = (source + 64_000) | 0;
+  machine.D = (finalRow + 640) | 0;
+  machine.E = (finalRow + displayWidth + 640) | 0;
 }
 
 function expandIndexed(machine, linked) {
@@ -14048,6 +14096,8 @@ export function createNoctisIntrinsics(overrides = {}) {
     [SERVICE_IDS.pgfInteger]: pgfInteger,
     [SERVICE_IDS.pgfFromInteger]: pgfFromInteger,
     [SERVICE_IDS.framebufferDigit]: framebufferDigit,
+    [SERVICE_IDS.vhguiCompose]: vhguiCompose,
+    [SERVICE_IDS.vhguiFixed2x]: vhguiFixed2x,
     [SERVICE_IDS.alphaDim]: alphaDim,
     [SERVICE_IDS.antialiasingDim]: antialiasingDim,
     [SERVICE_IDS.clearLayer]: clearLayer,

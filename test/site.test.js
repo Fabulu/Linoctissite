@@ -157,7 +157,7 @@ test("browser profiler uses the deterministic shared-Lino worker scene", async (
   assert.match(profiler, /instruction counters retained/);
 });
 
-test("deployment and screening reject stale pinned runtime artifacts", async () => {
+test("deployment and VHGUI screening reject stale pinned runtime artifacts", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8",
   );
@@ -165,30 +165,26 @@ test("deployment and screening reject stale pinned runtime artifacts", async () 
     new URL("../.github/workflows/browser-scheduler-screen.yml", import.meta.url),
     "utf8",
   );
-  const historicalProfiler = await readFile(
-    new URL("../tools/profile-historical-browser.mjs", import.meta.url),
-    "utf8",
-  );
+  const serviceRevision = "fc3ff3292f57ae8477095c9edf2b91a44d905f5b";
+  const sourceRevision = "92ddf9abe501c704bf2bb29858bda0f5444aa09b";
   assert.match(workflow, /Verify the pinned build is the checked-in runtime/);
   assert.match(
     workflow,
     /git diff --exit-code -- public\/noctis-runners\.js public\/linojava/,
   );
+  assert.match(workflow, new RegExp(serviceRevision));
+  assert.match(workflow, new RegExp(sourceRevision));
   assert.match(screen, /workflow_dispatch/);
-  assert.match(screen, /PROFILE_DURATION: \$\{\{ inputs\.duration \|\| '5' \}\}/);
+  assert.match(screen, /PROFILE_DURATION: \$\{\{ inputs\.duration \|\| '20' \}\}/);
   assert.match(
     screen,
-    /budgets=\(10000 50000 100000 250000 250000 100000 50000 10000\)/,
+    /variants=\(fallback service service fallback service fallback fallback service\)/,
   );
-  assert.match(
-    screen,
-    /labels=\(baseline-start counted-off structured-off sink-off baseline-end\)/,
-  );
+  assert.match(screen, new RegExp(`LINOJAVA_SERVICE_REVISION: ${serviceRevision}`));
+  assert.match(screen, new RegExp(`LINO_SOURCE_REVISION: ${sourceRevision}`));
   assert.match(screen, /stardrifter-panel-v18\.bin/);
-  assert.match(screen, /git diff --exit-code -- build\.mjs public\/noctis-runners\.js public\/linojava/);
-  assert.match(screen, /2f9f64cddbd1aead03c7f5a46cbba97eedfe7017/);
-  assert.match(screen, /legacyRetracesPerSourceLoop > 1\.95/);
-  assert.match(historicalProfiler, /commit\.startsWith\(prefix\)/);
-  assert.match(historicalProfiler, /Number\(counters\?\.vhgloopcalls\) > 0/);
-  assert.match(historicalProfiler, /failures\.runtime\.push\(status\)/);
+  assert.match(screen, /git diff --exit-code -- public\/noctis-runners\.js public\/linojava/);
+  assert.match(screen, /controlSpreadPercent <= 5/);
+  assert.match(screen, /instructionsPerFrame <= \$fallback\.instructionsPerFrame - 650000/);
+  assert.match(screen, /producedPresentationHz > \$fallback\.producedPresentationHz/);
 });

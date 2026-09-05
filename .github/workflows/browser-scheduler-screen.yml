@@ -1,4 +1,4 @@
-name: Browser scheduler screen
+name: Browser VHGUI service A/B
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       duration:
         description: Profile interval in seconds
         required: true
-        default: "5"
+        default: "20"
         type: choice
         options:
           - "5"
@@ -20,28 +20,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      PROFILE_DURATION: ${{ inputs.duration || '5' }}
+      PROFILE_DURATION: ${{ inputs.duration || '20' }}
+      LINOJAVA_FALLBACK_REVISION: db0c0c7004e10a90576da0e5e2f6af75d89e7e5c
+      LINOJAVA_SERVICE_REVISION: fc3ff3292f57ae8477095c9edf2b91a44d905f5b
+      LINO_SOURCE_REVISION: 92ddf9abe501c704bf2bb29858bda0f5444aa09b
     steps:
       - name: Checkout Linoctis
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Checkout pinned LinoJava
+      - name: Checkout fallback LinoJava
         uses: actions/checkout@v4
         with:
           repository: Fabulu/linojava
-          ref: db0c0c7004e10a90576da0e5e2f6af75d89e7e5c
-          path: vendor/linojava
-          fetch-depth: 0
+          ref: ${{ env.LINOJAVA_FALLBACK_REVISION }}
+          path: vendor/linojava-fallback
+
+      - name: Checkout service LinoJava
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/linojava
+          ref: ${{ env.LINOJAVA_SERVICE_REVISION }}
+          path: vendor/linojava-service
 
       - name: Checkout pinned Noctis Lino sources
         uses: actions/checkout@v4
         with:
           repository: Fabulu/noctis-lino
-          ref: 38c638af1f2af628b0bd90205d429573e8ce3aa6
+          ref: ${{ env.LINO_SOURCE_REVISION }}
           path: vendor/linoleum
-          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -54,333 +62,142 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: Build exact pinned runtime
+      - name: Verify exact service candidate
         env:
-          LINOJAVA_DIR: vendor/linojava
+          LINOJAVA_DIR: vendor/linojava-service
           LINO_SOURCE_DIR: vendor/linoleum
         run: |
           npm run build
           git diff --exit-code -- public/noctis-runners.js public/linojava
           node --test test/site.test.js
 
-      - name: Run interleaved scheduler screen
+      - name: Run interleaved fallback and service screen
         shell: bash
         run: |
-          mkdir -p build/scheduler-screen
-          budgets=(10000 50000 100000 250000 250000 100000 50000 10000)
-          for index in "${!budgets[@]}"; do
-            budget="${budgets[$index]}"
+          mkdir -p build/vhgui-service-screen
+          variants=(fallback service service fallback service fallback fallback service)
+          for index in "${!variants[@]}"; do
+            variant="${variants[$index]}"
             run="$((index + 1))"
-            node tools/profile-browser.mjs \
-              --checkpoint test/fixtures/stardrifter-panel-v18.bin \
-              --duration "$PROFILE_DURATION" \
-              --presentation 60 \
-              --worker-budget "$budget" \
-              --linojava-root vendor/linojava \
-              --linoleum-root vendor/linoleum \
-              --linojava-revision db0c0c7004e10a90576da0e5e2f6af75d89e7e5c \
-              --linoleum-revision 38c638af1f2af628b0bd90205d429573e8ce3aa6 \
-              --site-revision "$GITHUB_SHA" \
-              --output "build/scheduler-screen/${run}-${budget}.json"
-          done
-
-      - name: Summarize screening results
-        shell: bash
-        run: |
-          jq -s '{
-            schema: 1,
-            qualification: "shared GitHub runner screening only; not release FPS evidence",
-            runs: map({
-              workerBudget: .provenance.workerBudget,
-              runtimeId: .provenance.runtimeId,
-              workerSha256: .provenance.workerSource.servedSha256,
-              runnerSha256: .provenance.staticRunner.sha256,
-              measuredMilliseconds,
-              presentations: .interval.presentations,
-              producedPresentations: .interval.producedPresentations,
-              instructions: .interval.instructions,
-              runCalls: .interval.runCalls,
-              producedPresentationHz: .metrics.producedPresentationHz,
-              simulationHz: .metrics.simulationHz,
-              runnerMillisecondsPerProducedFrame: .metrics.averageRunnerMillisecondsPerProducedFrame,
-              nonRunnerMillisecondsPerProducedFrame: .metrics.nonRunnerMillisecondsPerProducedFrame,
-              runnerDutyCycle: .metrics.runnerDutyCycle,
-              runCallsPerProducedFrame: .metrics.runCallsPerProducedFrame,
-              menuOpenMilliseconds: .interaction.menuOpenMilliseconds,
-              menuDismissMilliseconds: .interaction.menuDismissMilliseconds,
-              activeElement: .interaction.activeElement,
-              failures
-            })
-          }' build/scheduler-screen/[1-8]-*.json \
-            > build/scheduler-screen/summary.json
-          {
-            echo "## Browser scheduler screen"
-            echo
-            echo "Shared-runner screening only; absolute FPS is not release evidence."
-            echo
-            echo "| Budget | Produced Hz | Simulation Hz | Runner ms/frame | Non-runner ms/frame | Run calls/frame | Menu open ms | Menu dismiss ms |"
-            echo "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
-            jq -r '.runs[] | [
-              .workerBudget,
-              .producedPresentationHz,
-              .simulationHz,
-              .runnerMillisecondsPerProducedFrame,
-              .nonRunnerMillisecondsPerProducedFrame,
-              .runCallsPerProducedFrame,
-              .menuOpenMilliseconds,
-              .menuDismissMilliseconds
-            ] | @tsv' build/scheduler-screen/summary.json |
-              while IFS=$'\t' read -r budget produced simulation runner nonrunner calls menuopen menudismiss; do
-                printf '| %s | %.3f | %.3f | %.3f | %.3f | %.3f | %.1f | %.1f |\n' \
-                  "$budget" "$produced" "$simulation" "$runner" "$nonrunner" "$calls" "$menuopen" "$menudismiss"
-              done
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload scheduler reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-scheduler-screen-${{ github.sha }}
-          path: build/scheduler-screen/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Run generated-runner option screen
-        shell: bash
-        env:
-          LINOJAVA_DIR: vendor/linojava
-          LINO_SOURCE_DIR: vendor/linoleum
-        run: |
-          mkdir -p build/runner-option-screen
-          labels=(baseline-start counted-off structured-off sink-off baseline-end)
-          options=(baseline counted-off structured-off sink-off baseline)
-          for index in "${!labels[@]}"; do
-            label="${labels[$index]}"
-            option="${options[$index]}"
-            run="$((index + 1))"
-            git checkout -- build.mjs
-            python - "$option" <<'PY'
-          from pathlib import Path
-          import sys
-
-          option = sys.argv[1]
-          path = Path("build.mjs")
-          source = path.read_text()
-          replacements = {
-              "counted-off": [
-                  ("const countedSelfBackedgeLabels = structuredSelfBackedgeLabels;",
-                   "const countedSelfBackedgeLabels = [];"),
-              ],
-              "structured-off": [
-                  ('const structuredSelfBackedgeLabels = ["VHGUI compose pixel", "VHGUI 2x pixel"];',
-                   "const structuredSelfBackedgeLabels = [];"),
-                  ("const countedSelfBackedgeLabels = structuredSelfBackedgeLabels;",
-                   "const countedSelfBackedgeLabels = [];"),
-              ],
-              "sink-off": [
-                  ("const sinkFallthroughPc = true;",
-                   "const sinkFallthroughPc = false;"),
-              ],
-              "baseline": [],
-          }
-          if option not in replacements:
-              raise SystemExit(f"unknown runner option: {option}")
-          for old, new in replacements[option]:
-              if source.count(old) != 1:
-                  raise SystemExit(f"expected one runner-option marker: {old}")
-              source = source.replace(old, new)
-          path.write_text(source)
-          PY
-            npm run build
+            if [[ "$variant" == "fallback" ]]; then
+              linojava_dir=vendor/linojava-fallback
+              linojava_revision="$LINOJAVA_FALLBACK_REVISION"
+            else
+              linojava_dir=vendor/linojava-service
+              linojava_revision="$LINOJAVA_SERVICE_REVISION"
+            fi
+            LINOJAVA_DIR="$linojava_dir" LINO_SOURCE_DIR=vendor/linoleum npm run build
             node tools/profile-browser.mjs \
               --checkpoint test/fixtures/stardrifter-panel-v18.bin \
               --duration "$PROFILE_DURATION" \
               --presentation 60 \
               --worker-budget 10000 \
-              --linojava-root vendor/linojava \
+              --linojava-root "$linojava_dir" \
               --linoleum-root vendor/linoleum \
-              --linojava-revision db0c0c7004e10a90576da0e5e2f6af75d89e7e5c \
-              --linoleum-revision 38c638af1f2af628b0bd90205d429573e8ce3aa6 \
+              --linojava-revision "$linojava_revision" \
+              --linoleum-revision "$LINO_SOURCE_REVISION" \
               --site-revision "$GITHUB_SHA" \
-              --output "build/runner-option-screen/${run}-${label}.json"
+              --output "build/vhgui-service-screen/${run}-${variant}.json"
           done
-          git checkout -- build.mjs
-          npm run build
-          git diff --exit-code -- build.mjs public/noctis-runners.js public/linojava
+          LINOJAVA_DIR=vendor/linojava-service LINO_SOURCE_DIR=vendor/linoleum npm run build
+          git diff --exit-code -- public/noctis-runners.js public/linojava
 
-      - name: Summarize generated-runner screening results
+      - name: Summarize and qualify service result
         shell: bash
         run: |
-          mkdir -p build/runner-option-screen/normalized
-          for report in build/runner-option-screen/[1-5]-*.json; do
+          mkdir -p build/vhgui-service-screen/normalized
+          for report in build/vhgui-service-screen/[1-8]-*.json; do
             label="$(basename "$report" .json)"
-            label="${label#*-}"
-            jq --arg label "$label" '. + {screenVariant: $label}' "$report" \
-              > "build/runner-option-screen/normalized/${label}.json"
+            variant="${label#*-}"
+            jq --arg variant "$variant" '. + {screenVariant: $variant}' "$report" \
+              > "build/vhgui-service-screen/normalized/${label}.json"
           done
-          jq -s '{
-            schema: 1,
-            qualification: "shared GitHub runner screening only; not release FPS evidence",
-            runs: map({
-              variant: .screenVariant,
-              runtimeId: .provenance.runtimeId,
-              runnerBytes: .provenance.staticRunner.bytes,
-              runnerSha256: .provenance.staticRunner.sha256,
-              measuredMilliseconds,
-              presentations: .interval.presentations,
-              producedPresentations: .interval.producedPresentations,
-              instructions: .interval.instructions,
-              runCalls: .interval.runCalls,
-              producedPresentationHz: .metrics.producedPresentationHz,
-              simulationHz: .metrics.simulationHz,
-              runnerMillisecondsPerProducedFrame: .metrics.averageRunnerMillisecondsPerProducedFrame,
-              nonRunnerMillisecondsPerProducedFrame: .metrics.nonRunnerMillisecondsPerProducedFrame,
-              runnerDutyCycle: .metrics.runnerDutyCycle,
-              runCallsPerProducedFrame: .metrics.runCallsPerProducedFrame,
-              menuOpenMilliseconds: .interaction.menuOpenMilliseconds,
-              menuDismissMilliseconds: .interaction.menuDismissMilliseconds,
-              activeElement: .interaction.activeElement,
-              failures
-            })
-          }' build/runner-option-screen/normalized/*.json \
-            > build/runner-option-screen/summary.json
+          jq -s '
+            def mean(field): map(field) | add / length;
+            def spread_percent(field):
+              (mean(field)) as $mean |
+              if $mean == 0 then 0 else ((map(field) | max) - (map(field) | min)) / $mean * 100 end;
+            . as $runs |
+            ($runs | group_by(.screenVariant) | map({
+              variant: .[0].screenVariant,
+              runs: length,
+              runtimeIds: map(.provenance.runtimeId) | unique,
+              runnerSha256: map(.provenance.staticRunner.sha256) | unique,
+              producedPresentationHz: mean(.metrics.producedPresentationHz),
+              simulationHz: mean(.metrics.simulationHz),
+              runnerMillisecondsPerFrame: mean(.metrics.averageRunnerMillisecondsPerProducedFrame),
+              instructionsPerFrame: mean(.metrics.instructionsPerProducedFrame),
+              controlSpreadPercent: spread_percent(.metrics.producedPresentationHz)
+            })) as $arms |
+            ($arms[] | select(.variant == "fallback")) as $fallback |
+            ($arms[] | select(.variant == "service")) as $service |
+            {
+              schema: 2,
+              qualification: "same-host shared-runner A/B; relative deltas qualify only",
+              runs: $runs | map({
+                variant: .screenVariant,
+                runtimeId: .provenance.runtimeId,
+                runnerSha256: .provenance.staticRunner.sha256,
+                producedPresentationHz: .metrics.producedPresentationHz,
+                simulationHz: .metrics.simulationHz,
+                runnerMillisecondsPerFrame: .metrics.averageRunnerMillisecondsPerProducedFrame,
+                instructionsPerFrame: .metrics.instructionsPerProducedFrame,
+                menuOpenMilliseconds: .interaction.menuOpenMilliseconds,
+                menuDismissMilliseconds: .interaction.menuDismissMilliseconds,
+                activeElement: .interaction.activeElement,
+                failures
+              }),
+              arms: $arms,
+              delta: {
+                producedPresentationHz: $service.producedPresentationHz - $fallback.producedPresentationHz,
+                runnerMillisecondsPerFrame: $service.runnerMillisecondsPerFrame - $fallback.runnerMillisecondsPerFrame,
+                instructionsPerFrame: $service.instructionsPerFrame - $fallback.instructionsPerFrame
+              },
+              passed: (
+                ($runs | all(
+                  .failures == {consoleErrors: [], failedRequests: [], pageErrors: []}
+                  and .interaction.activeElement == "game"
+                  and .provenance.workerBudget == 10000
+                ))
+                and ($arms | all(.runs == 4 and (.runtimeIds | length) == 1 and (.runnerSha256 | length) == 1))
+                and ($arms | all(.controlSpreadPercent <= 5))
+                and ($service.instructionsPerFrame <= $fallback.instructionsPerFrame - 650000)
+                and ($service.runnerMillisecondsPerFrame < $fallback.runnerMillisecondsPerFrame)
+                and ($service.producedPresentationHz > $fallback.producedPresentationHz)
+              )
+            }
+          ' build/vhgui-service-screen/normalized/*.json \
+            > build/vhgui-service-screen/summary.json
           {
-            echo "## Generated-runner option screen"
+            echo "## VHGUI service A/B"
             echo
-            echo "Shared-runner screening only; absolute FPS is not release evidence."
+            echo "Same-host shared-runner comparison; absolute FPS is not release evidence."
             echo
-            echo "| Variant | Produced Hz | Simulation Hz | Runner ms/frame | Instructions/frame | Menu open ms | Menu dismiss ms |"
-            echo "| :-- | ---: | ---: | ---: | ---: | ---: | ---: |"
-            jq -r '.runs[] | [
+            echo "| Arm | Mean produced Hz | Mean simulation Hz | Runner ms/frame | Instructions/frame | Control spread |"
+            echo "| :-- | ---: | ---: | ---: | ---: | ---: |"
+            jq -r '.arms[] | [
               .variant,
               .producedPresentationHz,
               .simulationHz,
-              .runnerMillisecondsPerProducedFrame,
-              (.instructions / .producedPresentations),
-              .menuOpenMilliseconds,
-              .menuDismissMilliseconds
-            ] | @tsv' build/runner-option-screen/summary.json |
-              while IFS=$'\t' read -r variant produced simulation runner instructions menuopen menudismiss; do
-                printf '| %s | %.3f | %.3f | %.3f | %.0f | %.1f | %.1f |\n' \
-                  "$variant" "$produced" "$simulation" "$runner" "$instructions" "$menuopen" "$menudismiss"
+              .runnerMillisecondsPerFrame,
+              .instructionsPerFrame,
+              .controlSpreadPercent
+            ] | @tsv' build/vhgui-service-screen/summary.json |
+              while IFS=$'\t' read -r variant produced simulation runner instructions spread; do
+                printf '| %s | %.3f | %.3f | %.3f | %.0f | %.2f%% |\n' \
+                  "$variant" "$produced" "$simulation" "$runner" "$instructions" "$spread"
               done
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload generated-runner reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-runner-option-screen-${{ github.sha }}
-          path: build/runner-option-screen/
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Prepare historical browser worktrees
-        shell: bash
-        run: |
-          git worktree add --detach "$RUNNER_TEMP/site-58ecd8c" \
-            58ecd8c740c361704eee5145d04041e79080e363
-          git worktree add --detach "$RUNNER_TEMP/site-4f9734b" \
-            4f9734bc4b44d24e353929b7a1938b242894a551
-          git worktree add --detach "$RUNNER_TEMP/site-2f9f64c" \
-            2f9f64cddbd1aead03c7f5a46cbba97eedfe7017
-          git -C vendor/linojava worktree add --detach \
-            "$RUNNER_TEMP/linojava-f9bf364" \
-            f9bf364c39be19aa0d0019133a704a7ff50ac535
-          git -C vendor/linojava worktree add --detach \
-            "$RUNNER_TEMP/linojava-32d18b8" \
-            32d18b85da5621990dc38a98f1fdb7af3985e043
-          git -C vendor/linojava worktree add --detach \
-            "$RUNNER_TEMP/linojava-722fd50" \
-            722fd5047061783adbdfce9b7ba25338ac4ee86e
-          git -C vendor/linoleum worktree add --detach \
-            "$RUNNER_TEMP/linoleum-f35fb83" \
-            f35fb8317fd4f5e5c1c2876bae56978a81548bbe
-          git -C vendor/linoleum worktree add --detach \
-            "$RUNNER_TEMP/linoleum-b90737d" \
-            b90737d337dbeed10a0ff810c4bdeb7ce754bbd2
-
-      - name: Build historical browser references
-        shell: bash
-        run: |
-          (
-            cd "$RUNNER_TEMP/site-58ecd8c"
-            LINOJAVA_DIR="$RUNNER_TEMP/linojava-f9bf364" \
-              LINO_SOURCE_DIR="$RUNNER_TEMP/linoleum-f35fb83" \
-              node build.mjs
-          )
-          (
-            cd "$RUNNER_TEMP/site-4f9734b"
-            LINOJAVA_DIR="$RUNNER_TEMP/linojava-32d18b8" \
-              LINO_SOURCE_DIR="$RUNNER_TEMP/linoleum-f35fb83" \
-              node build.mjs
-          )
-          (
-            cd "$RUNNER_TEMP/site-2f9f64c"
-            LINOJAVA_DIR="$RUNNER_TEMP/linojava-722fd50" \
-              LINO_SOURCE_DIR="$RUNNER_TEMP/linoleum-b90737d" \
-              node build.mjs
-          )
-
-      - name: Profile historical retrace semantics
-        shell: bash
-        run: |
-          mkdir -p build/historical-screen
-          node tools/profile-historical-browser.mjs \
-            --root "$RUNNER_TEMP/site-58ecd8c/public" \
-            --output build/historical-screen/58ecd8c-pinned.json \
-            --commit 58ecd8c740c361704eee5145d04041e79080e363 \
-            --variant pinned-build \
-            --duration "$PROFILE_DURATION" \
-            --source-counters
-          node tools/profile-historical-browser.mjs \
-            --root "$RUNNER_TEMP/site-4f9734b/public" \
-            --output build/historical-screen/4f9734b-pinned.json \
-            --commit 4f9734bc4b44d24e353929b7a1938b242894a551 \
-            --variant pinned-build \
-            --duration "$PROFILE_DURATION" \
-            --source-counters
-          node tools/profile-historical-browser.mjs \
-            --root "$RUNNER_TEMP/site-2f9f64c/public" \
-            --output build/historical-screen/2f9f64c-pinned.json \
-            --commit 2f9f64cddbd1aead03c7f5a46cbba97eedfe7017 \
-            --variant pinned-build \
-            --duration "$PROFILE_DURATION" \
-            --source-counters
-          for report in build/historical-screen/*.json; do
-            jq -e '
-              .failures == {console: [], page: [], requests: [], runtime: []}
-              and .interval.sourceLoopCalls > 0
-            ' "$report"
-          done
-          for report in \
-            build/historical-screen/4f9734b-pinned.json \
-            build/historical-screen/2f9f64c-pinned.json; do
-            jq -e '
-              .ratios.legacyRetracesPerSourceLoop > 1.95
-              and .ratios.legacyRetracesPerSourceLoop < 2.05
-            ' "$report"
-          done
-          {
-            echo "## Historical metric references"
             echo
-            echo "| Revision | Legacy retraces Hz | Shared-Lino loop Hz | Retraces/loop | Canvas writes Hz |"
-            echo "| :-- | ---: | ---: | ---: | ---: |"
-            jq -r '[
-              (.commit[0:8]),
-              (.rates.legacyRenderedHz // 0),
-              .rates.sourceLoopHz,
-              (.ratios.legacyRetracesPerSourceLoop // 0),
-              .rates.canvasWriteHz
-            ] | @tsv' build/historical-screen/*.json |
-              while IFS=$'\t' read -r revision legacy loop ratio canvas; do
-                printf '| %s | %.3f | %.3f | %.3f | %.3f |\n' \
-                  "$revision" "$legacy" "$loop" "$ratio" "$canvas"
-              done
+            jq -r '"Qualified: **\(.passed)**; service delta: \(.delta.producedPresentationHz) produced Hz, \(.delta.runnerMillisecondsPerFrame) runner ms/frame, \(.delta.instructionsPerFrame) instructions/frame."' \
+              build/vhgui-service-screen/summary.json
           } >> "$GITHUB_STEP_SUMMARY"
+          jq -e '.passed' build/vhgui-service-screen/summary.json
 
-      - name: Upload historical metric reports
+      - name: Upload service reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-historical-screen-${{ github.sha }}
-          path: build/historical-screen/
+          name: browser-vhgui-service-screen-${{ github.sha }}
+          path: build/vhgui-service-screen/
           if-no-files-found: error
           retention-days: 14
