@@ -29,7 +29,7 @@ const MIME_TYPES = new Map([
 
 function usage(message) {
   if (message) console.error(message);
-  console.error("Usage: node tools/profile-browser.mjs --checkpoint FILE [--duration SECONDS] [--presentation 18|60] [--worker-budget 10000|50000|100000|250000] [--output FILE] [--instruction-profile] [--force] [--headed]");
+  console.error("Usage: node tools/profile-browser.mjs --checkpoint FILE [--duration SECONDS] [--presentation 18|60] [--worker-budget 10000|50000|100000|250000] [--linoleum-revision SHA] [--linojava-revision SHA] [--site-revision SHA] [--output FILE] [--instruction-profile] [--force] [--headed]");
   process.exitCode = 2;
   return null;
 }
@@ -47,6 +47,11 @@ function parseArguments(argv) {
     output: resolve(SITE_ROOT, "build/browser-profile/surface/report.json"),
     presentationHz: 18,
     readinessSeconds: 240,
+    revisionOverrides: {
+      linoctissite: null,
+      linojava: null,
+      linoleum: null,
+    },
     workerBudget: 10_000,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -63,6 +68,9 @@ function parseArguments(argv) {
       else if (argument === "--duration") options.durationSeconds = Number(value);
       else if (argument === "--linojava-root") options.linoJavaRoot = resolve(value);
       else if (argument === "--linoleum-root") options.linoRoot = resolve(value);
+      else if (argument === "--linojava-revision") options.revisionOverrides.linojava = value;
+      else if (argument === "--linoleum-revision") options.revisionOverrides.linoleum = value;
+      else if (argument === "--site-revision") options.revisionOverrides.linoctissite = value;
       else if (argument === "--output") options.output = resolve(value);
       else if (argument === "--presentation") options.presentationHz = Number(value);
       else if (argument === "--readiness-timeout") options.readinessSeconds = Number(value);
@@ -79,6 +87,18 @@ function parseArguments(argv) {
   }
   if (![10_000, 50_000, 100_000, 250_000].includes(options.workerBudget)) {
     return usage("--worker-budget must be 10000, 50000, 100000, or 250000");
+  }
+  for (const [name, flag] of [
+    ["linoctissite", "site"],
+    ["linojava", "linojava"],
+    ["linoleum", "linoleum"],
+  ]) {
+    const revision = options.revisionOverrides[name];
+    if (revision === null) continue;
+    if (!/^[0-9a-f]{40}$/i.test(revision)) {
+      return usage(`--${flag}-revision must be a full 40-character commit SHA`);
+    }
+    options.revisionOverrides[name] = revision.toLowerCase();
   }
   if (!(options.readinessSeconds >= 5 && options.readinessSeconds <= 900)) {
     return usage("--readiness-timeout must be between 5 and 900 seconds");
@@ -481,10 +501,15 @@ async function runProfile(options) {
         },
         checkpointPath: options.checkpoint,
         checkpoint: checkpointRecord,
+        revisionOverrides: Object.fromEntries(
+          Object.entries(options.revisionOverrides).map(([name, revision]) => [
+            name, revision !== null,
+          ]),
+        ),
         revisions: {
-          linoleum: gitHead(options.linoRoot),
-          linojava: gitHead(options.linoJavaRoot),
-          linoctissite: gitHead(SITE_ROOT),
+          linoleum: options.revisionOverrides.linoleum ?? gitHead(options.linoRoot),
+          linojava: options.revisionOverrides.linojava ?? gitHead(options.linoJavaRoot),
+          linoctissite: options.revisionOverrides.linoctissite ?? gitHead(SITE_ROOT),
         },
       },
       interval: {

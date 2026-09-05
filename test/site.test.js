@@ -126,6 +126,11 @@ test("browser profiler uses the deterministic shared-Lino worker scene", async (
   assert.match(profiler, /--worker-budget/);
   assert.match(profiler, /workerSourceForBudget/);
   assert.match(profiler, /workerBudget: options\.workerBudget/);
+  assert.match(profiler, /--linoleum-revision/);
+  assert.match(profiler, /--linojava-revision/);
+  assert.match(profiler, /--site-revision/);
+  assert.match(profiler, /revisionOverrides: Object\.fromEntries/);
+  assert.match(profiler, /options\.revisionOverrides\.linoleum \?\? gitHead/);
   assert.match(profiler, /servedSha256: sha256\(workerSource\)/);
   assert.match(profiler, /sha256: sha256\(runnerSource\)/);
   assert.match(profiler, /menuOpenMilliseconds/);
