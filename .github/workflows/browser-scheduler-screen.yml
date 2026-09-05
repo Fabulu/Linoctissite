@@ -1,4 +1,4 @@
-name: Browser VHGUI service A/B
+name: Browser star-smoothing service A/B
 
 on:
   workflow_dispatch:
@@ -29,8 +29,8 @@ jobs:
     timeout-minutes: 30
     env:
       PROFILE_DURATION: ${{ inputs.duration || '20' }}
-      LINOJAVA_FALLBACK_REVISION: db0c0c7004e10a90576da0e5e2f6af75d89e7e5c
-      LINOJAVA_SERVICE_REVISION: fc3ff3292f57ae8477095c9edf2b91a44d905f5b
+      LINOJAVA_FALLBACK_REVISION: fc3ff3292f57ae8477095c9edf2b91a44d905f5b
+      LINOJAVA_SERVICE_REVISION: 5d16d444255a3787e7ad114c53e15b36b99cda2f
       LINO_SOURCE_REVISION: 92ddf9abe501c704bf2bb29858bda0f5444aa09b
     steps:
       - name: Checkout Linoctis
@@ -70,9 +70,9 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
 
-      - name: Verify exact service candidate
+      - name: Verify checked-in deployed baseline
         env:
-          LINOJAVA_DIR: vendor/linojava-service
+          LINOJAVA_DIR: vendor/linojava-fallback
           LINO_SOURCE_DIR: vendor/linoleum
         run: |
           npm run build
@@ -83,7 +83,7 @@ jobs:
         if: inputs.mode == 'service-ab'
         shell: bash
         run: |
-          mkdir -p build/vhgui-service-screen
+          mkdir -p build/star-smoothing-service-screen
           variants=(fallback service service fallback service fallback fallback service)
           for index in "${!variants[@]}"; do
             variant="${variants[$index]}"
@@ -106,16 +106,17 @@ jobs:
               --linojava-revision "$linojava_revision" \
               --linoleum-revision "$LINO_SOURCE_REVISION" \
               --site-revision "$GITHUB_SHA" \
-              --output "build/vhgui-service-screen/${run}-${variant}.json"
+              --output "build/star-smoothing-service-screen/${run}-${variant}.json"
           done
-          LINOJAVA_DIR=vendor/linojava-service LINO_SOURCE_DIR=vendor/linoleum npm run build
+          LINOJAVA_DIR=vendor/linojava-fallback LINO_SOURCE_DIR=vendor/linoleum npm run build
           git diff --exit-code -- public/noctis-runners.js public/linojava
 
       - name: Profile current Stardrifter instruction ownership
         if: inputs.mode == 'current-profile'
         shell: bash
         run: |
-          mkdir -p build/vhgui-service-screen
+          mkdir -p build/star-smoothing-service-screen
+          LINOJAVA_DIR=vendor/linojava-service LINO_SOURCE_DIR=vendor/linoleum npm run build
           node tools/profile-browser.mjs \
             --checkpoint test/fixtures/stardrifter-panel-v18.bin \
             --duration "$PROFILE_DURATION" \
@@ -128,18 +129,18 @@ jobs:
             --linojava-revision "$LINOJAVA_SERVICE_REVISION" \
             --linoleum-revision "$LINO_SOURCE_REVISION" \
             --site-revision "$GITHUB_SHA" \
-            --output build/vhgui-service-screen/current-profile.json
+            --output build/star-smoothing-service-screen/current-profile.json
 
       - name: Summarize and qualify service result
         if: inputs.mode == 'service-ab'
         shell: bash
         run: |
-          mkdir -p build/vhgui-service-screen/normalized
-          for report in build/vhgui-service-screen/[1-8]-*.json; do
+          mkdir -p build/star-smoothing-service-screen/normalized
+          for report in build/star-smoothing-service-screen/[1-8]-*.json; do
             label="$(basename "$report" .json)"
             variant="${label#*-}"
             jq --arg variant "$variant" '. + {screenVariant: $variant}' "$report" \
-              > "build/vhgui-service-screen/normalized/${label}.json"
+              > "build/star-smoothing-service-screen/normalized/${label}.json"
           done
           jq -s '
             def mean(field): map(field) | add / length;
@@ -190,15 +191,15 @@ jobs:
                 ))
                 and ($arms | all(.runs == 4 and (.runtimeIds | length) == 1 and (.runnerSha256 | length) == 1))
                 and ($arms | all(.controlSpreadPercent <= 5))
-                and ($service.instructionsPerFrame <= $fallback.instructionsPerFrame - 650000)
+                and ($service.instructionsPerFrame <= $fallback.instructionsPerFrame - 5000000)
                 and ($service.runnerMillisecondsPerFrame < $fallback.runnerMillisecondsPerFrame)
                 and ($service.producedPresentationHz > $fallback.producedPresentationHz)
               )
             }
-          ' build/vhgui-service-screen/normalized/*.json \
-            > build/vhgui-service-screen/summary.json
+          ' build/star-smoothing-service-screen/normalized/*.json \
+            > build/star-smoothing-service-screen/summary.json
           {
-            echo "## VHGUI service A/B"
+            echo "## Star-smoothing service A/B"
             echo
             echo "Same-host shared-runner comparison; absolute FPS is not release evidence."
             echo
@@ -211,22 +212,22 @@ jobs:
               .runnerMillisecondsPerFrame,
               .instructionsPerFrame,
               .controlSpreadPercent
-            ] | @tsv' build/vhgui-service-screen/summary.json |
+            ] | @tsv' build/star-smoothing-service-screen/summary.json |
               while IFS=$'\t' read -r variant produced simulation runner instructions spread; do
                 printf '| %s | %.3f | %.3f | %.3f | %.0f | %.2f%% |\n' \
                   "$variant" "$produced" "$simulation" "$runner" "$instructions" "$spread"
               done
             echo
             jq -r '"Qualified: **\(.passed)**; service delta: \(.delta.producedPresentationHz) produced Hz, \(.delta.runnerMillisecondsPerFrame) runner ms/frame, \(.delta.instructionsPerFrame) instructions/frame."' \
-              build/vhgui-service-screen/summary.json
+              build/star-smoothing-service-screen/summary.json
           } >> "$GITHUB_STEP_SUMMARY"
-          jq -e '.passed' build/vhgui-service-screen/summary.json
+          jq -e '.passed' build/star-smoothing-service-screen/summary.json
 
       - name: Upload service reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-vhgui-service-screen-${{ github.sha }}
-          path: build/vhgui-service-screen/
+          name: browser-star-smoothing-service-screen-${{ github.sha }}
+          path: build/star-smoothing-service-screen/
           if-no-files-found: error
           retention-days: 14

@@ -159,7 +159,7 @@ test("browser profiler uses the deterministic shared-Lino worker scene", async (
   assert.match(profiler, /instruction counters retained/);
 });
 
-test("deployment and VHGUI screening reject stale pinned runtime artifacts", async () => {
+test("deployment and exact-service screening reject stale pinned runtime artifacts", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8",
   );
@@ -167,14 +167,16 @@ test("deployment and VHGUI screening reject stale pinned runtime artifacts", asy
     new URL("../.github/workflows/browser-scheduler-screen.yml", import.meta.url),
     "utf8",
   );
-  const serviceRevision = "fc3ff3292f57ae8477095c9edf2b91a44d905f5b";
+  const deployedRevision = "fc3ff3292f57ae8477095c9edf2b91a44d905f5b";
+  const fallbackRevision = deployedRevision;
+  const serviceRevision = "5d16d444255a3787e7ad114c53e15b36b99cda2f";
   const sourceRevision = "92ddf9abe501c704bf2bb29858bda0f5444aa09b";
   assert.match(workflow, /Verify the pinned build is the checked-in runtime/);
   assert.match(
     workflow,
     /git diff --exit-code -- public\/noctis-runners\.js public\/linojava/,
   );
-  assert.match(workflow, new RegExp(serviceRevision));
+  assert.match(workflow, new RegExp(deployedRevision));
   assert.match(workflow, new RegExp(sourceRevision));
   assert.match(screen, /workflow_dispatch/);
   assert.match(screen, /- current-profile/);
@@ -185,11 +187,12 @@ test("deployment and VHGUI screening reject stale pinned runtime artifacts", asy
     screen,
     /variants=\(fallback service service fallback service fallback fallback service\)/,
   );
+  assert.match(screen, new RegExp(`LINOJAVA_FALLBACK_REVISION: ${fallbackRevision}`));
   assert.match(screen, new RegExp(`LINOJAVA_SERVICE_REVISION: ${serviceRevision}`));
   assert.match(screen, new RegExp(`LINO_SOURCE_REVISION: ${sourceRevision}`));
   assert.match(screen, /stardrifter-panel-v18\.bin/);
   assert.match(screen, /git diff --exit-code -- public\/noctis-runners\.js public\/linojava/);
   assert.match(screen, /controlSpreadPercent <= 5/);
-  assert.match(screen, /instructionsPerFrame <= \$fallback\.instructionsPerFrame - 650000/);
+  assert.match(screen, /instructionsPerFrame <= \$fallback\.instructionsPerFrame - 5000000/);
   assert.match(screen, /producedPresentationHz > \$fallback\.producedPresentationHz/);
 });
