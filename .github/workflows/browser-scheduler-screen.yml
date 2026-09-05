@@ -28,6 +28,27 @@ jobs:
           ref: 38c638af1f2af628b0bd90205d429573e8ce3aa6
           path: vendor/linoleum
 
+      - name: Checkout historical Linoctis reference
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/Linoctissite
+          ref: 2f9f64cddbd1aead03c7f5a46cbba97eedfe7017
+          path: vendor/historical-site
+
+      - name: Checkout historical LinoJava reference
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/linojava
+          ref: 722fd5047061783adbdfce9b7ba25338ac4ee86e
+          path: vendor/historical-linojava
+
+      - name: Checkout historical Lino source reference
+        uses: actions/checkout@v4
+        with:
+          repository: Fabulu/noctis-lino
+          ref: b90737d337dbeed10a0ff810c4bdeb7ce754bbd2
+          path: vendor/historical-linoleum
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -255,5 +276,47 @@ jobs:
         with:
           name: browser-runner-option-screen-${{ github.sha }}
           path: build/runner-option-screen/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build historical browser reference
+        working-directory: vendor/historical-site
+        env:
+          LINOJAVA_DIR: ${{ github.workspace }}/vendor/historical-linojava
+          LINO_SOURCE_DIR: ${{ github.workspace }}/vendor/historical-linoleum
+        run: node build.mjs
+
+      - name: Profile historical retrace semantics
+        shell: bash
+        run: |
+          mkdir -p build/historical-screen
+          node tools/profile-historical-browser.mjs \
+            --root vendor/historical-site/public \
+            --output build/historical-screen/2f9f64c-pinned.json \
+            --commit 2f9f64cddbd1aead03c7f5a46cbba97eedfe7017 \
+            --variant pinned-build \
+            --duration 5 \
+            --source-counters
+          jq -e '
+            .failures == {console: [], page: [], requests: [], runtime: []}
+            and .ratios.legacyRetracesPerSourceLoop > 1.95
+            and .ratios.legacyRetracesPerSourceLoop < 2.05
+            and .interval.sourceLoopCalls > 0
+          ' build/historical-screen/2f9f64c-pinned.json
+          {
+            echo "## Historical metric reference"
+            echo
+            jq -r '
+              "Legacy counter: \(.rates.legacyRenderedHz | tostring) retraces/s; "
+              + "shared-Lino loop: \(.rates.sourceLoopHz | tostring) loops/s; "
+              + "ratio: \(.ratios.legacyRetracesPerSourceLoop | tostring):1."
+            ' build/historical-screen/2f9f64c-pinned.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload historical metric report
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-historical-screen-${{ github.sha }}
+          path: build/historical-screen/
           if-no-files-found: error
           retention-days: 14

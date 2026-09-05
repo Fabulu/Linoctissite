@@ -165,6 +165,10 @@ test("deployment and screening reject stale pinned runtime artifacts", async () 
     new URL("../.github/workflows/browser-scheduler-screen.yml", import.meta.url),
     "utf8",
   );
+  const historicalProfiler = await readFile(
+    new URL("../tools/profile-historical-browser.mjs", import.meta.url),
+    "utf8",
+  );
   assert.match(workflow, /Verify the pinned build is the checked-in runtime/);
   assert.match(
     workflow,
@@ -181,4 +185,9 @@ test("deployment and screening reject stale pinned runtime artifacts", async () 
   );
   assert.match(screen, /stardrifter-panel-v18\.bin/);
   assert.match(screen, /git diff --exit-code -- build\.mjs public\/noctis-runners\.js public\/linojava/);
+  assert.match(screen, /2f9f64cddbd1aead03c7f5a46cbba97eedfe7017/);
+  assert.match(screen, /legacyRetracesPerSourceLoop > 1\.95/);
+  assert.match(historicalProfiler, /commit\.startsWith\(prefix\)/);
+  assert.match(historicalProfiler, /Number\(counters\?\.vhgloopcalls\) > 0/);
+  assert.match(historicalProfiler, /failures\.runtime\.push\(status\)/);
 });
