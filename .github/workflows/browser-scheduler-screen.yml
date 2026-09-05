@@ -149,9 +149,9 @@ jobs:
               }),
               arms: $arms,
               delta: {
-                producedPresentationHz: $service.producedPresentationHz - $fallback.producedPresentationHz,
-                runnerMillisecondsPerFrame: $service.runnerMillisecondsPerFrame - $fallback.runnerMillisecondsPerFrame,
-                instructionsPerFrame: $service.instructionsPerFrame - $fallback.instructionsPerFrame
+                producedPresentationHz: ($service.producedPresentationHz - $fallback.producedPresentationHz),
+                runnerMillisecondsPerFrame: ($service.runnerMillisecondsPerFrame - $fallback.runnerMillisecondsPerFrame),
+                instructionsPerFrame: ($service.instructionsPerFrame - $fallback.instructionsPerFrame)
               },
               passed: (
                 ($runs | all(
