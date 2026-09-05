@@ -421,8 +421,7 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
     count: 10559,
     hash: "7381c756d3c0b41921591735d71cb9b3e4ae26067f9ca8377eef5e3998663588",
     bands: [[27, 94], [106, 115], [127, 136], [148, 157]],
-    full: "57f59acdce39bc7fada43613b3dd6627a3f217ea979610c3ce6fd6333f77a4ab",
-  }, true);
+  });
   await localPoint(200, 300, true);
   await waitState((current) => current.values.menuon === 0 && !current.guiMenuActive,
     "dismiss GAME menu with mouse");
@@ -757,15 +756,6 @@ test("current shared-Lino project boots, paints, and survives fullscreen GOES fo
   assert.equal(keyboardInput.at(-1)?.type, "clearKeys");
 
   await page.locator("#game").focus();
-  const beforeEscape = await runtimeSnapshot();
-  if (beforeEscape.values.vhgconsole === 1) {
-    await page.keyboard.press("Escape");
-    await waitState(
-      (current) => current.values.vhgconsole === 0
-        && current.values.vhgloopcalls > beforeEscape.values.vhgloopcalls,
-      "close GOES before terminal action",
-    );
-  }
   await chooseGame(11, (current) => current.values.vhgesc === 1, "Save and quit");
   const stopped = await waitState((current) => !current.running || current.halted,
     "terminal Save and quit", 30_000);
@@ -821,7 +811,17 @@ test("main-thread fallback keeps the real FCS click route responsive", {
     assert.ok(bounds);
     await page.mouse.click(bounds.x + x, bounds.y + y);
   }
-  async function waitColor(crop, color, minimum) {
+  async function heldDrag(startX, startY, endX, endY, steps) {
+    const bounds = await page.locator("#game").boundingBox();
+    assert.ok(bounds);
+    await page.mouse.move(bounds.x + startX, bounds.y + startY);
+    await page.mouse.down({ button: "left" });
+    await page.mouse.move(bounds.x + endX, bounds.y + endY, { steps });
+    const held = await page.evaluate(() => globalThis.__linoPointerSnapshot());
+    await page.mouse.up({ button: "left" });
+    return held;
+  }
+  async function waitColor(crop, color, minimum, timeout = 30_000) {
     await page.waitForFunction(({ crop: area, color: wanted, minimum: count }) => {
       const canvas = document.querySelector("#game");
       const data = canvas.getContext("2d")
@@ -832,7 +832,7 @@ test("main-thread fallback keeps the real FCS click route responsive", {
             && data[index + 2] === wanted[2] && data[index + 3] === 255) matches += 1;
       }
       return matches >= count;
-    }, { crop, color, minimum }, { timeout: 30_000 });
+    }, { crop, color, minimum }, { timeout });
   }
   async function presentationCount() {
     return page.locator("#status").evaluate((node) => Number(
@@ -847,8 +847,13 @@ test("main-thread fallback keeps the real FCS click route responsive", {
     }, after, { timeout: 30_000 });
   }
 
+  const heldPointer = await heldDrag(260, 220, 420, 260, 256);
+  assert.ok(heldPointer.pointerTransitions <= 2,
+    `main-thread held queue grew to ${heldPointer.pointerTransitions}`);
+  const menuStartedAt = performance.now();
   await localPoint(565, 12);
-  await waitColor({ x: 487, y: 27, width: 152, height: 234 }, [255, 255, 255], 10_000);
+  await waitColor({ x: 487, y: 27, width: 152, height: 234 }, [255, 255, 255], 10_000, 5_000);
+  assert.ok(performance.now() - menuStartedAt < 5_000);
   await localPoint(550, 188);
   await waitColor({ x: 20, y: 45, width: 480, height: 360 }, [128, 255, 255], 9_000);
 

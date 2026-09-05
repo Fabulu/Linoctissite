@@ -1,4 +1,5 @@
 import { compileProject, createNoctisIntrinsics } from "./linojava/compiler.js";
+import { enqueuePointerTransition } from "./pointer-transitions.js";
 import {
   createRunners as createNoctisRunners,
   instructionCount as noctisInstructionCount,
@@ -71,7 +72,7 @@ function recordInputEvent(message) {
   if (!["key", "clearKeys", "ascii", "pointer", "physical", "displayPosition"].includes(message.type)) return;
   const entry = { at: Math.round(performance.now()), type: message.type };
   for (const name of ["name", "down", "value", "x", "y", "buttons", "deltaX", "deltaY",
-    "transition", "width", "height"]) {
+    "transition", "motion", "mode", "width", "height"]) {
     if (message[name] !== undefined) entry[name] = message[name];
   }
   recentInputEvents.push(entry);
@@ -222,6 +223,7 @@ const runtimeSnapshotSymbols = [
   "vhaavailable", "vhaplaying", "vhggraphics", "vhgfcsopen", "vhgdevaccess",
   "vhgdev", "vhgprefs", "vhginfo", "vhgnoticeframes", "vhgnoticeptr",
   "vhgmenuheld", "vhgmenuhover", "vhgmenux", "vhgmenuy", "pointerstatus",
+  "pointerxcoordinate", "pointerycoordinate",
   "vhguileft", "vhguitop", "vhguidw", "vhguidh", "menuon",
   "mgstspeed", "mgpwr", "mgcharge", "mgapreached", "mgipreaching",
   "mgipreached", "mgaptgt", "vhglocalactive", "vhglocaltarget",
@@ -737,9 +739,14 @@ function handleMessage(message) {
     pointerX = message.x | 0;
     pointerY = message.y | 0;
     pointerButtons = message.buttons | 0;
-    if (message.transition) pointerTransitions.push({
-      x: pointerX, y: pointerY, buttons: pointerButtons,
-      deltaX: message.deltaX | 0, deltaY: message.deltaY | 0,
+    if (message.transition) enqueuePointerTransition(pointerTransitions, {
+      x: pointerX,
+      y: pointerY,
+      buttons: pointerButtons,
+      deltaX: message.deltaX,
+      deltaY: message.deltaY,
+      mode: message.mode,
+      motion: message.motion === true,
     });
     else {
       pointerDeltaX = (pointerDeltaX + (message.deltaX | 0)) | 0;

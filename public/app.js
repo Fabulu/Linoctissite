@@ -2,6 +2,7 @@ import {
   fastPresentationFromSearch,
   presentationDescription,
 } from "./runtime-options.js";
+import { enqueuePointerTransition } from "./pointer-transitions.js";
 
 const runtimeOptions = new URLSearchParams(location.search);
 const fastPresentation = fastPresentationFromSearch(location.search);
@@ -158,6 +159,13 @@ let linoMenuPress = false;
 let linoWindowDrag = null;
 let linoWindowResize = null;
 let activePointerTarget = null;
+globalThis.__linoPointerSnapshot = () => ({
+  pointerX,
+  pointerY,
+  pointerButtons,
+  pointerTransitions: pointerTransitions.length,
+  activePointerTransition: activePointerTransition ? { ...activePointerTransition } : null,
+});
 let image = context.createImageData(canvas.width, canvas.height);
 let pixels = new Uint32Array(image.data.buffer);
 
@@ -619,16 +627,22 @@ function pointerPosition(event, target = event.currentTarget) {
   return { deltaX, deltaY };
 }
 
+function queuePointerTransition(deltaX, deltaY, motion = false) {
+  enqueuePointerTransition(pointerTransitions, {
+    buttons: pointerButtons,
+    x: pointerX,
+    y: pointerY,
+    deltaX,
+    deltaY,
+    mode: pointerMode,
+    motion,
+  });
+}
+
 function movePointer(event, target) {
   const movement = pointerPosition(event, target);
   if (pointerButtons !== 0) {
-    pointerTransitions.push({
-      buttons: pointerButtons,
-      x: pointerX,
-      y: pointerY,
-      deltaX: movement.deltaX,
-      deltaY: movement.deltaY,
-    });
+    queuePointerTransition(movement.deltaX, movement.deltaY, true);
     if (linoWindowResize) {
       linoWindowResize.queuedX += movement.deltaX;
       linoWindowResize.queuedY += movement.deltaY;
@@ -670,13 +684,13 @@ function releasePointer(event, target) {
     const deltaX = desiredX - linoWindowResize.queuedX;
     const deltaY = desiredY - linoWindowResize.queuedY;
     if (deltaX !== 0 || deltaY !== 0) {
-      pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY, deltaX, deltaY });
+      queuePointerTransition(deltaX, deltaY, true);
     }
   }
   pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
   pointerDeltaX = 0;
   pointerDeltaY = 0;
-  pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY, deltaX: 0, deltaY: 0 });
+  queuePointerTransition(0, 0);
   if (linoFullscreenPress && event.button === 0 && target === canvas
       && insideLinoBounds("fullbuttonhotspot", pointerX, pointerY)) {
     void requestGameFullscreen();
@@ -694,9 +708,7 @@ function cancelActivePointer() {
   pointerButtons = 0;
   pointerDeltaX = 0;
   pointerDeltaY = 0;
-  pointerTransitions.push({
-    buttons: 0, x: pointerX, y: pointerY, deltaX: 0, deltaY: 0,
-  });
+  queuePointerTransition(0, 0);
   linoFullscreenPress = false;
   linoMenuPress = false;
   linoWindowDrag = null;
@@ -721,7 +733,7 @@ for (const target of [canvas, fullscreenCanvas]) {
     pointerButtons |= event.button === 0 ? 4 : event.button === 2 ? 8 : 16;
     pointerDeltaX = 0;
     pointerDeltaY = 0;
-    pointerTransitions.push({ buttons: pointerButtons, x: pointerX, y: pointerY, deltaX: 0, deltaY: 0 });
+    queuePointerTransition(0, 0);
     activePointerTarget = target;
     if (event.button === 0 && target === canvas
         && insideLinoBounds("titlebarbounds", pointerX, pointerY)) {

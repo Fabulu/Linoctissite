@@ -1,11 +1,11 @@
 {
   "name": "linoctissite",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node ./build.mjs",
-    "test": "node --test",
+    "test": "node --test --test-concurrency=1 test",
     "profile:browser": "node ./tools/profile-browser.mjs",
     "deploy": "npm run build && npx wrangler pages deploy public --project-name=linoctis --branch=main"
   },

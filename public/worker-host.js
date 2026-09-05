@@ -314,10 +314,10 @@ function insideLinoBounds(name, x, y) {
     && x >= bounds[0] && y >= bounds[1] && x <= bounds[2] && y <= bounds[3];
 }
 
-function sendPointer(deltaX, deltaY, transition) {
+function sendPointer(deltaX, deltaY, transition, motion = false) {
   worker.postMessage({
     type: "pointer", x: pointerX, y: pointerY, buttons: pointerButtons,
-    deltaX, deltaY, transition,
+    deltaX, deltaY, transition, motion: transition && motion, mode: pointerMode,
   });
 }
 
@@ -338,7 +338,8 @@ function pointerPosition(event, target = event.currentTarget) {
 
 function movePointer(event, target) {
   const movement = pointerPosition(event, target);
-  sendPointer(movement.deltaX, movement.deltaY, pointerButtons !== 0);
+  const transition = pointerButtons !== 0;
+  sendPointer(movement.deltaX, movement.deltaY, transition, transition);
   if (linoWindowDrag && target === canvas) {
     const left = linoWindowDrag.left + event.clientX - linoWindowDrag.clientX;
     const top = linoWindowDrag.top + event.clientY - linoWindowDrag.clientY;
@@ -385,7 +386,7 @@ function releasePointer(event, target) {
     const desiredY = Math.round((event.clientY - linoWindowResize.clientY) * linoWindowResize.height / linoWindowResize.cssHeight);
     const deltaX = desiredX - linoWindowResize.queuedX;
     const deltaY = desiredY - linoWindowResize.queuedY;
-    if (deltaX !== 0 || deltaY !== 0) sendPointer(deltaX, deltaY, true);
+    if (deltaX !== 0 || deltaY !== 0) sendPointer(deltaX, deltaY, true, true);
   }
   pointerButtons &= ~(event.button === 0 ? 4 : event.button === 2 ? 8 : 16);
   sendPointer(0, 0, true);
