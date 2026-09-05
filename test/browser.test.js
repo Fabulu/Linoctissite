@@ -865,6 +865,35 @@ test("main-thread fallback keeps the real FCS click route responsive", {
   const heldPointer = await heldDrag(260, 220, 420, 260, 256);
   assert.ok(heldPointer.pointerTransitions <= 2,
     `main-thread held queue grew to ${heldPointer.pointerTransitions}`);
+  {
+    const bounds = await page.locator("#game").boundingBox();
+    assert.ok(bounds);
+    await page.mouse.move(bounds.x + 240, bounds.y + 180);
+    await page.mouse.down({ button: "left" });
+    await page.evaluate(() => {
+      const target = document.querySelector("#game");
+      target.blur();
+      target.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerId: 1 }));
+    });
+    await page.mouse.up({ button: "left" });
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "game");
+    await page.evaluate(() => {
+      const target = document.querySelector("#game");
+      target.focus = () => {};
+      target.blur();
+    });
+    await page.keyboard.down("ArrowUp");
+    assert.deepEqual(
+      await page.evaluate(() => globalThis.__linoPointerSnapshot().heldKeys),
+      ["keyup"],
+    );
+    await page.keyboard.up("ArrowUp");
+    assert.deepEqual(
+      await page.evaluate(() => globalThis.__linoPointerSnapshot().heldKeys),
+      [],
+    );
+    await page.evaluate(() => { delete document.querySelector("#game").focus; });
+  }
   const menuStartedAt = performance.now();
   await localPoint(565, 12);
   await waitColor({ x: 487, y: 27, width: 152, height: 234 }, [255, 255, 255], 10_000, 5_000);

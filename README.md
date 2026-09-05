@@ -1,6 +1,6 @@
 # Linoctis
 
-Linoctis 1.0.2 is the browser home of the L.in.oleum Noctis port. The reusable
+Linoctis 1.0.3 is the browser home of the L.in.oleum Noctis port. The reusable
 JavaScript compiler and machine live in
 [Fabulu/linojava](https://github.com/Fabulu/linojava).
 
@@ -32,6 +32,9 @@ Current browser integration includes:
 - Bounded held-pointer input: obsolete adjacent motion is coalesced while every
   button edge, final coordinate, and accumulated drag/resize delta is retained;
   the worker path is regression-tested in Chromium and Firefox.
+- Explicit game keyboard ownership survives canvas redraw, pointer-capture
+  cancellation, and transient DOM focus loss; intentional focus on an external
+  control still releases every held Lino key.
 - Optional exact host services for bounded shared-Lino routines, including the
   packed in-place Stardrifter star-page smoother; the same linked Lino
   implementations remain executable fallbacks.

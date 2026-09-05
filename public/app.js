@@ -159,12 +159,15 @@ let linoMenuPress = false;
 let linoWindowDrag = null;
 let linoWindowResize = null;
 let activePointerTarget = null;
+let keyboardInputTarget = null;
 globalThis.__linoPointerSnapshot = () => ({
   pointerX,
   pointerY,
   pointerButtons,
   pointerTransitions: pointerTransitions.length,
   activePointerTransition: activePointerTransition ? { ...activePointerTransition } : null,
+  keyboardInputTarget: keyboardInputTarget?.id ?? null,
+  heldKeys: Object.keys(heldKeys).sort(),
 });
 let image = context.createImageData(canvas.width, canvas.height);
 let pixels = new Uint32Array(image.data.buffer);
@@ -252,7 +255,15 @@ function createPcmHost() {
 }
 
 const pcmHost = createPcmHost();
-document.addEventListener("pointerdown", () => { void pcmHost.unlock(); }, { passive: true });
+document.addEventListener("pointerdown", (event) => {
+  void pcmHost.unlock();
+  if (event.target !== canvas && event.target !== fullscreenCanvas) relinquishKeyboard();
+}, { passive: true });
+document.addEventListener("focusin", (event) => {
+  if (event.target !== canvas && event.target !== fullscreenCanvas && event.target !== document.body) {
+    relinquishKeyboard();
+  }
+});
 document.addEventListener("keydown", () => { void pcmHost.unlock(); });
 
 function configureDisplay(width, height) {
@@ -274,6 +285,7 @@ function configureDisplay(width, height) {
   linoWindow.classList.toggle("is-dormant", dormant);
   const availableWidth = Math.max(1, Math.floor(window.innerWidth * 0.96));
   linoWindow.style.width = dormant ? "146px" : `${Math.min(availableWidth, width + 20)}px`;
+  restoreKeyboardFocus();
   return true;
 }
 
@@ -474,6 +486,25 @@ async function exitGameFullscreen() {
   }
 }
 
+function claimKeyboard(target) {
+  keyboardInputTarget = target;
+  target.focus({ preventScroll: true });
+}
+
+function restoreKeyboardFocus() {
+  if (!keyboardInputTarget || document.hidden || !document.hasFocus() || gameStage.hidden) return;
+  const target = document.fullscreenElement === gameStage ? fullscreenCanvas : canvas;
+  if (target.hidden) return;
+  keyboardInputTarget = target;
+  if (document.activeElement !== target) target.focus({ preventScroll: true });
+}
+
+function relinquishKeyboard() {
+  if (!keyboardInputTarget) return;
+  keyboardInputTarget = null;
+  clearKeyboard();
+}
+
 function scheduleLinoMenuAction() {
   // A browser event can arrive at any VM yield. Wait for the actual GUI idle
   // continuation before entering the menu service so no renderer stack frame
@@ -670,6 +701,7 @@ function releasePointer(event, target) {
     }
     linoMenuPress = false;
     activePointerTarget = null;
+    restoreKeyboardFocus();
     return;
   }
   if (linoWindowResize) {
@@ -699,6 +731,7 @@ function releasePointer(event, target) {
   linoWindowDrag = null;
   linoWindowResize = null;
   activePointerTarget = null;
+  restoreKeyboardFocus();
 }
 
 function cancelActivePointer() {
@@ -714,9 +747,11 @@ function cancelActivePointer() {
   linoWindowDrag = null;
   linoWindowResize = null;
   activePointerTarget = null;
+  restoreKeyboardFocus();
 }
 
 for (const target of [canvas, fullscreenCanvas]) {
+  target.addEventListener("focus", () => { keyboardInputTarget = target; });
   target.addEventListener("pointermove", (event) => movePointer(event, target));
   target.addEventListener("pointerdown", (event) => {
     pointerPosition(event);
@@ -724,7 +759,7 @@ for (const target of [canvas, fullscreenCanvas]) {
         && insideLinoBounds("menubuttonhotspot", pointerX, pointerY)) {
       linoMenuPress = true;
       activePointerTarget = target;
-      target.focus();
+      claimKeyboard(target);
       target.setPointerCapture(event.pointerId);
       return;
     }
@@ -759,7 +794,7 @@ for (const target of [canvas, fullscreenCanvas]) {
         queuedY: 0,
       };
     }
-    target.focus();
+    claimKeyboard(target);
     target.setPointerCapture(event.pointerId);
   });
   target.addEventListener("pointerup", (event) => releasePointer(event, target));
@@ -835,24 +870,27 @@ function clearKeyboard() {
   for (const key of Object.keys(heldKeys)) delete heldKeys[key];
 }
 
-for (const target of [canvas, fullscreenCanvas]) {
-  target.addEventListener("keydown", (event) => {
-    const key = updateLinoKey(event.code, true);
-    const ascii = asciiInput(event);
-    if (ascii !== null) consoleInput.push(ascii);
-    if (key || ascii !== null) event.preventDefault();
-  });
-  target.addEventListener("keyup", (event) => {
-    const key = updateLinoKey(event.code, false);
-    if (key) event.preventDefault();
-  });
-}
+window.addEventListener("keydown", (event) => {
+  if (!keyboardInputTarget) return;
+  const key = updateLinoKey(event.code, true);
+  const ascii = asciiInput(event);
+  if (ascii !== null) consoleInput.push(ascii);
+  if (key || ascii !== null) event.preventDefault();
+});
+window.addEventListener("keyup", (event) => {
+  if (!keyboardInputTarget) return;
+  const key = updateLinoKey(event.code, false);
+  if (key) event.preventDefault();
+});
+
 window.addEventListener("blur", () => {
+  keyboardInputTarget = null;
   cancelActivePointer();
   clearKeyboard();
 });
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
+    keyboardInputTarget = null;
     cancelActivePointer();
     clearKeyboard();
   }
@@ -870,7 +908,7 @@ document.addEventListener("fullscreenchange", () => {
   const active = document.fullscreenElement === gameStage;
   exitFullscreenButton.hidden = !active;
   fullscreenCanvas.hidden = !active;
-  (active ? fullscreenCanvas : canvas).focus();
+  claimKeyboard(active ? fullscreenCanvas : canvas);
 });
 
 runFrame();

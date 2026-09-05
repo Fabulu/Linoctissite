@@ -90,7 +90,7 @@ async function seedCheckpoint(page, baseUrl) {
 }
 
 for (const [name, browserType] of [["Chromium", chromium], ["Firefox", firefox]]) {
-  test(`${name} bounds held-pointer motion and leaves GAME clicks responsive`, {
+  test(`${name} bounds held-pointer motion and preserves keyboard ownership`, {
     timeout: 600_000,
   }, async (context) => {
     const server = createStaticServer();
@@ -116,6 +116,18 @@ for (const [name, browserType] of [["Chromium", chromium], ["Firefox", firefox]]
     await page.waitForFunction(() => !document.querySelector("#crash-panel")?.hidden
       || globalThis.__linoSnapshot?.()?.simulationTicks > 0, null, { timeout: 240_000 });
     assert.equal(await page.locator("#crash-panel").getAttribute("hidden"), "");
+    await page.evaluate(() => {
+      const runtime = globalThis.__linoRuntime;
+      const postMessage = runtime.postMessage.bind(runtime);
+      globalThis.__linoTestInput = [];
+      runtime.postMessage = (...args) => {
+        const message = args[0];
+        if (["ascii", "clearKeys", "key", "pointer"].includes(message?.type)) {
+          globalThis.__linoTestInput.push({ ...message });
+        }
+        return postMessage(...args);
+      };
+    });
 
     async function runtimeSnapshot() {
       await page.evaluate(() => {
@@ -160,6 +172,53 @@ for (const [name, browserType] of [["Chromium", chromium], ["Firefox", firefox]]
         pointerY: Math.floor((clientY - bounds.y) * size.height / bounds.height),
       };
     }
+
+    const ownershipPoint = await canvasPoint(240, 180);
+    await page.mouse.move(ownershipPoint.clientX, ownershipPoint.clientY);
+    await page.mouse.down({ button: "left" });
+    await page.evaluate(() => {
+      const target = document.querySelector("#game");
+      target.blur();
+      target.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true, pointerId: 1 }));
+      globalThis.__linoTestInput.length = 0;
+    });
+    await page.mouse.up({ button: "left" });
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "game");
+    await page.evaluate(() => {
+      const target = document.querySelector("#game");
+      target.focus = () => {};
+      target.blur();
+    });
+    assert.notEqual(await page.evaluate(() => document.activeElement?.id), "game");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.type("x");
+    const ownershipInput = await page.evaluate(() => globalThis.__linoTestInput);
+    assert.deepEqual(
+      ownershipInput.filter((message) => message.type === "key" && message.name === "keyup")
+        .map((message) => message.down),
+      [true, false, true, false],
+    );
+    assert.ok(ownershipInput.some((message) => message.type === "ascii" && message.value === 120));
+    await page.evaluate(() => {
+      const target = document.querySelector("#game");
+      delete target.focus;
+      const button = document.createElement("button");
+      button.id = "focus-probe";
+      document.body.append(button);
+      button.focus();
+      globalThis.__linoTestInput.length = 0;
+    });
+    await page.keyboard.press("ArrowUp");
+    assert.deepEqual(
+      await page.evaluate(() => globalThis.__linoTestInput
+        .filter((message) => message.type === "key")),
+      [],
+    );
+    await page.evaluate(() => document.querySelector("#focus-probe").remove());
+    await waitRuntime((state) => state.values.pointerstatus === 3
+      && state.pointerTransitions === 0 && state.activePointerTransition === null,
+    "recover from pointer-capture cancellation");
 
     const start = await canvasPoint(260, 220);
     const end = await canvasPoint(420, 260);
