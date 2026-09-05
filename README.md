@@ -58,6 +58,8 @@ Unsupported native paths still stop with an explicit error. Browser sustained
 Place the `linojava` and `linoleum` repositories beside this one, then run:
 
 ```powershell
+npm ci
+npx playwright install chromium firefox
 npm run build
 npm test
 npx serve public

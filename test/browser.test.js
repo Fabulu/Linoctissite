@@ -122,6 +122,21 @@ test("physical Stardrifter panels render mapped text at meaningful throughput", 
   });
   await page.waitForFunction(() => globalThis.__linoMetrics?.simulationTicks >= 80
     || !document.querySelector("#crash-panel")?.hidden, null, { timeout: 540_000 });
+  await page.waitForFunction(() => {
+    if (!document.querySelector("#crash-panel")?.hidden) return true;
+    const context2d = document.querySelector("#game").getContext("2d");
+    const backgroundPixels = (x, y, width, height) => {
+      const pixels = context2d.getImageData(x, y, width, height).data;
+      let count = 0;
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index] === 40 && pixels[index + 1] === 36
+            && pixels[index + 2] === 28 && pixels[index + 3] === 255) count += 1;
+      }
+      return count;
+    };
+    return backgroundPixels(30, 60, 370, 75) > 10_000
+      && backgroundPixels(480, 60, 135, 120) > 5_000;
+  }, null, { timeout: 30_000 });
 
   const state = await page.evaluate(() => {
     const canvas = document.querySelector("#game");
