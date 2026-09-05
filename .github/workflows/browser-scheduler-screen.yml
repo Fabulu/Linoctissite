@@ -3,6 +3,14 @@ name: Browser VHGUI service A/B
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Benchmark mode
+        required: true
+        default: service-ab
+        type: choice
+        options:
+          - service-ab
+          - current-profile
       duration:
         description: Profile interval in seconds
         required: true
@@ -72,6 +80,7 @@ jobs:
           node --test test/site.test.js
 
       - name: Run interleaved fallback and service screen
+        if: inputs.mode == 'service-ab'
         shell: bash
         run: |
           mkdir -p build/vhgui-service-screen
@@ -102,7 +111,26 @@ jobs:
           LINOJAVA_DIR=vendor/linojava-service LINO_SOURCE_DIR=vendor/linoleum npm run build
           git diff --exit-code -- public/noctis-runners.js public/linojava
 
+      - name: Profile current Stardrifter instruction ownership
+        if: inputs.mode == 'current-profile'
+        shell: bash
+        run: |
+          mkdir -p build/vhgui-service-screen
+          node tools/profile-browser.mjs \
+            --checkpoint test/fixtures/stardrifter-panel-v18.bin \
+            --duration "$PROFILE_DURATION" \
+            --presentation 60 \
+            --worker-budget 10000 \
+            --instruction-profile \
+            --linojava-root vendor/linojava-service \
+            --linoleum-root vendor/linoleum \
+            --linojava-revision "$LINOJAVA_SERVICE_REVISION" \
+            --linoleum-revision "$LINO_SOURCE_REVISION" \
+            --site-revision "$GITHUB_SHA" \
+            --output build/vhgui-service-screen/current-profile.json
+
       - name: Summarize and qualify service result
+        if: inputs.mode == 'service-ab'
         shell: bash
         run: |
           mkdir -p build/vhgui-service-screen/normalized

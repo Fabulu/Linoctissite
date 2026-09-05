@@ -175,6 +175,8 @@ test("deployment and VHGUI screening reject stale pinned runtime artifacts", asy
   assert.match(workflow, new RegExp(serviceRevision));
   assert.match(workflow, new RegExp(sourceRevision));
   assert.match(screen, /workflow_dispatch/);
+  assert.match(screen, /- current-profile/);
+  assert.match(screen, /--instruction-profile/);
   assert.match(screen, /PROFILE_DURATION: \$\{\{ inputs\.duration \|\| '20' \}\}/);
   assert.match(
     screen,
