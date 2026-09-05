@@ -128,3 +128,132 @@ jobs:
           path: build/scheduler-screen/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Run generated-runner option screen
+        shell: bash
+        env:
+          LINOJAVA_DIR: vendor/linojava
+          LINO_SOURCE_DIR: vendor/linoleum
+        run: |
+          mkdir -p build/runner-option-screen
+          labels=(baseline-start counted-off structured-off sink-off baseline-end)
+          options=(baseline counted-off structured-off sink-off baseline)
+          for index in "${!labels[@]}"; do
+            label="${labels[$index]}"
+            option="${options[$index]}"
+            run="$((index + 1))"
+            git checkout -- build.mjs
+            python - "$option" <<'PY'
+          from pathlib import Path
+          import sys
+
+          option = sys.argv[1]
+          path = Path("build.mjs")
+          source = path.read_text()
+          replacements = {
+              "counted-off": [
+                  ("const countedSelfBackedgeLabels = structuredSelfBackedgeLabels;",
+                   "const countedSelfBackedgeLabels = [];"),
+              ],
+              "structured-off": [
+                  ('const structuredSelfBackedgeLabels = ["VHGUI compose pixel", "VHGUI 2x pixel"];',
+                   "const structuredSelfBackedgeLabels = [];"),
+                  ("const countedSelfBackedgeLabels = structuredSelfBackedgeLabels;",
+                   "const countedSelfBackedgeLabels = [];"),
+              ],
+              "sink-off": [
+                  ("const sinkFallthroughPc = true;",
+                   "const sinkFallthroughPc = false;"),
+              ],
+              "baseline": [],
+          }
+          if option not in replacements:
+              raise SystemExit(f"unknown runner option: {option}")
+          for old, new in replacements[option]:
+              if source.count(old) != 1:
+                  raise SystemExit(f"expected one runner-option marker: {old}")
+              source = source.replace(old, new)
+          path.write_text(source)
+          PY
+            npm run build
+            node tools/profile-browser.mjs \
+              --checkpoint test/fixtures/stardrifter-panel-v18.bin \
+              --duration 5 \
+              --presentation 60 \
+              --worker-budget 10000 \
+              --linojava-root vendor/linojava \
+              --linoleum-root vendor/linoleum \
+              --linojava-revision db0c0c7004e10a90576da0e5e2f6af75d89e7e5c \
+              --linoleum-revision 38c638af1f2af628b0bd90205d429573e8ce3aa6 \
+              --site-revision "$GITHUB_SHA" \
+              --output "build/runner-option-screen/${run}-${label}.json"
+          done
+          git checkout -- build.mjs
+          npm run build
+          git diff --exit-code -- build.mjs public/noctis-runners.js public/linojava
+
+      - name: Summarize generated-runner screening results
+        shell: bash
+        run: |
+          mkdir -p build/runner-option-screen/normalized
+          for report in build/runner-option-screen/[1-5]-*.json; do
+            label="$(basename "$report" .json)"
+            label="${label#*-}"
+            jq --arg label "$label" '. + {screenVariant: $label}' "$report" \
+              > "build/runner-option-screen/normalized/${label}.json"
+          done
+          jq -s '{
+            schema: 1,
+            qualification: "shared GitHub runner screening only; not release FPS evidence",
+            runs: map({
+              variant: .screenVariant,
+              runtimeId: .provenance.runtimeId,
+              runnerBytes: .provenance.staticRunner.bytes,
+              runnerSha256: .provenance.staticRunner.sha256,
+              measuredMilliseconds,
+              presentations: .interval.presentations,
+              producedPresentations: .interval.producedPresentations,
+              instructions: .interval.instructions,
+              runCalls: .interval.runCalls,
+              producedPresentationHz: .metrics.producedPresentationHz,
+              simulationHz: .metrics.simulationHz,
+              runnerMillisecondsPerProducedFrame: .metrics.averageRunnerMillisecondsPerProducedFrame,
+              nonRunnerMillisecondsPerProducedFrame: .metrics.nonRunnerMillisecondsPerProducedFrame,
+              runnerDutyCycle: .metrics.runnerDutyCycle,
+              runCallsPerProducedFrame: .metrics.runCallsPerProducedFrame,
+              menuOpenMilliseconds: .interaction.menuOpenMilliseconds,
+              menuDismissMilliseconds: .interaction.menuDismissMilliseconds,
+              activeElement: .interaction.activeElement,
+              failures
+            })
+          }' build/runner-option-screen/normalized/*.json \
+            > build/runner-option-screen/summary.json
+          {
+            echo "## Generated-runner option screen"
+            echo
+            echo "Shared-runner screening only; absolute FPS is not release evidence."
+            echo
+            echo "| Variant | Produced Hz | Simulation Hz | Runner ms/frame | Instructions/frame | Menu open ms | Menu dismiss ms |"
+            echo "| :-- | ---: | ---: | ---: | ---: | ---: | ---: |"
+            jq -r '.runs[] | [
+              .variant,
+              .producedPresentationHz,
+              .simulationHz,
+              .runnerMillisecondsPerProducedFrame,
+              (.instructions / .producedPresentations),
+              .menuOpenMilliseconds,
+              .menuDismissMilliseconds
+            ] | @tsv' build/runner-option-screen/summary.json |
+              while IFS=$'\t' read -r variant produced simulation runner instructions menuopen menudismiss; do
+                printf '| %s | %.3f | %.3f | %.3f | %.0f | %.1f | %.1f |\n' \
+                  "$variant" "$produced" "$simulation" "$runner" "$instructions" "$menuopen" "$menudismiss"
+              done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload generated-runner reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-runner-option-screen-${{ github.sha }}
+          path: build/runner-option-screen/
+          if-no-files-found: error
+          retention-days: 14

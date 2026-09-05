@@ -157,13 +157,25 @@ test("browser profiler uses the deterministic shared-Lino worker scene", async (
   assert.match(profiler, /instruction counters retained/);
 });
 
-test("deployment rejects stale pinned runtime artifacts", async () => {
+test("deployment and screening reject stale pinned runtime artifacts", async () => {
   const workflow = await readFile(
     new URL("../.github/workflows/deploy.yml", import.meta.url), "utf8",
+  );
+  const screen = await readFile(
+    new URL("../.github/workflows/browser-scheduler-screen.yml", import.meta.url),
+    "utf8",
   );
   assert.match(workflow, /Verify the pinned build is the checked-in runtime/);
   assert.match(
     workflow,
     /git diff --exit-code -- public\/noctis-runners\.js public\/linojava/,
   );
+  assert.match(screen, /workflow_dispatch/);
+  assert.match(screen, /budgets=\(10000 250000 250000 10000\)/);
+  assert.match(
+    screen,
+    /labels=\(baseline-start counted-off structured-off sink-off baseline-end\)/,
+  );
+  assert.match(screen, /stardrifter-panel-v18\.bin/);
+  assert.match(screen, /git diff --exit-code -- build\.mjs public\/noctis-runners\.js public\/linojava/);
 });
