@@ -13,6 +13,12 @@ import { chromium } from "playwright";
 const SITE_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const PUBLIC_ROOT = resolve(SITE_ROOT, "public");
 const DEFAULT_CLOCK_SECONDS = 1344638527;
+const WORKER_BUDGET_LITERALS = new Map([
+  [10_000, "10_000"],
+  [50_000, "50_000"],
+  [100_000, "100_000"],
+  [250_000, "250_000"],
+]);
 const MIME_TYPES = new Map([
   [".css", "text/css; charset=utf-8"],
   [".html", "text/html; charset=utf-8"],
@@ -23,7 +29,7 @@ const MIME_TYPES = new Map([
 
 function usage(message) {
   if (message) console.error(message);
-  console.error("Usage: node tools/profile-browser.mjs --checkpoint FILE [--duration SECONDS] [--output FILE] [--instruction-profile] [--force] [--headed]");
+  console.error("Usage: node tools/profile-browser.mjs --checkpoint FILE [--duration SECONDS] [--presentation 18|60] [--worker-budget 10000|50000|100000|250000] [--output FILE] [--instruction-profile] [--force] [--headed]");
   process.exitCode = 2;
   return null;
 }
@@ -39,7 +45,9 @@ function parseArguments(argv) {
     linoJavaRoot: resolve(SITE_ROOT, "../linojava"),
     linoRoot: resolve(SITE_ROOT, "../linoleum"),
     output: resolve(SITE_ROOT, "build/browser-profile/surface/report.json"),
+    presentationHz: 18,
     readinessSeconds: 240,
+    workerBudget: 10_000,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -56,13 +64,21 @@ function parseArguments(argv) {
       else if (argument === "--linojava-root") options.linoJavaRoot = resolve(value);
       else if (argument === "--linoleum-root") options.linoRoot = resolve(value);
       else if (argument === "--output") options.output = resolve(value);
+      else if (argument === "--presentation") options.presentationHz = Number(value);
       else if (argument === "--readiness-timeout") options.readinessSeconds = Number(value);
+      else if (argument === "--worker-budget") options.workerBudget = Number(value);
       else return usage(`Unknown argument: ${argument}`);
     }
   }
   if (!options.checkpoint) return usage("--checkpoint is required");
   if (!(options.durationSeconds >= 5 && options.durationSeconds <= 120)) {
     return usage("--duration must be between 5 and 120 seconds");
+  }
+  if (![18, 60].includes(options.presentationHz)) {
+    return usage("--presentation must be 18 or 60");
+  }
+  if (![10_000, 50_000, 100_000, 250_000].includes(options.workerBudget)) {
+    return usage("--worker-budget must be 10000, 50000, 100000, or 250000");
   }
   if (!(options.readinessSeconds >= 5 && options.readinessSeconds <= 900)) {
     return usage("--readiness-timeout must be between 5 and 900 seconds");
@@ -111,7 +127,18 @@ function checkpointProvenance(bytes) {
   };
 }
 
-function createStaticServer() {
+function workerSourceForBudget(source, budget) {
+  const marker = "const runInstructionBudget = 10_000;";
+  const parts = source.split(marker);
+  if (parts.length !== 2) {
+    throw new Error(`expected one worker-budget marker, found ${parts.length - 1}`);
+  }
+  return parts.join(
+    `const runInstructionBudget = ${WORKER_BUDGET_LITERALS.get(budget)};`,
+  );
+}
+
+function createStaticServer(workerSource) {
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -130,7 +157,8 @@ function createStaticServer() {
         response.writeHead(403).end();
         return;
       }
-      const data = await readFile(filename);
+      let data = await readFile(filename);
+      if (filename === resolve(PUBLIC_ROOT, "game-worker.js")) data = workerSource;
       response.writeHead(200, {
         "cache-control": "no-store",
         "content-type": MIME_TYPES.get(extname(filename)) ?? "application/octet-stream",
@@ -194,7 +222,10 @@ async function runProfile(options) {
   const checkpoint = new Uint8Array(await readFile(options.checkpoint));
   const checkpointRecord = checkpointProvenance(checkpoint);
   const manifest = JSON.parse(await readFile(resolve(PUBLIC_ROOT, "lino-src/manifest.json"), "utf8"));
-  const server = createStaticServer();
+  const runnerSource = await readFile(resolve(PUBLIC_ROOT, "noctis-runners.js"));
+  const canonicalWorkerSource = await readFile(resolve(PUBLIC_ROOT, "game-worker.js"), "utf8");
+  const workerSource = workerSourceForBudget(canonicalWorkerSource, options.workerBudget);
+  const server = createStaticServer(workerSource);
   const baseUrl = await listen(server);
   const browser = await chromium.launch({ headless: !options.headed });
   try {
@@ -214,7 +245,8 @@ async function runProfile(options) {
     await seedCheckpoint(page, baseUrl, checkpoint);
     const startupStartedAt = performance.now();
     const instructionProfileQuery = options.instructionProfile ? "&instructionProfile=1" : "";
-    await page.goto(`${baseUrl}/?clock=${options.clockSeconds}&profile=1${instructionProfileQuery}`, { waitUntil: "domcontentloaded" });
+    const presentationQuery = options.presentationHz === 60 ? "&presentation=60" : "";
+    await page.goto(`${baseUrl}/?clock=${options.clockSeconds}&profile=1${presentationQuery}${instructionProfileQuery}`, { waitUntil: "domcontentloaded" });
     try {
       await page.waitForFunction(() => {
         const crashed = !document.querySelector("#crash-panel")?.hidden;
@@ -258,8 +290,42 @@ async function runProfile(options) {
     if (readyState.worker?.budgetYieldStrategy !== "scheduler-yield") {
       throw new Error(`profile used ${readyState.worker?.budgetYieldStrategy ?? "unknown"} budget yielding`);
     }
+    if (readyState.worker?.runInstructionBudget !== options.workerBudget) {
+      throw new Error(
+        `profile requested worker budget ${options.workerBudget} but runtime used `
+        + `${readyState.worker?.runInstructionBudget ?? "missing"}`,
+      );
+    }
     if (Boolean(readyState.worker?.instructionProfile) !== options.instructionProfile) {
       throw new Error("instruction profiling mode did not match the request");
+    }
+    const expectedFastPresentation = options.presentationHz === 60 ? 1 : 0;
+    if (readyState.worker?.values?.vhgfast !== expectedFastPresentation) {
+      throw new Error(
+        `profile requested ${options.presentationHz}-Hz presentation but VHGfast is ${readyState.worker?.values?.vhgfast ?? "missing"}`,
+      );
+    }
+
+    async function runtimeSnapshot() {
+      await page.evaluate(() => {
+        globalThis.__linoWorkerSnapshot = null;
+        globalThis.__linoRuntime.postMessage({ type: "runtimeSnapshot" });
+      });
+      await page.waitForFunction(() => globalThis.__linoWorkerSnapshot?.values, null, {
+        timeout: 10_000,
+      });
+      return page.evaluate(() => globalThis.__linoWorkerSnapshot);
+    }
+
+    async function waitRuntimeState(predicate, label) {
+      const deadline = performance.now() + 10_000;
+      let snapshot;
+      while (performance.now() < deadline) {
+        snapshot = await runtimeSnapshot();
+        if (predicate(snapshot)) return snapshot;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+      }
+      throw new Error(`${label}: ${JSON.stringify(snapshot)}`);
     }
 
     await page.locator("#game").focus();
@@ -341,9 +407,41 @@ async function runProfile(options) {
     const runnerMilliseconds = difference(ended, started, "cumulativeRunnerMilliseconds");
     const displayMilliseconds = difference(ended, started, "cumulativeDisplayMilliseconds");
     const instructions = difference(ended, started, "cumulativeInstructions");
+    const runCalls = difference(ended, started, "cumulativeRunCalls");
     if (!(elapsedMilliseconds > 0) || presentations === 0 || producedPresentations === 0) {
       throw new Error("browser profile did not retain a positive presentation interval");
     }
+
+    const canvasBounds = await page.locator("#game").boundingBox();
+    if (!canvasBounds || canvasBounds.width < 600 || canvasBounds.height < 350) {
+      throw new Error(`unexpected game canvas bounds: ${JSON.stringify(canvasBounds)}`);
+    }
+    const menuStartedAt = performance.now();
+    await page.mouse.click(canvasBounds.x + 565, canvasBounds.y + 12);
+    const menuOpened = await waitRuntimeState(
+      (snapshot) => snapshot.values.menuon === 1,
+      "open GAME menu",
+    );
+    const menuOpenMilliseconds = performance.now() - menuStartedAt;
+    const dismissStartedAt = performance.now();
+    await page.mouse.click(canvasBounds.x + 200, canvasBounds.y + 300);
+    const menuDismissed = await waitRuntimeState(
+      (snapshot) => snapshot.values.menuon === 0 && !snapshot.guiMenuActive
+        && snapshot.pointerTransitions === 0 && !snapshot.activePointerTransition,
+      "dismiss GAME menu with pointer",
+    );
+    const menuDismissMilliseconds = performance.now() - dismissStartedAt;
+    const activeElement = await page.evaluate(() => document.activeElement?.id ?? "");
+    if (activeElement !== "game") throw new Error(`game canvas lost focus to ${activeElement}`);
+    const interaction = {
+      canvasBounds,
+      menuOpenMilliseconds,
+      menuDismissMilliseconds,
+      activeElement,
+      openedAtPresentation: menuOpened.presentationFrames,
+      dismissedAtPresentation: menuDismissed.presentationFrames,
+    };
+
     if (consoleErrors.length || pageErrors.length || failedRequests.length) {
       throw new Error(JSON.stringify({ consoleErrors, failedRequests, pageErrors }, null, 2));
     }
@@ -355,21 +453,32 @@ async function runProfile(options) {
     }));
     return {
       schema: 1,
-      scenario: "surface",
+      scenario: checkpointRecord.scene.mode === 0 ? "stardrifter" : "surface",
       command: [process.execPath, ...process.argv.slice(1)],
       generatedAt: new Date().toISOString(),
       requestedMeasurementSeconds: options.durationSeconds,
       measuredMilliseconds: elapsedMilliseconds,
       startupSeconds,
       input: { warmupSeconds, key: "W", holdSeconds },
+      interaction,
       provenance: {
         browser: { version: browserVersion, headless: !options.headed, ...browserIdentity },
         clockSeconds: options.clockSeconds,
+        presentationHz: options.presentationHz,
         defaultModuleWorker: true,
         fastBootstrapEndedBeforeMeasurement: true,
         budgetYieldStrategy: readyState.worker.budgetYieldStrategy,
+        workerBudget: options.workerBudget,
+        workerSource: {
+          canonicalSha256: sha256(canonicalWorkerSource),
+          servedSha256: sha256(workerSource),
+        },
         instructionProfile: options.instructionProfile,
         runtimeId: String(manifest.runtimeId ?? "unversioned"),
+        staticRunner: {
+          bytes: runnerSource.length,
+          sha256: sha256(runnerSource),
+        },
         checkpointPath: options.checkpoint,
         checkpoint: checkpointRecord,
         revisions: {
@@ -387,6 +496,7 @@ async function runProfile(options) {
         runnerMilliseconds,
         displayMilliseconds,
         instructions,
+        runCalls,
       },
       metrics: {
         presentationHz: presentations * 1000 / elapsedMilliseconds,
@@ -396,8 +506,13 @@ async function runProfile(options) {
         averageRunnerMillisecondsPerPresentedFrame: runnerMilliseconds / presentations,
         averageRunnerMillisecondsPerProducedFrame: runnerMilliseconds / producedPresentations,
         averageDisplayMillisecondsPerPresentedFrame: displayMilliseconds / presentations,
+        nonRunnerMillisecondsPerProducedFrame:
+          (elapsedMilliseconds - runnerMilliseconds) / producedPresentations,
+        runnerDutyCycle: runnerMilliseconds / elapsedMilliseconds,
         instructionsPerPresentedFrame: instructions / presentations,
         instructionsPerProducedFrame: instructions / producedPresentations,
+        runCallsPerProducedFrame: runCalls / producedPresentations,
+        instructionsPerRunCall: instructions / runCalls,
       },
       instructionProfile,
       failures: { consoleErrors, failedRequests, pageErrors },
@@ -422,7 +537,7 @@ if (options) {
     const report = await runProfile(options);
     await mkdir(resolve(options.output, ".."), { recursive: true });
     await writeFile(options.output, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-    console.log(`PROFILE browser surface: ${report.interval.presentations} presentations, ${report.metrics.presentationHz.toFixed(2)} Hz, ${report.metrics.simulationHz.toFixed(3)} simulation Hz -> ${options.output}`);
+    console.log(`PROFILE browser ${report.scenario}: ${report.interval.presentations} presentations, ${report.metrics.presentationHz.toFixed(2)} Hz, ${report.metrics.simulationHz.toFixed(3)} simulation Hz -> ${options.output}`);
   } catch (error) {
     console.error(error?.stack ?? String(error));
     process.exitCode = 1;

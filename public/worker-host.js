@@ -267,6 +267,7 @@ function runtimeMetrics(now = performance.now()) {
     cumulativeRunnerMilliseconds: lastMetrics.cumulativeRunnerMilliseconds,
     cumulativeDisplayMilliseconds,
     cumulativeInstructions: lastMetrics.cumulativeInstructions,
+    cumulativeRunCalls: lastMetrics.cumulativeRunCalls,
     runnerMillisecondsPerPresentation: lastMetrics.runnerMillisecondsPerPresentation,
     instructionsPerPresentation: lastMetrics.instructionsPerPresentation,
     sleepMilliseconds: lastMetrics.sleepMilliseconds,

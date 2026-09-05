@@ -10,6 +10,7 @@ const workerScope = typeof WorkerGlobalScope !== "undefined"
 const structuredSelfBackedgeLabels = ["VHGUI compose pixel", "VHGUI 2x pixel"];
 const countedSelfBackedgeLabels = structuredSelfBackedgeLabels;
 const sinkFallthroughPc = true;
+const runInstructionBudget = 10_000;
 let foregroundRuntime = false;
 let fastBootstrap = false;
 let emitMessage = (message, transfer = []) => globalThis.postMessage(message, transfer);
@@ -48,6 +49,7 @@ let rateRunnerMilliseconds = 0;
 let rateInstructions = 0;
 let cumulativeRunnerMilliseconds = 0;
 let cumulativeInstructions = 0;
+let cumulativeRunCalls = 0;
 let presentationFps = 0;
 let simulationFps = 0;
 let runnerMillisecondsPerPresentation = 0;
@@ -435,6 +437,7 @@ function publishFrame(result, runnerMilliseconds, instructions, producedFrame) {
     instructionsPerPresentation,
     cumulativeRunnerMilliseconds,
     cumulativeInstructions,
+    cumulativeRunCalls,
     sleepMilliseconds: result.sleepMilliseconds,
     status: result.status,
   };
@@ -448,7 +451,8 @@ function runMachine() {
     // Keep host input responsive while source-level GUI redraws run. Normal
     // Noctis frames usually yield below this bound; complex iGUI transactions
     // are split so a pointer release cannot wait behind a giant Lino slice.
-    const result = program.run(10_000);
+    const result = program.run(runInstructionBudget);
+    cumulativeRunCalls += 1;
     const runnerMilliseconds = performance.now() - started;
     lastRun = {
       status: result.status,
@@ -779,6 +783,7 @@ function handleMessage(message) {
         delayedRun: Boolean(delayedRun),
         yieldedRun,
         budgetYieldStrategy,
+        runInstructionBudget,
         instructionProfile: Boolean(program.machine.profile),
         waitingForFrameCredit,
         fastBootstrap,
@@ -788,6 +793,7 @@ function handleMessage(message) {
         lastRun,
         presentationFrames,
         simulationTicks,
+        cumulativeRunCalls,
         pendingGuiMenu,
         guiMenuActive,
         guiPointerPressPendingRelease,
