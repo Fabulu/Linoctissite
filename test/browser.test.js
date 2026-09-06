@@ -178,13 +178,13 @@ test("physical Stardrifter panels render mapped text immediately and at meaningf
   await page.goto(`${baseUrl}/?clock=1344638527&presentation=18`, {
     waitUntil: "domcontentloaded",
   });
-  await page.waitForFunction(() => globalThis.__linoMetrics?.simulationTicks >= 5
+  await page.waitForFunction(() => globalThis.__linoSnapshot?.()?.simulationTicks >= 5
     || !document.querySelector("#crash-panel")?.hidden, null, { timeout: 540_000 });
 
   const earlyState = await page.evaluate(() => ({
     crash: document.querySelector("#crash-report")?.textContent,
     crashHidden: document.querySelector("#crash-panel")?.hidden,
-    simulationTicks: globalThis.__linoMetrics?.simulationTicks,
+    simulationTicks: globalThis.__linoSnapshot?.()?.simulationTicks,
   }));
   assert.equal(earlyState.crashHidden, true, earlyState.crash);
   assert.ok(earlyState.simulationTicks <= 20,
@@ -276,12 +276,12 @@ test("Firefox renders exact physical Stardrifter lettering during startup", {
   await page.goto(`${baseUrl}/?clock=1344638527&presentation=18`, {
     waitUntil: "domcontentloaded",
   });
-  await page.waitForFunction(() => globalThis.__linoMetrics?.simulationTicks >= 5
+  await page.waitForFunction(() => globalThis.__linoSnapshot?.()?.simulationTicks >= 5
     || !document.querySelector("#crash-panel")?.hidden, null, { timeout: 540_000 });
   const state = await page.evaluate(() => ({
     crash: document.querySelector("#crash-report")?.textContent,
     crashHidden: document.querySelector("#crash-panel")?.hidden,
-    simulationTicks: globalThis.__linoMetrics?.simulationTicks,
+    simulationTicks: globalThis.__linoSnapshot?.()?.simulationTicks,
   }));
   assert.equal(state.crashHidden, true, state.crash);
   assert.ok(state.simulationTicks <= 20,
