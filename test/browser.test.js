@@ -1023,8 +1023,21 @@ test("main-thread fallback keeps the real FCS click route responsive", {
   await localPoint(565, 12);
   await waitColor({ x: 487, y: 27, width: 152, height: 234 }, [255, 255, 255], 10_000, 5_000);
   assert.ok(performance.now() - menuStartedAt < 5_000);
+  await page.evaluate(() => {
+    const probe = document.createElement("button");
+    probe.id = "main-thread-menu-focus-probe";
+    document.body.append(probe);
+    document.querySelector("#game").addEventListener("click", () => probe.focus(), { once: true });
+  });
   await localPoint(550, 188);
   await waitColor({ x: 20, y: 45, width: 480, height: 360 }, [128, 255, 255], 9_000);
+  await page.waitForFunction(() => document.activeElement?.id === "game", null, { timeout: 1_000 });
+  assert.equal((await page.evaluate(() => globalThis.__linoPointerSnapshot())).keyboardInputTarget, "game");
+  await page.keyboard.down("ArrowUp");
+  assert.deepEqual(await page.evaluate(() => globalThis.__linoPointerSnapshot().heldKeys), ["keyup"]);
+  await page.keyboard.up("ArrowUp");
+  assert.deepEqual(await page.evaluate(() => globalThis.__linoPointerSnapshot().heldKeys), []);
+  await page.evaluate(() => document.querySelector("#main-thread-menu-focus-probe").remove());
 
   const beforeStart = await presentationCount();
   await localPoint(151, 151);

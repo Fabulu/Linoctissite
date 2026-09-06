@@ -391,6 +391,10 @@ function relinquishKeyboard() {
   clearKeyboard();
 }
 
+function reclaimKeyboardAfterGameClick(target) {
+  claimKeyboard(target);
+}
+
 function releasePointer(event, target) {
   pointerPosition(event, target);
   if (linoMenuPress) {
@@ -442,6 +446,7 @@ for (const target of [canvas, fullscreenCanvas]) {
   target.addEventListener("focus", () => { keyboardInputTarget = target; });
   target.addEventListener("pointermove", (event) => movePointer(event, target));
   target.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
     pointerPosition(event);
     if (event.button === 0 && target === canvas
         && insideLinoBounds("menubuttonhotspot", pointerX, pointerY)) {
@@ -578,6 +583,11 @@ document.addEventListener("pointerdown", (event) => {
   void pcmHost.unlock();
   if (event.target !== canvas && event.target !== fullscreenCanvas) relinquishKeyboard();
 }, { passive: true });
+document.addEventListener("click", (event) => {
+  if (event.target !== canvas && event.target !== fullscreenCanvas) return;
+  event.preventDefault();
+  reclaimKeyboardAfterGameClick(event.target);
+});
 document.addEventListener("focusin", (event) => {
   if (event.target !== canvas && event.target !== fullscreenCanvas && event.target !== document.body) {
     relinquishKeyboard();

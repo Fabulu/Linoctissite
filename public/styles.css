@@ -53,6 +53,7 @@ body {
   image-rendering: crisp-edges;
   background: #000;
   box-shadow: 0 0 0 1px #283b4c;
+  cursor: none;
   touch-action: none;
 }
 
@@ -62,6 +63,7 @@ body {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   background: #000;
+  cursor: none;
   touch-action: none;
 }
 

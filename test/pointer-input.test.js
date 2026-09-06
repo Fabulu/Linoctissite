@@ -116,6 +116,10 @@ for (const [name, browserType] of [["Chromium", chromium], ["Firefox", firefox]]
     await page.waitForFunction(() => !document.querySelector("#crash-panel")?.hidden
       || globalThis.__linoSnapshot?.()?.simulationTicks > 0, null, { timeout: 240_000 });
     assert.equal(await page.locator("#crash-panel").getAttribute("hidden"), "");
+    assert.deepEqual(await page.evaluate(() => ({
+      game: getComputedStyle(document.querySelector("#game")).cursor,
+      fullscreen: getComputedStyle(document.querySelector("#fullscreen-game")).cursor,
+    })), { game: "none", fullscreen: "none" });
     await page.evaluate(() => {
       const runtime = globalThis.__linoRuntime;
       const postMessage = runtime.postMessage.bind(runtime);
@@ -248,6 +252,31 @@ for (const [name, browserType] of [["Chromium", chromium], ["Firefox", firefox]]
     await waitRuntime((state) => state.values.menuon === 0 && !state.guiMenuActive
       && state.pointerTransitions === 0 && state.activePointerTransition === null,
     "dismiss GAME after held motion");
+
+    await page.mouse.click(menu.clientX, menu.clientY);
+    await waitRuntime((state) => state.values.menuon === 1, "reopen GAME for menu focus");
+    await page.evaluate(() => {
+      const probe = document.createElement("button");
+      probe.id = "post-menu-focus-probe";
+      document.body.append(probe);
+      document.querySelector("#game").addEventListener("click", () => probe.focus(), { once: true });
+      globalThis.__linoTestInput.length = 0;
+    });
+    const controls = await canvasPoint(550, 36);
+    await page.mouse.click(controls.clientX, controls.clientY);
+    await waitRuntime((state) => state.values.menuon === 0 && state.values.vhghelpshow === 1,
+      "activate Controls after transient click focus loss");
+    await page.waitForFunction(() => document.activeElement?.id === "game", null, { timeout: 1_000 });
+    await page.keyboard.press("Escape");
+    await waitRuntime((state) => state.values.vhghelpshow === 0,
+      "keyboard closes Controls after menu item click");
+    assert.deepEqual(
+      await page.evaluate(() => globalThis.__linoTestInput
+        .filter((message) => message.type === "key" && message.name === "keyescape")
+        .map((message) => message.down)),
+      [true, false],
+    );
+    await page.evaluate(() => document.querySelector("#post-menu-focus-probe").remove());
 
     assert.equal(await page.evaluate(() => document.activeElement?.id), "game");
     assert.deepEqual(failures, { consoleErrors: [], failedRequests: [], pageErrors: [] });

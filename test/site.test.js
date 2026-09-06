@@ -22,6 +22,7 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
   const build = await readFile(new URL("../build.mjs", import.meta.url), "utf8");
   const app = await readFile(new URL("../public/app.js", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../public/styles.css", import.meta.url), "utf8");
   const workerHost = await readFile(new URL("../public/worker-host.js", import.meta.url), "utf8");
   const gameWorker = await readFile(new URL("../public/game-worker.js", import.meta.url), "utf8");
   assert.match(html, /id="exit-fullscreen"/);
@@ -30,6 +31,8 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
   assert.match(html, /rel="icon" href="\.\/favicon\.svg"/);
   assert.match(html, /width="400" height="300"/);
   assert.match(html, /Lino-rendered Noctis/);
+  assert.match(styles, /#game\s*\{[^}]*cursor: none;/s);
+  assert.match(styles, /#fullscreen-game\s*\{[^}]*cursor: none;/s);
   assert.match(build, /\["STARMAP\.BIN", resolve\(linoRoot, "work\/STARMAP\.BIN"\)\]/);
   assert.match(build, /\["GUIDE\.BIN", resolve\(linoRoot, "work\/GUIDE\.BIN"\)\]/);
   assert.match(app, /compileProject/);
@@ -97,6 +100,8 @@ test("ships the real linked Noctis project and visible fullscreen exits", async 
     assert.match(host, /const pressedKeyCodes = new Set\(\)/);
     assert.match(host, /const linoKeyCounts = new Map\(\)/);
     assert.match(host, /visibilitychange[\s\S]*clearKeyboard\(\)/);
+    assert.match(host, /reclaimKeyboardAfterGameClick/);
+    assert.match(host, /document\.addEventListener\("click"[\s\S]*reclaimKeyboardAfterGameClick/);
     assert.match(host, /typeof gameStage\.requestFullscreen !== "function"/);
     assert.match(host, /void exitGameFullscreen\(\)/);
   }
